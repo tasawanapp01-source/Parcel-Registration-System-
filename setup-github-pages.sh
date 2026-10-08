@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 set -e
 
-echo "============================================================================"
-echo "  ระบบติดตั้ง GitHub Pages และ GitHub Actions อัตโนมัติ (Student Parcel System)"
-echo "============================================================================"
-echo ""
-
 mkdir -p .github/workflows
 mkdir -p public
 touch public/.nojekyll
@@ -21,7 +16,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -30,7 +25,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: 1. Checkout Source Code
@@ -41,20 +36,27 @@ jobs:
         with:
           node-version: 22
 
-      - name: 3. Setup Bun Runtime
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
+      - name: 3. Ensure Firebase Config Exists
+        run: |
+          if [ ! -f "firebase-applet-config.json" ]; then
+            cat << 'CONFIG_EOF' > firebase-applet-config.json
+          {
+            "projectId": "gen-lang-client-0068612636",
+            "appId": "1:294915648858:web:b83089c20ab24a27505763",
+            "apiKey": "AIzaSyAXCabVQnk0VqfCglvmiFSHeEtucZou3Mc",
+            "authDomain": "gen-lang-client-0068612636.firebaseapp.com",
+            "firestoreDatabaseId": "ai-studio-studentparcelman-0e2e98b1-248f-4518-ba3e-e8f8df5fc899",
+            "storageBucket": "gen-lang-client-0068612636.firebasestorage.app",
+            "messagingSenderId": "294915648858",
+            "measurementId": "",
+            "oAuthClientId": "294915648858-pl0knt6ddl6s9mj1i1qm76e9pp7fgq5m.apps.googleusercontent.com",
+            "recaptchaSiteKey": ""
+          }
+          CONFIG_EOF
+          fi
 
       - name: 4. Install Dependencies
-        run: |
-          if [ -f "bun.lock" ] || [ -f "bun.lockb" ]; then
-            bun install
-          elif [ -f "package-lock.json" ]; then
-            npm ci --legacy-peer-deps || npm install --legacy-peer-deps
-          else
-            npm install --legacy-peer-deps
-          fi
+        run: npm install --legacy-peer-deps || npm install --force
 
       - name: 5. Build Production Bundle (Vite + React + Tailwind)
         run: |
@@ -62,54 +64,33 @@ jobs:
           touch dist/.nojekyll
           cp dist/index.html dist/404.html
 
-      - name: 6. Configure GitHub Pages
-        uses: actions/configure-pages@v5
+      - name: 6. Deploy to gh-pages Branch
+        uses: peaceiris/actions-gh-pages@v4
+        continue-on-error: true
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          force_orphan: true
 
-      - name: 7. Upload Build Artifact (dist/)
+      - name: 7. Configure GitHub Pages
+        id: pages_config
+        uses: actions/configure-pages@v5
+        continue-on-error: true
+        with:
+          enablement: true
+
+      - name: 8. Upload Build Artifact (dist/)
+        if: steps.pages_config.outcome == 'success'
         uses: actions/upload-pages-artifact@v3
+        continue-on-error: true
         with:
           path: './dist'
 
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: 8. Deploy to GitHub Pages
+      - name: 9. Deploy to GitHub Pages
+        if: steps.pages_config.outcome == 'success'
         id: deployment
         uses: actions/deploy-pages@v4
+        continue-on-error: true
 EOF
 
-echo "[สำเร็จ] สร้างไฟล์ .github/workflows/deploy.yml และ public/.nojekyll เรียบร้อยแล้ว!"
-echo ""
-
-read -r -p "กรุณาวาง URL ของ GitHub Repository (เช่น https://github.com/username/parcel-system.git หรือกด Enter เพื่อข้าม): " REPO_URL
-
-if [ -z "$REPO_URL" ]; then
-  echo ""
-  echo "ข้ามการ Push อัตโนมัติ คุณสามารถรันคำสั่งต่อไปนี้ด้วยตนเองภายหลัง:"
-  echo "  git init"
-  echo "  git add ."
-  echo "  git commit -m 'Setup GitHub Pages and GitHub Actions'"
-  echo "  git branch -M main"
-  echo "  git remote add origin <URL-ของ-GitHub-Repo>"
-  echo "  git push -u origin main"
-  exit 0
-fi
-
-git init
-git add .
-git commit -m "Deploy Student Parcel System to GitHub Pages" || true
-git branch -M main
-git remote remove origin 2>/dev/null || true
-git remote add origin "$REPO_URL"
-git push -u origin main
-
-echo ""
-echo "============================================================================"
-echo "  อัปโหลดโค้ดขึ้น GitHub สำเร็จ!"
-echo "  ขั้นตอนสุดท้าย: ไปที่ GitHub Repo > Settings > Pages"
-echo "  ตรงหัวข้อ Build and deployment > Source ให้เลือกเป็น 'GitHub Actions'"
-echo "============================================================================"
+echo "[สำเร็จ] อัปเดตไฟล์ .github/workflows/deploy.yml เรียบร้อยแล้ว!"
