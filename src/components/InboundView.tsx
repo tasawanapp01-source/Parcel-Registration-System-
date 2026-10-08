@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import {
   Barcode,
   Camera,
@@ -19,6 +18,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useParcelSystem } from '../context/ParcelSystemContext';
+import { BarcodeCameraScanner, decodeBarcodeFromImageFile } from './BarcodeCameraScanner';
 import {
   ParcelCategory,
   ParcelStatus,
@@ -76,20 +76,6 @@ const LEGAL_HOLD_REASONS = [
   'สงสัยอาหารสดเน่าเสียง่าย ต้องเปิดตรวจต่อหน้าครูหอพัก',
   'กล่องพัสดุชำรุด/มีกลิ่นผิดปกติ',
   'ไม่ระบุชื่อผู้รับชัดเจน รอตรวจสอบหลักฐานการสั่งซื้อ',
-];
-
-const SUPPORTED_BARCODE_FORMATS = [
-  Html5QrcodeSupportedFormats.CODE_128,
-  Html5QrcodeSupportedFormats.CODE_39,
-  Html5QrcodeSupportedFormats.CODE_93,
-  Html5QrcodeSupportedFormats.EAN_13,
-  Html5QrcodeSupportedFormats.EAN_8,
-  Html5QrcodeSupportedFormats.ITF,
-  Html5QrcodeSupportedFormats.CODABAR,
-  Html5QrcodeSupportedFormats.QR_CODE,
-  Html5QrcodeSupportedFormats.DATA_MATRIX,
-  Html5QrcodeSupportedFormats.UPC_A,
-  Html5QrcodeSupportedFormats.UPC_E,
 ];
 
 function playScanBeep(): void {
@@ -166,13 +152,8 @@ export const InboundView: React.FC = () => {
   const [cameraPermission, setCameraPermission] = useState<
     'prompt' | 'granted' | 'denied' | 'requesting'
   >('prompt');
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [availableCameras, setAvailableCameras] = useState<{ id: string; label: string }[]>([]);
-  const [selectedCameraId, setSelectedCameraId] = useState<string>('');
-  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [isScanningFile, setIsScanningFile] = useState<boolean>(false);
 
-  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const trackingInputRef = useRef<HTMLInputElement | null>(null);
   const studentCodeInputRef = useRef<HTMLInputElement | null>(null);
   const customCategoryInputRef = useRef<HTMLInputElement | null>(null);
@@ -386,220 +367,29 @@ export const InboundView: React.FC = () => {
     };
   }, []);
 
-  // ฟังก์ชันขออนุญาตใช้กล้องจากเบราว์เซอร์โดยตรง (เรียกทันทีเมื่อผู้ใช้กดปุ่ม เพื่อให้เด้ง Popup ขออนุญาตใช้กล้องเสมอ)
-  const requestCameraPermissionAndOpenScanner = useCallback(async () => {
-    setCameraError(null);
-    setCameraPermission('requesting');
-
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      setCameraPermission('denied');
-      setCameraError(
-        'เบราว์เซอร์ของคุณไม่รองรับการเปิดกล้องโดยตรง (ต้องใช้งานผ่าน HTTPS หรือ localhost) คุณสามารถกดปุ่ม "ถ่ายรูป/เลือกรูปบาร์โค้ด" เพื่อสแกนได้ทันที'
-      );
-      setIsScannerOpen(true);
-      return;
-    }
-
-    try {
-      let stream: MediaStream;
-      try {
-        // ขออนุญาตใช้กล้องหลังก่อน (สำหรับมือถือ/แท็บเล็ต)
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: facingMode } },
-          audio: false,
-        });
-      } catch {
-        // หากเป็นโน้ตบุ๊กหรือคอมพิวเตอร์ที่มีแต่กล้องหน้า ให้ขออนุญาตกล้องใดก็ได้ที่มีในเครื่อง
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: false,
-        });
-      }
-
-      // ปิด Stream ชั่วคราวทันทีหลังจากได้รับสิทธิ์ เพื่อส่งต่อกล้องให้ตัวอ่านบาร์โค้ด Html5Qrcode
-      stream.getTracks().forEach((track) => track.stop());
-      setCameraPermission('granted');
-
-      try {
-        const devices = await Html5Qrcode.getCameras();
-        if (devices && devices.length > 0) {
-          const mapped = devices.map((d, idx) => ({
-            id: d.id,
-            label: d.label || `กล้องอุปกรณ์ #${idx + 1}`,
-          }));
-          setAvailableCameras(mapped);
-          // เลือกกล้องหลังอัตโนมัติถ้าพบชื่อ back/rear/environment
-          const rearCam = mapped.find((c) =>
-            /back|rear|environment|หลัง/i.test(c.label)
-          );
-          if (rearCam && !selectedCameraId) {
-            setSelectedCameraId(rearCam.id);
-          }
-        }
-      } catch {
-        // proceed with default camera
-      }
-
-      setIsScannerOpen(true);
-    } catch (err) {
-      const errName = err instanceof Error ? err.name : '';
-      setCameraPermission('denied');
-      setIsScannerOpen(true);
-      if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
-        setCameraError(
-          'คุณยังไม่ได้กดอนุญาตให้ใช้กล้อง กรุณากดที่ไอคอนรูปแม่กุญแจ 🔒 หรือรูปกล้อง 📷 บนแถบ URL ด้านบนของเบราว์เซอร์ แล้วเลือก "อนุญาต (Allow)" สำหรับกล้อง จากนั้นกดปุ่ม "ขออนุญาตใช้กล้องอีกครั้ง"'
-        );
-      } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
-        setCameraError(
-          'ไม่พบอุปกรณ์กล้องในเครื่องนี้ คุณสามารถกดปุ่ม "ถ่ายรูป/เลือกรูปบาร์โค้ด" ด้านล่างเพื่อสแกนจากรูปภาพแทนได้ทันที'
-        );
-      } else {
-        setCameraError(
-          'ไม่สามารถเข้าถึงกล้องได้ในขณะนี้ (อาจมีโปรแกรมอื่นกำลังใช้กล้องอยู่ หรือยังไม่ได้อนุญาตสิทธิ์กล้อง) กรุณากด "ขออนุญาตใช้กล้องอีกครั้ง" หรือใช้ปุ่มถ่ายรูปบาร์โค้ด'
-        );
-      }
-    }
-  }, [facingMode, selectedCameraId]);
+  const requestCameraPermissionAndOpenScanner = useCallback(() => {
+    setFormError(null);
+    setIsScannerOpen(true);
+  }, []);
 
   const handleToggleScanner = useCallback(() => {
-    if (isScannerOpen) {
-      setIsScannerOpen(false);
-    } else {
-      requestCameraPermissionAndOpenScanner();
-    }
-  }, [isScannerOpen, requestCameraPermissionAndOpenScanner]);
+    setFormError(null);
+    setIsScannerOpen((prev) => !prev);
+  }, []);
 
-  // เปิด/ปิดและถอดรหัสบาร์โค้ดผ่านกล้องอุปกรณ์ด้วย Html5Qrcode
-  useEffect(() => {
-    if (!isScannerOpen || cameraPermission === 'denied' || cameraPermission === 'requesting') {
-      if (html5QrCodeRef.current) {
-        const scanner = html5QrCodeRef.current;
-        html5QrCodeRef.current = null;
-        if (scanner.isScanning) {
-          scanner
-            .stop()
-            .then(() => scanner.clear())
-            .catch(() => {});
-        }
-      }
-      return;
-    }
-
-    let isMounted = true;
-    setCameraError(null);
-
-    const startScanner = async () => {
-      try {
-        let detectedDevices: { id: string; label: string }[] = [];
-        try {
-          const devices = await Html5Qrcode.getCameras();
-          if (devices && devices.length > 0) {
-            detectedDevices = devices.map((d, idx) => ({
-              id: d.id,
-              label: d.label || `กล้องอุปกรณ์ #${idx + 1}`,
-            }));
-            if (isMounted) {
-              setAvailableCameras(detectedDevices);
-            }
-          }
-        } catch {
-          // ignore camera list error
-        }
-
-        if (!isMounted) return;
-
-        const readerElement = document.getElementById('inbound-barcode-reader');
-        if (!readerElement) return;
-
-        const scannerInstance = new Html5Qrcode('inbound-barcode-reader', {
-          formatsToSupport: SUPPORTED_BARCODE_FORMATS,
-          verbose: false,
-        });
-        html5QrCodeRef.current = scannerInstance;
-
-        const scanConfig = {
-          fps: 15,
-          qrbox: { width: 260, height: 140 },
-        };
-
-        const onScanSuccess = (decodedText: string) => {
-          if (isMounted) {
-            handleBarcodeDetected(decodedText);
-          }
-        };
-
-        const onScanFailure = () => {
-          // ignore frame scan miss
-        };
-
-        // ลองเปิดกล้องตามลำดับ Fallback เพื่อรองรับทั้งมือถือ (กล้องหลัง) และโน้ตบุ๊ก/PC (Webcam)
-        try {
-          const primaryTarget = selectedCameraId
-            ? selectedCameraId
-            : { facingMode };
-          await scannerInstance.start(primaryTarget, scanConfig, onScanSuccess, onScanFailure);
-        } catch {
-          if (detectedDevices.length > 0) {
-            await scannerInstance.start(
-              detectedDevices[0].id,
-              scanConfig,
-              onScanSuccess,
-              onScanFailure
-            );
-          } else {
-            await scannerInstance.start(
-              { facingMode: 'user' },
-              scanConfig,
-              onScanSuccess,
-              onScanFailure
-            );
-          }
-        }
-      } catch {
-        if (isMounted) {
-          setCameraError(
-            'ไม่สามารถเปิดสตรีมกล้องสดได้ กรุณากดปุ่ม "ขออนุญาตใช้กล้องอีกครั้ง" หรือกดปุ่ม "ถ่ายรูปบาร์โค้ด / เลือกรูปจากอุปกรณ์" ด้านล่าง'
-          );
-        }
-      }
-    };
-
-    const timer = setTimeout(startScanner, 120);
-
-    return () => {
-      isMounted = false;
-      clearTimeout(timer);
-      if (html5QrCodeRef.current) {
-        const scanner = html5QrCodeRef.current;
-        html5QrCodeRef.current = null;
-        if (scanner.isScanning) {
-          scanner
-            .stop()
-            .then(() => scanner.clear())
-            .catch(() => {});
-        }
-      }
-    };
-  }, [isScannerOpen, cameraPermission, selectedCameraId, facingMode, handleBarcodeDetected]);
-
-  // สแกนบาร์โค้ดจากไฟล์ภาพถ่ายกล้องอุปกรณ์ (Fallback / Mobile Camera Capture)
+  // สแกนบาร์โค้ดจากไฟล์ภาพถ่ายกล้องหลังมือถือ (Fallback / Mobile Camera Capture)
   const handleScanBarcodeFromImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setIsScanningFile(true);
-    setCameraError(null);
+    setFormError(null);
 
     try {
-      const fileScanner = new Html5Qrcode('inbound-barcode-file-reader', {
-        formatsToSupport: SUPPORTED_BARCODE_FORMATS,
-        verbose: false,
-      });
-      const decodedText = await fileScanner.scanFile(file, false);
-      fileScanner.clear();
+      const decodedText = await decodeBarcodeFromImageFile(file);
       handleBarcodeDetected(decodedText);
     } catch {
-      setCameraError(
-        'ไม่พบบาร์โค้ดในภาพที่เลือก กรุณาถ่ายภาพให้เห็นแถบบาร์โค้ดชัดเจน หรือพิมพ์เลขพัสดุในช่องกรอก'
+      setFormError(
+        'ไม่พบบาร์โค้ดในภาพที่ถ่าย กรุณาถ่ายให้เห็นแถบบาร์โค้ดชัดเจน หรือพิมพ์เลขพัสดุในช่องกรอก'
       );
     } finally {
       setIsScanningFile(false);
@@ -897,104 +687,14 @@ export const InboundView: React.FC = () => {
               </div>
             )}
 
-            {/* หน้าจอกล้องสแกนบาร์โค้ดสด (Inline Device Camera Barcode Scanner) */}
-            {isScannerOpen && (
-              <div className="p-4 bg-slate-900 text-white rounded-2xl space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400">
-                    <Camera className="w-4 h-4" />
-                    <span>
-                      {cameraPermission === 'requesting'
-                        ? 'กำลังขออนุญาตใช้กล้องจากเบราว์เซอร์ กรุณากด "อนุญาต (Allow)" บนหน้าต่างที่เด้งขึ้นมา...'
-                        : 'หันกล้องอุปกรณ์ไปที่บาร์โค้ดหรือ QR Code บนกล่องพัสดุ'}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    {availableCameras.length > 1 ? (
-                      <select
-                        aria-label="เลือกกล้องอุปกรณ์"
-                        value={selectedCameraId}
-                        onChange={(e) => setSelectedCameraId(e.target.value)}
-                        className="px-2.5 py-1.5 text-xs bg-slate-800 text-white border border-slate-700 rounded-lg"
-                      >
-                        <option value="">อัตโนมัติ ({facingMode === 'environment' ? 'กล้องหลัง' : 'กล้องหน้า'})</option>
-                        {availableCameras.map((cam) => (
-                          <option key={cam.id} value={cam.id}>
-                            {cam.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedCameraId('');
-                          setFacingMode((prev) => (prev === 'environment' ? 'user' : 'environment'));
-                        }}
-                        className="px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg flex items-center gap-1 cursor-pointer"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        <span>สลับกล้อง ({facingMode === 'environment' ? 'กล้องหลัง' : 'กล้องหน้า'})</span>
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => setIsScannerOpen(false)}
-                      className="px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg cursor-pointer"
-                    >
-                      ปิดกล้อง
-                    </button>
-                  </div>
-                </div>
-
-                {cameraPermission === 'requesting' ? (
-                  <div className="rounded-xl bg-slate-950 min-h-[200px] p-6 flex flex-col items-center justify-center text-center gap-3">
-                    <Camera className="w-8 h-8 text-emerald-400 animate-pulse" />
-                    <p className="text-sm font-bold text-white">
-                      ระบบกำลังขออนุญาตใช้กล้องเพื่อสแกนโค้ด...
-                    </p>
-                    <p className="text-xs text-slate-300 max-w-md">
-                      กรุณากดปุ่ม <strong>&quot;อนุญาต (Allow)&quot;</strong> หรือ <strong>&quot;ขณะใช้เว็บไซต์&quot;</strong> บนหน้าต่างแจ้งเตือนของเบราว์เซอร์ด้านบน
-                    </p>
-                  </div>
-                ) : !cameraError ? (
-                  <div className="relative rounded-xl overflow-hidden bg-black min-h-[240px] flex items-center justify-center">
-                    <div id="inbound-barcode-reader" className="w-full" />
-                  </div>
-                ) : (
-                  <div className="p-4 bg-amber-950/90 border border-amber-700 rounded-xl flex flex-col gap-3">
-                    <div className="flex items-start gap-2.5">
-                      <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                      <p className="text-xs text-amber-200 leading-relaxed">{cameraError}</p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={requestCameraPermissionAndOpenScanner}
-                        className="min-h-[40px] px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Camera className="w-4 h-4" />
-                        <span>ขออนุญาตใช้กล้องอีกครั้ง</span>
-                      </button>
-
-                      <label className="min-h-[40px] px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer">
-                        <ImageUp className="w-4 h-4" />
-                        <span>ถ่ายภาพบาร์โค้ดด้วยกล้อง</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          onChange={handleScanBarcodeFromImage}
-                          className="sr-only"
-                        />
-                      </label>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            {/* หน้าจอกล้องสแกนบาร์โค้ดสด (บังคับกล้องหลังมือถือเป็นหลัก + สลับเลนส์ได้) */}
+            <BarcodeCameraScanner
+              isOpen={isScannerOpen}
+              onClose={() => setIsScannerOpen(false)}
+              onDetected={handleBarcodeDetected}
+              onScanFromFile={handleScanBarcodeFromImage}
+              isScanningFile={isScanningFile}
+            />
 
             {lastScannedCode && (
               <div className="px-3.5 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-900">
