@@ -58,11 +58,33 @@
 
 ---
 
-## 3. วิธีตั้งค่า Firebase และนำขึ้น GitHub Pages
+## 3. วิธีตั้งค่าและติดตั้งขึ้น GitHub Pages ด้วย GitHub Actions (CI/CD)
 
-1. สร้างโปรเจกต์ที่ [Firebase Console](https://console.firebase.google.com/)
-2. เปิดใช้งาน **Firestore Database** และ **Authentication (Google Sign-In)**
-3. นำค่า Config มาใส่ในไฟล์ `firebase-applet-config.json`
-4. อัปโหลดโค้ดขึ้น GitHub Repository ที่กิ่ง `main`
-5. ไปที่เมนู **Settings > Pages** บน GitHub แล้วเลือก **Build and deployment > Source: GitHub Actions**
-6. ทุกครั้งที่ `git push origin main` ไฟล์ `.github/workflows/deploy.yml` จะทำการ Build และ Deploy ขึ้น GitHub Pages โดยอัตโนมัติ
+ระบบได้เตรียมไฟล์สำหรับติดตั้งขึ้น **GitHub Pages** และ **GitHub Actions** ไว้ครบถ้วนแล้ว ดังนี้:
+- `.github/workflows/deploy.yml` : ไฟล์ Workflow สำหรับสั่ง Build (Vite + React + Tailwind) และ Deploy ขึ้น GitHub Pages อัตโนมัติ (รองรับทั้ง `bun.lock` และ `npm`, สร้าง `.nojekyll` และ `404.html` อัตโนมัติ)
+- `public/.nojekyll` : ป้องกันไม่ให้ GitHub Pages (Jekyll) บล็อกไฟล์ Assets ของ Vite
+- `vite.config.ts` : ตั้งค่า `base: './'` เพื่อให้เรียกไฟล์ CSS/JS ได้ถูกต้องในทุกชื่อ Repository ย่อยบน GitHub Pages
+- `setup-github-pages.bat` (Windows) และ `setup-github-pages.sh` (Mac/Linux) : สคริปต์ติดตั้งและ Push โค้ดขึ้น GitHub อัตโนมัติในคลิกเดียว
+
+### วิธีที่ 1: รันไฟล์ติดตั้งอัตโนมัติ (แนะนำ)
+1. สร้าง Repository ใหม่บน GitHub (เช่น `student-parcel-system`)
+2. บนเครื่องคอมพิวเตอร์ของคุณ:
+   - **Windows**: ดับเบิลคลิกไฟล์ `setup-github-pages.bat` แล้ววาง URL ของ GitHub Repository
+   - **macOS / Linux**: รันคำสั่ง `bash setup-github-pages.sh` แล้ววาง URL ของ GitHub Repository
+
+### วิธีที่ 2: รันคำสั่งผ่าน Git Terminal ด้วยตนเอง
+```bash
+git init
+git add .
+git commit -m "Deploy Student Parcel System to GitHub Pages"
+git branch -M main
+git remote add origin https://github.com/<ชื่อผู้ใช้ของคุณ>/<ชื่อ-repo>.git
+git push -u origin main
+```
+
+### ขั้นตอนสำคัญบนหน้าเว็บ GitHub (ตั้งค่าครั้งแรกครั้งเดียว)
+1. ไปที่หน้า GitHub Repository ของคุณ > คลิกแท็บ **Settings** (ด้านบน)
+2. ที่เมนูด้านซ้าย คลิก **Pages**
+3. ในหัวข้อ **Build and deployment > Source** ให้เปลี่ยนจาก `Deploy from a branch` เป็น **`GitHub Actions`**
+4. ไปที่แท็บ **Actions** บน GitHub จะเห็น Workflow ชื่อ **"Deploy Student Parcel System to GitHub Pages"** กำลังทำงาน รอประมาณ 1–2 นาที เว็บไซต์จะออนไลน์พร้อมใช้งานทันที
+5. *(สำหรับ Google Sign-In บน Firebase)* ไปที่ [Firebase Console](https://console.firebase.google.com/) > **Authentication > Settings > Authorized domains** แล้วกด **Add domain** เพิ่ม `<ชื่อผู้ใช้ของคุณ>.github.io` เข้าไป

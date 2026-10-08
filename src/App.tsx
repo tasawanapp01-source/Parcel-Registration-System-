@@ -128,13 +128,13 @@ const MainWorkspace: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('deliverables')}
-            className={`hidden xl:inline-block py-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+            className={`py-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
               activeTab === 'deliverables'
                 ? 'text-slate-900 font-bold underline underline-offset-8 decoration-2'
                 : 'hover:text-slate-900 hover:underline underline-offset-8'
             }`}
           >
-            คู่มือ & CI/CD
+            ติดตั้ง GitHub Pages & Action
           </button>
         </nav>
 
@@ -234,7 +234,7 @@ const MainWorkspace: React.FC = () => {
               className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-lg font-semibold flex items-center gap-1 whitespace-nowrap cursor-pointer"
             >
               <BookOpen className="w-3.5 h-3.5" />
-              <span>ดูโครงสร้างโค้ด & CI/CD</span>
+              <span>ไฟล์ติดตั้ง GitHub Pages & Action</span>
             </button>
           </div>
         </div>
