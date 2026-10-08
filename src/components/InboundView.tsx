@@ -3,7 +3,6 @@ import {
   Barcode,
   Camera,
   UserCheck,
-  AlertTriangle,
   PackagePlus,
   Search,
   X,
@@ -29,7 +28,6 @@ import {
   getAvailableDormitories,
   detectCourierFromTracking,
   generateUniqueParentTrackingNumber,
-  WEEKLY_PARCEL_WARNING_LIMIT,
   isUnknownOwnerParcel,
 } from '../types/parcel';
 
@@ -147,17 +145,15 @@ export const InboundView: React.FC = () => {
   const [recentPage, setRecentPage] = useState<number>(1);
   const [recentPageSize, setRecentPageSize] = useState<string>('10');
 
-  // สถานะกล้องสแกนบาร์โค้ดและการขออนุญาตสิทธิ์ใช้กล้อง (Camera Permission)
+  // สถานะกล้องสแกนบาร์โค้ด
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
-  const [cameraPermission, setCameraPermission] = useState<
-    'prompt' | 'granted' | 'denied' | 'requesting'
-  >('prompt');
   const [isScanningFile, setIsScanningFile] = useState<boolean>(false);
 
   const trackingInputRef = useRef<HTMLInputElement | null>(null);
   const studentCodeInputRef = useRef<HTMLInputElement | null>(null);
   const customCategoryInputRef = useRef<HTMLInputElement | null>(null);
   const barcodeFileInputRef = useRef<HTMLInputElement | null>(null);
+  const lastAutoPopulatedCodeRef = useRef<string>('');
 
   const availableDormitories = useMemo(
     () => getAvailableDormitories(students, parcels),
@@ -169,12 +165,21 @@ export const InboundView: React.FC = () => {
     return lookupStudentByCode(studentCodeInput);
   }, [lookupStudentByCode, studentCodeInput]);
 
-  // คำนวณจำนวนพัสดุของนักเรียนที่กำลังเลือกอยู่ แยกเป็น วัน, สัปดาห์, เดือน
+  // คำนวณจำนวนพัสดุของนักเรียนที่กำลังเลือกอยู่
   const activeStudentParcelStats = useMemo(() => {
     return getStudentParcelCounts(studentCodeInput, studentFullName, matchedStudent);
   }, [getStudentParcelCounts, studentCodeInput, studentFullName, matchedStudent]);
 
-  // ฟังก์ชันเติมข้อมูลนักเรียนลงในฟอร์มเมื่อดึงข้อมูลสำเร็จ พร้อมแจ้งเตือนหากพัสดุเกิน 3 ชิ้นต่อสัปดาห์
+  // ปิดกล่องแจ้งเตือนสถานะการดึงข้อมูลนักเรียนอัตโนมัติเมื่อแสดงครบกำหนด
+  useEffect(() => {
+    if (!studentFetchFeedback) return;
+    const timer = setTimeout(() => {
+      setStudentFetchFeedback(null);
+    }, 2800);
+    return () => clearTimeout(timer);
+  }, [studentFetchFeedback]);
+
+  // ฟังก์ชันเติมข้อมูลนักเรียนลงในฟอร์มเมื่อดึงข้อมูลสำเร็จ พร้อมแจ้งเตือนเฉพาะชื่อ หอพัก และจำนวนชิ้นรวมปัจจุบัน
   const populateStudentFields = useCallback(
     (st: Student) => {
       setStudentCodeInput(st.studentCode);
@@ -189,10 +194,15 @@ export const InboundView: React.FC = () => {
           ? `${st.grade}${st.room && st.room !== '-' ? `/${st.room}` : ''}`
           : '';
       setStudentGradeRoom(gRoom);
-      setStudentDormitory(st.dormitory && st.dormitory !== '-' ? st.dormitory : '');
+      const dormName = st.dormitory && st.dormitory !== '-' ? st.dormitory : '';
+      setStudentDormitory(dormName);
       setStudentDormRoom(st.dormRoom && st.dormRoom !== '-' ? st.dormRoom : '');
 
       const stStats = getStudentParcelCounts(st.studentCode, fullName, st);
+      setStudentFetchFeedback({
+        type: 'success',
+        message: `ชื่อ: ${fullName} · หอพัก: ${dormName || '-'} · จำนวนชิ้นรวมปัจจุบัน: ${stStats.totalCount} ชิ้น`,
+      });
       if (stStats.isOverWeeklyLimit) {
         openWeeklyWarningPopup(stStats, 'student_lookup');
       }
@@ -200,16 +210,18 @@ export const InboundView: React.FC = () => {
     [getStudentParcelCounts, openWeeklyWarningPopup]
   );
 
-  // เมื่อพิมพ์รหัสนักเรียนตรงกับในระบบ ให้ดึงข้อมูลมาแสดงในช่องกรอกอัตโนมัติทันที
+  // เมื่อพิมพ์หรือสแกนรหัสนักเรียนตรงกับในระบบ ให้ดึงข้อมูลและแจ้งเตือนครั้งเดียวต่อการสแกน
   useEffect(() => {
-    if (matchedStudent) {
-      recordLocalSearchSaving();
-      populateStudentFields(matchedStudent);
-      setStudentFetchFeedback({
-        type: 'success',
-        message: `ดึงข้อมูลนักเรียนสำเร็จ: ${matchedStudent.prefix}${matchedStudent.firstName} ${matchedStudent.lastName} (${matchedStudent.dormitory} ห้อง ${matchedStudent.dormRoom})`,
-      });
+    if (!matchedStudent) {
+      lastAutoPopulatedCodeRef.current = '';
+      return;
     }
+    if (lastAutoPopulatedCodeRef.current === matchedStudent.studentCode) {
+      return;
+    }
+    lastAutoPopulatedCodeRef.current = matchedStudent.studentCode;
+    recordLocalSearchSaving();
+    populateStudentFields(matchedStudent);
   }, [matchedStudent, recordLocalSearchSaving, populateStudentFields]);
 
   // ปุ่มกด "ดึงข้อมูลนักเรียน" จากรหัสนักเรียน หรือคำค้นหาชื่อ/ชื่อเล่น
@@ -221,12 +233,9 @@ export const InboundView: React.FC = () => {
     if (codeQuery) {
       const byCode = lookupStudentByCode(codeQuery);
       if (byCode) {
+        lastAutoPopulatedCodeRef.current = byCode.studentCode;
         recordLocalSearchSaving();
         populateStudentFields(byCode);
-        setStudentFetchFeedback({
-          type: 'success',
-          message: `ดึงข้อมูลนักเรียนรหัส ${byCode.studentCode} สำเร็จ (${byCode.prefix}${byCode.firstName} ${byCode.lastName})`,
-        });
         return;
       }
       // ลองค้นหาจากชื่อหรือรหัสบางส่วนในกรณีที่ผู้ใช้พิมพ์ชื่อในช่องรหัส
@@ -238,12 +247,9 @@ export const InboundView: React.FC = () => {
           s.nickname.toLowerCase().includes(codeQuery.toLowerCase())
       );
       if (fuzzyByCodeField) {
+        lastAutoPopulatedCodeRef.current = fuzzyByCodeField.studentCode;
         recordLocalSearchSaving();
         populateStudentFields(fuzzyByCodeField);
-        setStudentFetchFeedback({
-          type: 'success',
-          message: `ดึงข้อมูลนักเรียนสำเร็จ: ${fuzzyByCodeField.prefix}${fuzzyByCodeField.firstName} ${fuzzyByCodeField.lastName} (รหัส ${fuzzyByCodeField.studentCode})`,
-        });
         return;
       }
     }
@@ -257,12 +263,9 @@ export const InboundView: React.FC = () => {
           s.nickname.toLowerCase().includes(textQuery)
       );
       if (bySearch) {
+        lastAutoPopulatedCodeRef.current = bySearch.studentCode;
         recordLocalSearchSaving();
         populateStudentFields(bySearch);
-        setStudentFetchFeedback({
-          type: 'success',
-          message: `ดึงข้อมูลนักเรียนสำเร็จ: ${bySearch.prefix}${bySearch.firstName} ${bySearch.lastName} (รหัส ${bySearch.studentCode})`,
-        });
         return;
       }
     }
@@ -336,36 +339,6 @@ export const InboundView: React.FC = () => {
     },
     [handleTrackingChange]
   );
-
-  // ตรวจสอบสถานะสิทธิ์การใช้กล้องจากเบราว์เซอร์เมื่อเริ่มต้น
-  useEffect(() => {
-    let permStatus: PermissionStatus | null = null;
-    const handlePermChange = () => {
-      if (!permStatus) return;
-      if (permStatus.state === 'granted') setCameraPermission('granted');
-      else if (permStatus.state === 'denied') setCameraPermission('denied');
-      else setCameraPermission('prompt');
-    };
-
-    if (typeof navigator !== 'undefined' && navigator.permissions?.query) {
-      navigator.permissions
-        .query({ name: 'camera' as PermissionName })
-        .then((statusObj) => {
-          permStatus = statusObj;
-          handlePermChange();
-          statusObj.addEventListener('change', handlePermChange);
-        })
-        .catch(() => {
-          // บางเบราว์เซอร์เช่น Safari อาจไม่รองรับ permissions.query('camera')
-        });
-    }
-
-    return () => {
-      if (permStatus) {
-        permStatus.removeEventListener('change', handlePermChange);
-      }
-    };
-  }, []);
 
   const requestCameraPermissionAndOpenScanner = useCallback(() => {
     setFormError(null);
@@ -588,22 +561,6 @@ export const InboundView: React.FC = () => {
             ระบบลงทะเบียนรับเข้าและคัดแยกพัสดุประจำหอพัก (Inbound)
           </h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={handleToggleScanner}
-            className="min-h-[44px] px-4 py-2.5 bg-slate-900 text-white text-sm font-semibold rounded-xl hover:bg-slate-800 transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer"
-          >
-            <Camera className="w-4 h-4 shrink-0" />
-            <span>
-              {isScannerOpen
-                ? 'ปิดกล้องสแกนบาร์โค้ด'
-                : cameraPermission === 'granted'
-                ? 'เปิดกล้องสแกนบาร์โค้ด'
-                : 'ขออนุญาตใช้กล้อง & สแกนบาร์โค้ด'}
-            </span>
-          </button>
-        </div>
       </div>
 
       {formError && (
@@ -634,25 +591,6 @@ export const InboundView: React.FC = () => {
               </label>
 
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleToggleScanner}
-                  className={`min-h-[40px] px-3.5 py-2 text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer ${
-                    isScannerOpen
-                      ? 'bg-red-600 hover:bg-red-700 text-white'
-                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                  }`}
-                >
-                  <Camera className="w-4 h-4 shrink-0" />
-                  <span>
-                    {isScannerOpen
-                      ? 'ปิดกล้องสแกน'
-                      : cameraPermission === 'granted'
-                      ? 'เปิดกล้องสแกนโค้ด'
-                      : 'ขออนุญาตใช้กล้องสแกน'}
-                  </span>
-                </button>
-
                 <label className="min-h-[40px] px-3.5 py-2 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer">
                   <ImageUp className="w-4 h-4 shrink-0" />
                   <span>{isScanningFile ? 'กำลังอ่าน...' : 'ถ่ายรูป/เลือกรูปบาร์โค้ด'}</span>
@@ -667,25 +605,6 @@ export const InboundView: React.FC = () => {
                 </label>
               </div>
             </div>
-
-            {/* แถบแสดงสถานะการขออนุญาตใช้กล้อง (แสดงเมื่อยังไม่เปิดกล้องและยังไม่ได้อนุญาตสิทธิ์) */}
-            {!isScannerOpen && cameraPermission !== 'granted' && (
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5 text-xs text-slate-700">
-                  <Camera className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>
-                    ต้องการสแกนบาร์โค้ดหรือ QR Code จากกล่องพัสดุ? กดปุ่มเพื่อ<strong>ขออนุญาตเปิดใช้งานกล้องของอุปกรณ์</strong>
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={requestCameraPermissionAndOpenScanner}
-                  className="min-h-[36px] px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-colors shrink-0 self-start sm:self-center cursor-pointer"
-                >
-                  อนุญาตให้ใช้กล้องเพื่อสแกนโค้ด
-                </button>
-              </div>
-            )}
 
             {/* หน้าจอกล้องสแกนบาร์โค้ดสด (บังคับกล้องหลังมือถือเป็นหลัก + สลับเลนส์ได้) */}
             <BarcodeCameraScanner
@@ -899,11 +818,8 @@ export const InboundView: React.FC = () => {
                           key={st.studentCode}
                           type="button"
                           onClick={() => {
+                            lastAutoPopulatedCodeRef.current = st.studentCode;
                             populateStudentFields(st);
-                            setStudentFetchFeedback({
-                              type: 'success',
-                              message: `ดึงข้อมูลนักเรียน: ${st.prefix}${st.firstName} ${st.lastName} (${st.dormitory} ห้อง ${st.dormRoom})`,
-                            });
                           }}
                           className={`min-h-[38px] px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
                             isSelected
@@ -1049,96 +965,6 @@ export const InboundView: React.FC = () => {
                   />
                 </div>
               </div>
-
-              {/* แสดงการนับจำนวนพัสดุของนักเรียนคนนี้ แยกเป็น วัน, สัปดาห์, เดือน */}
-              {(studentCodeInput.trim() || studentFullName.trim() || matchedStudent) && (
-                <div
-                  className={`p-4 rounded-xl border space-y-3 ${
-                    activeStudentParcelStats.isOverWeeklyLimit
-                      ? 'bg-red-50 border-red-300'
-                      : activeStudentParcelStats.weekCount === WEEKLY_PARCEL_WARNING_LIMIT
-                      ? 'bg-amber-50 border-amber-300'
-                      : 'bg-slate-50 border-slate-200'
-                  }`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-slate-900">
-                      สถิติจำนวนพัสดุสะสมของนักเรียนคนนี้ (วัน / สัปดาห์ / เดือน):
-                    </span>
-                    {activeStudentParcelStats.isOverWeeklyLimit ? (
-                      <button
-                        type="button"
-                        onClick={() => openWeeklyWarningPopup(activeStudentParcelStats, 'manual')}
-                        className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <AlertTriangle className="w-3.5 h-3.5" />
-                        <span>
-                          แจ้งเตือน! เกิน {WEEKLY_PARCEL_WARNING_LIMIT} ชิ้น/สัปดาห์ (คลิกดู Popup)
-                        </span>
-                      </button>
-                    ) : activeStudentParcelStats.weekCount === WEEKLY_PARCEL_WARNING_LIMIT ? (
-                      <span className="text-xs font-bold text-amber-800 flex items-center gap-1">
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                        <span>
-                          รับครบ {WEEKLY_PARCEL_WARNING_LIMIT} ชิ้นในสัปดาห์นี้แล้ว (ชิ้นถัดไปจะแจ้งเตือน Popup)
-                        </span>
-                      </span>
-                    ) : null}
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2.5 text-center">
-                    <div className="bg-white border border-slate-200 rounded-xl p-2.5">
-                      <span className="block text-[11px] font-semibold text-slate-500">
-                        วัน (วันนี้)
-                      </span>
-                      <span className="block text-xl font-mono font-extrabold text-slate-900 tabular-nums mt-0.5">
-                        {activeStudentParcelStats.dayCount}
-                      </span>
-                      <span className="block text-[10px] text-slate-500">ชิ้น</span>
-                    </div>
-
-                    <div
-                      className={`bg-white rounded-xl p-2.5 border ${
-                        activeStudentParcelStats.isOverWeeklyLimit
-                          ? 'border-2 border-red-600'
-                          : 'border-slate-200'
-                      }`}
-                    >
-                      <span
-                        className={`block text-[11px] font-bold ${
-                          activeStudentParcelStats.isOverWeeklyLimit
-                            ? 'text-red-700'
-                            : 'text-slate-600'
-                        }`}
-                      >
-                        สัปดาห์ (7 วัน)
-                      </span>
-                      <span
-                        className={`block text-xl font-mono font-extrabold tabular-nums mt-0.5 ${
-                          activeStudentParcelStats.isOverWeeklyLimit
-                            ? 'text-red-600'
-                            : 'text-slate-900'
-                        }`}
-                      >
-                        {activeStudentParcelStats.weekCount}
-                      </span>
-                      <span className="block text-[10px] text-slate-500">
-                        ชิ้น (เกณฑ์ไม่เกิน {WEEKLY_PARCEL_WARNING_LIMIT})
-                      </span>
-                    </div>
-
-                    <div className="bg-white border border-slate-200 rounded-xl p-2.5">
-                      <span className="block text-[11px] font-semibold text-slate-500">
-                        เดือน (เดือนนี้)
-                      </span>
-                      <span className="block text-xl font-mono font-extrabold text-slate-900 tabular-nums mt-0.5">
-                        {activeStudentParcelStats.monthCount}
-                      </span>
-                      <span className="block text-[10px] text-slate-500">ชิ้น</span>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           </section>
 
@@ -1348,51 +1174,14 @@ export const InboundView: React.FC = () => {
                   </div>
                 </div>
 
-                {/* แสดงจำนวนพัสดุของนักเรียน (วัน / สัปดาห์ / เดือน) บนการ์ดคัดแยกตะกร้า */}
-                <div className="bg-white/90 border border-black/10 rounded-xl p-3.5 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-slate-700">
-                      จำนวนพัสดุของนักเรียน (วัน / สัปดาห์ / เดือน)
-                    </span>
-                    {activeStudentParcelStats.isOverWeeklyLimit && (
-                      <button
-                        type="button"
-                        onClick={() => openWeeklyWarningPopup(activeStudentParcelStats, 'manual')}
-                        className="px-2 py-0.5 bg-red-600 text-white text-[11px] font-bold rounded-md cursor-pointer"
-                      >
-                        เกิน 3 ชิ้น/สัปดาห์!
-                      </button>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 text-center font-mono text-xs">
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2">
-                      <span className="block text-[10px] font-sans text-slate-500">วัน</span>
-                      <strong className="text-sm text-slate-900 tabular-nums">
-                        {activeStudentParcelStats.dayCount}
-                      </strong>{' '}
-                      <span className="text-[10px] font-sans text-slate-500">ชิ้น</span>
-                    </div>
-                    <div
-                      className={`rounded-lg py-1.5 px-2 border ${
-                        activeStudentParcelStats.isOverWeeklyLimit
-                          ? 'bg-red-50 border-red-500 text-red-700'
-                          : 'bg-slate-50 border-slate-200 text-slate-900'
-                      }`}
-                    >
-                      <span className="block text-[10px] font-sans">สัปดาห์</span>
-                      <strong className="text-sm tabular-nums">
-                        {activeStudentParcelStats.weekCount}
-                      </strong>{' '}
-                      <span className="text-[10px] font-sans">ชิ้น</span>
-                    </div>
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2">
-                      <span className="block text-[10px] font-sans text-slate-500">เดือน</span>
-                      <strong className="text-sm text-slate-900 tabular-nums">
-                        {activeStudentParcelStats.monthCount}
-                      </strong>{' '}
-                      <span className="text-[10px] font-sans text-slate-500">ชิ้น</span>
-                    </div>
-                  </div>
+                {/* แสดงจำนวนชิ้นรวมปัจจุบันบนการ์ดคัดแยกตะกร้า */}
+                <div className="bg-white/90 border border-black/10 rounded-xl p-3.5 flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-slate-700">
+                    จำนวนชิ้นรวมปัจจุบัน
+                  </span>
+                  <span className={`text-lg font-mono font-extrabold tabular-nums ${dormTheme.textClass}`}>
+                    {activeStudentParcelStats.totalCount} ชิ้น
+                  </span>
                 </div>
               </div>
             ) : (

@@ -12,11 +12,6 @@ import {
   X,
 } from 'lucide-react';
 import { ParcelSystemProvider, useParcelSystem } from './context/ParcelSystemContext';
-import {
-  WEEKLY_PARCEL_WARNING_LIMIT,
-  getDormitoryTheme,
-  formatThaiSlashDate,
-} from './types/parcel';
 import { InboundView } from './components/InboundView';
 import { TrackingView } from './components/TrackingView';
 import { ManifestView } from './components/ManifestView';
@@ -35,7 +30,6 @@ const MainWorkspace: React.FC = () => {
     parcels,
     overWeeklyLimitStudents,
     weeklyWarningPopup,
-    openWeeklyWarningPopup,
     closeWeeklyWarningPopup,
     pendingWrites,
     quotaMetrics,
@@ -138,7 +132,8 @@ const MainWorkspace: React.FC = () => {
           </button>
         </nav>
 
-        <div className="flex items-center gap-2 shrink-0">
+        {/* ซ่อน email Tasawan และปุ่มซิงก์ข้อมูลล่าสุดเมื่อแสดงบนจอมือถือและไอแพด (แสดงเฉพาะจอใหญ่ xl ขึ้นไป) */}
+        <div className="hidden xl:flex items-center gap-2 shrink-0">
           <div
             title={`เชื่อมต่อ Firebase อัตโนมัติภายใต้บัญชี ${connectedEmail}`}
             className="min-h-[38px] px-3 py-1.5 text-xs font-semibold text-emerald-950 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2 whitespace-nowrap"
@@ -168,8 +163,8 @@ const MainWorkspace: React.FC = () => {
         </div>
       </header>
 
-      {/* แถบแสดงสถานะการเชื่อมต่อ Firebase อัตโนมัติภายใต้ Tasawan_app01@pcccr.ac.th */}
-      <div className="no-print bg-slate-900 text-slate-200 px-4 md:px-8 py-2.5 border-b border-slate-800">
+      {/* แถบแสดงสถานะการเชื่อมต่อ Firebase (ซ่อนบนจอมือถือและไอแพด) */}
+      <div className="no-print hidden xl:block bg-slate-900 text-slate-200 px-4 md:px-8 py-2.5 border-b border-slate-800">
         <div className="max-w-7xl mx-auto flex flex-col lg:flex-row lg:items-center justify-between gap-2 text-xs">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="font-semibold text-emerald-400">
@@ -240,31 +235,6 @@ const MainWorkspace: React.FC = () => {
         </div>
       </div>
 
-      {/* แถบแจ้งเตือนด่วนเมื่อมีนักเรียนรับพัสดุเกิน 3 ชิ้นต่อสัปดาห์ */}
-      {overWeeklyLimitStudents.length > 0 && (
-        <div className="no-print bg-red-600 text-white px-4 md:px-8 py-2.5 border-b border-red-700">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-2 font-semibold">
-              <AlertTriangle className="w-4 h-4 text-amber-200 shrink-0" />
-              <span>
-                แจ้งเตือน: พบนักเรียนที่มีพัสดุเกิน {WEEKLY_PARCEL_WARNING_LIMIT} ชิ้นต่อสัปดาห์ จำนวน{' '}
-                <strong className="font-mono text-sm underline tabular-nums">
-                  {overWeeklyLimitStudents.length}
-                </strong>{' '}
-                คน (สูงสุด {overWeeklyLimitStudents[0]?.weekCount || 0} ชิ้น/สัปดาห์)
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => openWeeklyWarningPopup(overWeeklyLimitStudents[0], 'manual')}
-              className="min-h-[32px] px-3 py-1 bg-white text-red-700 hover:bg-red-50 font-bold rounded-lg transition-colors self-start sm:self-auto shrink-0 cursor-pointer"
-            >
-              เปิดดูรายละเอียดแจ้งเตือน ({overWeeklyLimitStudents.length} คน)
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* แจ้งเตือนสถานะการทำงาน (Toast Notification) */}
       {toastMessage && (
         <div className="no-print max-w-7xl w-full mx-auto px-4 md:px-8 pt-4">
@@ -303,216 +273,71 @@ const MainWorkspace: React.FC = () => {
         {activeTab === 'deliverables' && <DeliverablesView />}
       </main>
 
-      {/* Popup แจ้งเตือนเมื่อพบว่ามีพัสดุนักเรียนเกิน 3 ชิ้นต่อสัปดาห์ */}
-      {weeklyWarningPopup.isOpen && (
+      {/* กล่องแจ้งเตือนเมื่อสแกนพบ แสดงเฉพาะ ชื่อ หอพัก และจำนวนชิ้นรวมปัจจุบัน เตือนแล้วปิดเลย */}
+      {weeklyWarningPopup.isOpen && activePopupStudent && (
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="weekly-parcel-warning-title"
-          className="no-print fixed inset-0 z-50 bg-slate-950/65 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={closeWeeklyWarningPopup}
+          className="no-print fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4"
         >
-          <div className="bg-white border-2 border-red-600 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5">
-            <div className="flex items-start justify-between gap-4 border-b border-red-200 pb-4">
-              <div className="flex items-start gap-3">
-                <div className="w-11 h-11 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0">
-                  <AlertTriangle className="w-6 h-6" />
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white border-2 border-red-600 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-xl"
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-red-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5" />
                 </div>
-                <div>
-                  <p className="text-xs font-bold text-red-700">
-                    ระบบเฝ้าระวังปริมาณพัสดุนักเรียน (เกณฑ์กำหนดไม่เกิน {WEEKLY_PARCEL_WARNING_LIMIT} ชิ้น/สัปดาห์)
-                  </p>
-                  <h2
-                    id="weekly-parcel-warning-title"
-                    className="text-lg md:text-xl font-extrabold text-slate-900 mt-0.5"
-                  >
-                    แจ้งเตือน! พบพัสดุนักเรียนเกิน {WEEKLY_PARCEL_WARNING_LIMIT} ชิ้นต่อสัปดาห์
-                  </h2>
-                  <p className="text-xs text-slate-600 mt-1">
-                    {weeklyWarningPopup.triggerReason === 'inbound_added'
-                      ? 'รายการพัสดุที่เพิ่งบันทึกรับเข้า ทำให้นักเรียนมีจำนวนพัสดุสะสมในรอบสัปดาห์นี้เกิน 3 ชิ้น'
-                      : weeklyWarningPopup.triggerReason === 'student_lookup'
-                      ? 'นักเรียนที่กำลังเลือกมีจำนวนพัสดุสะสมในรอบสัปดาห์นี้เกิน 3 ชิ้นแล้ว'
-                      : `พบนักเรียนที่มีพัสดุรับเข้าเกิน 3 ชิ้นต่อสัปดาห์ จำนวน ${overWeeklyLimitStudents.length} คน`}
-                  </p>
-                </div>
+                <h2
+                  id="weekly-parcel-warning-title"
+                  className="text-base font-extrabold text-red-700"
+                >
+                  แจ้งเตือนจำนวนพัสดุ
+                </h2>
               </div>
-
               <button
                 type="button"
-                aria-label="ปิดหน้าต่างแจ้งเตือนพัสดุเกินกำหนด"
+                aria-label="ปิดกล่องแจ้งเตือน"
                 onClick={closeWeeklyWarningPopup}
-                className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 cursor-pointer"
+                className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {activePopupStudent ? (
-              <div className="space-y-4">
-                {/* ข้อมูลนักเรียนที่กำลังแสดงใน Popup พร้อมสรุปจำนวนพัสดุ วัน / สัปดาห์ / เดือน */}
-                <div className="p-5 bg-red-50/80 border border-red-200 rounded-2xl space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div>
-                      <span className="text-xs font-bold text-red-800">
-                        ข้อมูลนักเรียนที่มีพัสดุเกินเกณฑ์รายสัปดาห์:
-                      </span>
-                      <div className="text-lg font-extrabold text-slate-900 mt-0.5">
-                        {activePopupStudent.studentFullName}{' '}
-                        {activePopupStudent.nickname && activePopupStudent.nickname !== '-' && (
-                          <span className="font-normal text-sm text-slate-700">
-                            ({activePopupStudent.nickname})
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-slate-700 font-mono mt-1 tabular-nums">
-                        รหัสนักเรียน: <strong>{activePopupStudent.studentCode}</strong> · ชั้น{' '}
-                        {activePopupStudent.gradeRoom} · {activePopupStudent.dormitory} ห้อง{' '}
-                        {activePopupStudent.dormRoom}
-                      </div>
-                    </div>
-
-                    <div className="px-3.5 py-2 bg-red-600 text-white rounded-xl text-right shrink-0 self-start sm:self-center">
-                      <span className="block text-[11px] font-semibold text-red-100">
-                        สถานะเฝ้าระวังรายสัปดาห์
-                      </span>
-                      <span className="font-mono font-extrabold text-sm tabular-nums">
-                        เกินเกณฑ์ ({activePopupStudent.weekCount} / {WEEKLY_PARCEL_WARNING_LIMIT} ชิ้น)
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* ตัวเลขแสดงจำนวนพัสดุ วัน, สัปดาห์, เดือน */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-white border border-slate-200 rounded-xl p-3.5 text-center">
-                      <span className="block text-xs font-semibold text-slate-600">
-                        รายวัน (วันนี้)
-                      </span>
-                      <span className="block text-2xl font-mono font-extrabold text-slate-900 tabular-nums mt-1">
-                        {activePopupStudent.dayCount}
-                      </span>
-                      <span className="block text-[11px] text-slate-500">ชิ้น</span>
-                    </div>
-
-                    <div className="bg-white border-2 border-red-600 rounded-xl p-3.5 text-center">
-                      <span className="block text-xs font-bold text-red-700">
-                        รายสัปดาห์ (7 วัน)
-                      </span>
-                      <span className="block text-2xl font-mono font-extrabold text-red-600 tabular-nums mt-1">
-                        {activePopupStudent.weekCount}
-                      </span>
-                      <span className="block text-[11px] font-bold text-red-700">
-                        ชิ้น (เกิน 3 ชิ้น/สัปดาห์)
-                      </span>
-                    </div>
-
-                    <div className="bg-white border border-slate-200 rounded-xl p-3.5 text-center">
-                      <span className="block text-xs font-semibold text-slate-600">
-                        รายเดือน (เดือนนี้)
-                      </span>
-                      <span className="block text-2xl font-mono font-extrabold text-slate-900 tabular-nums mt-1">
-                        {activePopupStudent.monthCount}
-                      </span>
-                      <span className="block text-[11px] text-slate-500">ชิ้น</span>
-                    </div>
-                  </div>
-
-                  {/* รายการพัสดุของนักเรียนคนนี้ในรอบสัปดาห์ */}
-                  <div className="space-y-2">
-                    <span className="block text-xs font-bold text-slate-800">
-                      รายการพัสดุในรอบสัปดาห์นี้ของ {activePopupStudent.studentFullName} (
-                      {activePopupStudent.weekParcels.length} ชิ้น):
-                    </span>
-                    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                          <tr>
-                            <th className="py-2 px-3">ลำดับ</th>
-                            <th className="py-2 px-3">เลขพัสดุ (Tracking)</th>
-                            <th className="py-2 px-3">ขนส่ง</th>
-                            <th className="py-2 px-3">ประเภทสิ่งของ</th>
-                            <th className="py-2 px-3">วันที่รับเข้า</th>
-                            <th className="py-2 px-3">สถานะ</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {activePopupStudent.weekParcels.map((p, idx) => (
-                            <tr key={p.id} className="hover:bg-slate-50">
-                              <td className="py-2 px-3 font-mono font-bold tabular-nums">
-                                #{idx + 1}
-                              </td>
-                              <td className="py-2 px-3 font-mono font-bold text-slate-900 tabular-nums">
-                                {p.trackingNumber}
-                              </td>
-                              <td className="py-2 px-3 text-slate-700">{p.courier}</td>
-                              <td className="py-2 px-3 text-slate-800 font-medium">{p.category}</td>
-                              <td className="py-2 px-3 font-mono tabular-nums">
-                                {formatThaiSlashDate(p.receivedDate)}
-                              </td>
-                              <td className="py-2 px-3 font-semibold text-slate-800">
-                                {p.status}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-
-                {/* หากมีนักเรียนที่เกิน 3 ชิ้น/สัปดาห์ หลายคน ให้คลิกสลับดูรายคนได้ */}
-                {overWeeklyLimitStudents.length > 1 && (
-                  <div className="space-y-2">
-                    <span className="block text-xs font-bold text-slate-800">
-                      รายชื่อนักเรียนทั้งหมดที่มีพัสดุเกิน {WEEKLY_PARCEL_WARNING_LIMIT} ชิ้นต่อสัปดาห์ ({overWeeklyLimitStudents.length} คน) — คลิกเพื่อดูรายละเอียด:
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      {overWeeklyLimitStudents.map((stStats) => {
-                        const isSelected = stStats.studentKey === activePopupStudent.studentKey;
-                        const theme = getDormitoryTheme(stStats.dormitory);
-                        return (
-                          <button
-                            key={stStats.studentKey}
-                            type="button"
-                            onClick={() => openWeeklyWarningPopup(stStats, 'manual')}
-                            className={`min-h-[38px] px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer ${
-                              isSelected
-                                ? 'bg-red-600 text-white border-red-600'
-                                : 'bg-white text-slate-800 border-slate-300 hover:bg-red-50 hover:border-red-300'
-                            }`}
-                          >
-                            <span
-                              className="w-2.5 h-2.5 rounded-xs shrink-0"
-                              style={{ backgroundColor: theme.hexColor }}
-                            />
-                            <span>{stStats.studentFullName}</span>
-                            <span className="font-mono font-bold tabular-nums">
-                              (วัน {stStats.dayCount} · สัปดาห์ {stStats.weekCount} · เดือน {stStats.monthCount})
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+            <div className="space-y-2.5 text-sm">
+              <div className="flex items-baseline justify-between gap-3 py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-medium shrink-0">ชื่อ</span>
+                <span className="font-bold text-slate-900 text-right">
+                  {activePopupStudent.studentFullName}
+                </span>
               </div>
-            ) : (
-              <div className="p-6 text-center text-sm text-slate-600">
-                ยังไม่มีนักเรียนที่รับพัสดุเกิน {WEEKLY_PARCEL_WARNING_LIMIT} ชิ้นต่อสัปดาห์ในขณะนี้
-              </div>
-            )}
 
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-200">
-              <span className="text-xs text-slate-500">
-                เกณฑ์การแจ้งเตือน: แสดง Popup อัตโนมัติเมื่อจำนวนพัสดุของนักเรียนเกิน 3 ชิ้นต่อสัปดาห์ (ตั้งแต่ชิ้นที่ 4 ขึ้นไป)
-              </span>
-              <button
-                type="button"
-                onClick={closeWeeklyWarningPopup}
-                className="min-h-[44px] px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
-              >
-                รับทราบและปิดหน้าต่างแจ้งเตือน
-              </button>
+              <div className="flex items-baseline justify-between gap-3 py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-medium shrink-0">หอพัก</span>
+                <span className="font-bold text-slate-900 text-right">
+                  {activePopupStudent.dormitory || '-'}
+                </span>
+              </div>
+
+              <div className="flex items-baseline justify-between gap-3 py-1.5">
+                <span className="text-slate-500 font-medium shrink-0">จำนวนชิ้นรวมปัจจุบัน</span>
+                <span className="text-lg font-mono font-extrabold text-red-600 tabular-nums">
+                  {activePopupStudent.totalCount} ชิ้น
+                </span>
+              </div>
             </div>
+
+            <button
+              type="button"
+              onClick={closeWeeklyWarningPopup}
+              className="w-full min-h-[44px] py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl transition-colors cursor-pointer"
+            >
+              ปิด
+            </button>
           </div>
         </div>
       )}

@@ -60,11 +60,13 @@ function createNativeDetector(): NativeBarcodeDetector | null {
   }
 }
 
-type Html5QrcodeInternal = Html5Qrcode & {
+interface Html5QrcodeInternal {
+  scanFile: (file: File, showImage?: boolean) => Promise<string>;
+  clear: () => void;
   qrcode?: {
     decodeRobustlyAsync?: (canvas: HTMLCanvasElement) => Promise<{ text?: string }>;
   };
-};
+}
 
 /**
  * ฟังก์ชันถอดรหัสบาร์โค้ดจากไฟล์รูปภาพ (รองรับภาพความละเอียดสูงจากกล้องหลังมือถือทั้งแนวตั้งและแนวนอน)
@@ -113,7 +115,7 @@ export async function decodeBarcodeFromImageFile(file: File): Promise<string> {
     const decoder = new Html5Qrcode(tempId, {
       formatsToSupport: SUPPORTED_BARCODE_FORMATS,
       verbose: false,
-    }) as Html5QrcodeInternal;
+    }) as unknown as Html5QrcodeInternal;
 
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -417,7 +419,7 @@ export const BarcodeCameraScanner: React.FC<BarcodeCameraScannerProps> = ({
               activeTrack as MediaStreamTrack & {
                 getCapabilities?: () => Record<string, unknown>;
               }
-            ).getCapabilities?.();
+            ).getCapabilities?.() as Record<string, unknown> | undefined;
             if (capabilities) {
               if ('torch' in capabilities && Boolean(capabilities.torch)) {
                 setTorchSupported(true);
@@ -492,7 +494,7 @@ export const BarcodeCameraScanner: React.FC<BarcodeCameraScannerProps> = ({
         html5Decoder = new Html5Qrcode(decoderContainerIdRef.current, {
           formatsToSupport: SUPPORTED_BARCODE_FORMATS,
           verbose: false,
-        }) as Html5QrcodeInternal;
+        }) as unknown as Html5QrcodeInternal;
       }
     } catch {
       // ignore

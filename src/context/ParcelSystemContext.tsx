@@ -545,18 +545,14 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }));
   }, []);
 
-  // แจ้งเตือน Popup อัตโนมัติเมื่อตรวจพบว่าในระบบมีนักเรียนที่รับพัสดุเกิน 3 ชิ้นต่อสัปดาห์
+  // เมื่อกล่องแจ้งเตือนเปิดขึ้น ให้แสดงเตือนแล้วปิดอัตโนมัติ
   useEffect(() => {
-    if (initialOverLimitAlertShownRef.current) return;
-    if (overWeeklyLimitStudents.length > 0) {
-      initialOverLimitAlertShownRef.current = true;
-      setWeeklyWarningPopup({
-        isOpen: true,
-        focusedStudent: overWeeklyLimitStudents[0],
-        triggerReason: 'auto_detect',
-      });
-    }
-  }, [overWeeklyLimitStudents]);
+    if (!weeklyWarningPopup.isOpen) return;
+    const timer = setTimeout(() => {
+      closeWeeklyWarningPopup();
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [weeklyWarningPopup.isOpen, closeWeeklyWarningPopup]);
 
   const recordLocalSearchSaving = useCallback(() => {
     setQuotaMetrics((prev) => ({
