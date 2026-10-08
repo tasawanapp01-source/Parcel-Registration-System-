@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import {
   Search,
   CheckCircle2,
@@ -9,6 +10,8 @@ import {
   X,
   Database,
   AlertTriangle,
+  Camera,
+  RefreshCw,
 } from 'lucide-react';
 import { useParcelSystem } from '../context/ParcelSystemContext';
 import {
@@ -19,6 +22,20 @@ import {
   isUnknownOwnerParcel,
   WEEKLY_PARCEL_WARNING_LIMIT,
 } from '../types/parcel';
+
+const TRACKING_SCAN_FORMATS = [
+  Html5QrcodeSupportedFormats.CODE_128,
+  Html5QrcodeSupportedFormats.CODE_39,
+  Html5QrcodeSupportedFormats.CODE_93,
+  Html5QrcodeSupportedFormats.EAN_13,
+  Html5QrcodeSupportedFormats.EAN_8,
+  Html5QrcodeSupportedFormats.ITF,
+  Html5QrcodeSupportedFormats.CODABAR,
+  Html5QrcodeSupportedFormats.QR_CODE,
+  Html5QrcodeSupportedFormats.DATA_MATRIX,
+  Html5QrcodeSupportedFormats.UPC_A,
+  Html5QrcodeSupportedFormats.UPC_E,
+];
 
 export const TrackingView: React.FC = () => {
   const {
@@ -38,17 +55,133 @@ export const TrackingView: React.FC = () => {
   const [selectedDormitory, setSelectedDormitory] = useState<string>('ALL');
   const [onlyOverWeeklyLimit, setOnlyOverWeeklyLimit] = useState<boolean>(false);
 
+  // สถานะขออนุญาตใช้กล้องและสแกนค้นหาพัสดุ
+  const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
+  const [cameraPermission, setCameraPermission] = useState<
+    'prompt' | 'granted' | 'denied' | 'requesting'
+  >('prompt');
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
+  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+
   const availableDormitories = useMemo(
     () => getAvailableDormitories(students, parcels),
     [students, parcels]
   );
 
-  const handleKeywordChange = (val: string) => {
-    setSearchKeyword(val);
-    if (val.trim().length > 0) {
-      recordLocalSearchSaving();
+  const handleKeywordChange = useCallback(
+    (val: string) => {
+      setSearchKeyword(val);
+      if (val.trim().length > 0) {
+        recordLocalSearchSaving();
+      }
+    },
+    [recordLocalSearchSaving]
+  );
+
+  const requestCameraPermissionAndScan = useCallback(async () => {
+    setCameraError(null);
+    setCameraPermission('requesting');
+
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setCameraPermission('denied');
+      setCameraError('เบราว์เซอร์ไม่รองรับการเปิดกล้องโดยตรง');
+      setIsScannerOpen(true);
+      return;
     }
-  };
+
+    try {
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: facingMode } },
+          audio: false,
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+      }
+      stream.getTracks().forEach((t) => t.stop());
+      setCameraPermission('granted');
+      setIsScannerOpen(true);
+    } catch {
+      setCameraPermission('denied');
+      setIsScannerOpen(true);
+      setCameraError(
+        'ยังไม่ได้รับอนุญาตให้ใช้กล้อง กรุณากดอนุญาต (Allow) ที่แถบ URL ด้านบนของเบราว์เซอร์ แล้วกด "ขออนุญาตใช้กล้องอีกครั้ง"'
+      );
+    }
+  }, [facingMode]);
+
+  useEffect(() => {
+    if (!isScannerOpen || cameraPermission === 'denied' || cameraPermission === 'requesting') {
+      if (html5QrCodeRef.current) {
+        const scanner = html5QrCodeRef.current;
+        html5QrCodeRef.current = null;
+        if (scanner.isScanning) {
+          scanner
+            .stop()
+            .then(() => scanner.clear())
+            .catch(() => {});
+        }
+      }
+      return;
+    }
+
+    let isMounted = true;
+    const startScanner = async () => {
+      try {
+        const el = document.getElementById('tracking-barcode-reader');
+        if (!el || !isMounted) return;
+        const scannerInstance = new Html5Qrcode('tracking-barcode-reader', {
+          formatsToSupport: TRACKING_SCAN_FORMATS,
+          verbose: false,
+        });
+        html5QrCodeRef.current = scannerInstance;
+
+        const config = { fps: 15, qrbox: { width: 260, height: 140 } };
+        const onSuccess = (decoded: string) => {
+          if (isMounted && decoded.trim()) {
+            handleKeywordChange(decoded.trim());
+            setIsScannerOpen(false);
+          }
+        };
+
+        try {
+          await scannerInstance.start({ facingMode }, config, onSuccess, () => {});
+        } catch {
+          const cams = await Html5Qrcode.getCameras();
+          if (cams && cams.length > 0) {
+            await scannerInstance.start(cams[0].id, config, onSuccess, () => {});
+          } else {
+            await scannerInstance.start({ facingMode: 'user' }, config, onSuccess, () => {});
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setCameraError('ไม่สามารถเปิดกล้องได้ กรุณากดขออนุญาตใช้กล้องอีกครั้ง');
+        }
+      }
+    };
+
+    const timer = setTimeout(startScanner, 120);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+      if (html5QrCodeRef.current) {
+        const scanner = html5QrCodeRef.current;
+        html5QrCodeRef.current = null;
+        if (scanner.isScanning) {
+          scanner
+            .stop()
+            .then(() => scanner.clear())
+            .catch(() => {});
+        }
+      }
+    };
+  }, [isScannerOpen, cameraPermission, facingMode, handleKeywordChange]);
 
   const filteredParcels = useMemo(() => {
     const base = searchParcelsLocal(searchKeyword, selectedStatus, selectedDormitory);
@@ -109,29 +242,43 @@ export const TrackingView: React.FC = () => {
       {/* แถบค้นหาขนาดใหญ่ (Mobile-First) และตัวกรองหอพัก */}
       <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-          <div className="md:col-span-8 relative">
-            <label htmlFor="tracking-search-input" className="sr-only">
-              ค้นหาเลขพัสดุ ชื่อนักเรียน หรือรหัสนักเรียน
-            </label>
-            <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
-            <input
-              id="tracking-search-input"
-              type="text"
-              value={searchKeyword}
-              onChange={(e) => handleKeywordChange(e.target.value)}
-              placeholder="ค้นหาด้วย เลข Tracking, รหัสนักเรียน, ชื่อจริง หรือ ชื่อเล่น..."
-              className="w-full min-h-[52px] pl-12 pr-10 py-3 text-base text-slate-900 bg-slate-50 border-2 border-slate-300 rounded-xl focus:bg-white focus:border-slate-900 focus:outline-none transition-colors"
-            />
-            {searchKeyword && (
-              <button
-                type="button"
-                aria-label="ล้างคำค้นหา"
-                onClick={() => setSearchKeyword('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 min-h-[38px] min-w-[38px] flex items-center justify-center text-slate-400 hover:text-slate-700"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
+          <div className="md:col-span-8 flex items-center gap-2">
+            <div className="relative flex-1">
+              <label htmlFor="tracking-search-input" className="sr-only">
+                ค้นหาเลขพัสดุ ชื่อนักเรียน หรือรหัสนักเรียน
+              </label>
+              <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+              <input
+                id="tracking-search-input"
+                type="text"
+                value={searchKeyword}
+                onChange={(e) => handleKeywordChange(e.target.value)}
+                placeholder="ค้นหาด้วย เลข Tracking, รหัสนักเรียน, ชื่อจริง หรือ ชื่อเล่น..."
+                className="w-full min-h-[52px] pl-12 pr-10 py-3 text-base text-slate-900 bg-slate-50 border-2 border-slate-300 rounded-xl focus:bg-white focus:border-slate-900 focus:outline-none transition-colors"
+              />
+              {searchKeyword && (
+                <button
+                  type="button"
+                  aria-label="ล้างคำค้นหา"
+                  onClick={() => setSearchKeyword('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 min-h-[38px] min-w-[38px] flex items-center justify-center text-slate-400 hover:text-slate-700"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (isScannerOpen) setIsScannerOpen(false);
+                else requestCameraPermissionAndScan();
+              }}
+              className="min-h-[52px] px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center gap-2 shrink-0 cursor-pointer transition-colors"
+            >
+              <Camera className="w-4 h-4 shrink-0" />
+              <span>{isScannerOpen ? 'ปิดกล้อง' : 'สแกนค้นหา'}</span>
+            </button>
           </div>
 
           <div className="md:col-span-4">
@@ -153,6 +300,57 @@ export const TrackingView: React.FC = () => {
             </select>
           </div>
         </div>
+
+        {isScannerOpen && (
+          <div className="p-4 bg-slate-900 text-white rounded-2xl space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400">
+                <Camera className="w-4 h-4" />
+                <span>
+                  {cameraPermission === 'requesting'
+                    ? 'กำลังขออนุญาตใช้กล้อง กรุณากด "อนุญาต (Allow)"...'
+                    : 'ส่องกล้องไปที่บาร์โค้ดหรือ QR Code เพื่อค้นหาพัสดุ'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFacingMode((prev) => (prev === 'environment' ? 'user' : 'environment'))
+                  }
+                  className="px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg flex items-center gap-1 cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>สลับกล้อง</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsScannerOpen(false)}
+                  className="px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg cursor-pointer"
+                >
+                  ปิดกล้อง
+                </button>
+              </div>
+            </div>
+
+            {!cameraError ? (
+              <div className="rounded-xl overflow-hidden bg-black min-h-[220px] flex items-center justify-center">
+                <div id="tracking-barcode-reader" className="w-full" />
+              </div>
+            ) : (
+              <div className="p-4 bg-amber-950/90 border border-amber-700 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <p className="text-xs text-amber-200">{cameraError}</p>
+                <button
+                  type="button"
+                  onClick={requestCameraPermissionAndScan}
+                  className="min-h-[38px] px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-lg shrink-0 cursor-pointer"
+                >
+                  ขออนุญาตใช้กล้องอีกครั้ง
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ปุ่มกรองตามสถานะพัสดุ */}
         <div className="flex flex-wrap gap-2 pt-1">
