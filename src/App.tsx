@@ -63,7 +63,7 @@ const MainWorkspace: React.FC = () => {
           }}
           className="text-base md:text-lg font-extrabold tracking-tight text-slate-900 whitespace-nowrap shrink-0"
         >
-          ParcelSort Dormitory
+          Parcel Registration System
         </a>
 
         <nav
