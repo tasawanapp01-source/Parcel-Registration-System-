@@ -1,0 +1,184 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net (Default-Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Global Hardened Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'tasawan_app01@pcccr.ac.th' ||
+        request.auth.token.email == 'Tasawan_app01@pcccr.ac.th'
+      );
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (isVerifiedUser() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    // Bound Workspace Identity for Tasawan_app01@pcccr.ac.th
+    function isWorkspaceAccount(ownerId) {
+      return ownerId is string && ownerId == 'tasawan_app01_pcccr_ac_th';
+    }
+
+    function isAuthorizedOwner(ownerId) {
+      return isWorkspaceAccount(ownerId) || (isVerifiedUser() && ownerId == request.auth.uid);
+    }
+
+    // 3. Entity Validation Blueprints (Anti-Update-Gap)
+    function isValidStudent(data) {
+      return data.keys().hasAll([
+        'studentCode', 'seqNo', 'prefix', 'firstName', 'lastName',
+        'nickname', 'grade', 'room', 'dormitory', 'dormRoom', 'bed',
+        'ownerId', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'studentCode', 'seqNo', 'prefix', 'firstName', 'lastName',
+        'nickname', 'grade', 'room', 'dormitory', 'dormRoom', 'bed',
+        'ownerId', 'createdAt', 'updatedAt'
+      ]) &&
+      data.studentCode is string && data.studentCode.size() >= 1 && data.studentCode.size() <= 20 && data.studentCode.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.seqNo is int && data.seqNo >= 1 && data.seqNo <= 100000 &&
+      data.prefix is string && data.prefix.size() >= 1 && data.prefix.size() <= 30 &&
+      data.firstName is string && data.firstName.size() >= 1 && data.firstName.size() <= 100 &&
+      data.lastName is string && data.lastName.size() >= 1 && data.lastName.size() <= 100 &&
+      data.nickname is string && data.nickname.size() <= 50 &&
+      data.grade is string && data.grade.size() >= 1 && data.grade.size() <= 30 &&
+      data.room is string && data.room.size() >= 1 && data.room.size() <= 20 &&
+      data.dormitory is string && data.dormitory.size() >= 1 && data.dormitory.size() <= 80 &&
+      data.dormRoom is string && data.dormRoom.size() >= 1 && data.dormRoom.size() <= 30 &&
+      data.bed is string && data.bed.size() >= 1 && data.bed.size() <= 20 &&
+      data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') && isAuthorizedOwner(data.ownerId) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidParcel(data) {
+      return data.keys().hasAll([
+        'trackingNumber', 'studentCode', 'studentFullName', 'nickname',
+        'gradeRoom', 'dormitory', 'dormRoom', 'bed', 'category', 'status',
+        'courier', 'note', 'receivedDate', 'receivedHour',
+        'ownerId', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'trackingNumber', 'studentCode', 'studentFullName', 'nickname',
+        'gradeRoom', 'dormitory', 'dormRoom', 'bed', 'category', 'status',
+        'courier', 'note', 'receivedDate', 'receivedHour', 'deliveredDate',
+        'ownerId', 'createdAt', 'updatedAt'
+      ]) &&
+      data.trackingNumber is string && data.trackingNumber.size() >= 1 && data.trackingNumber.size() <= 64 && data.trackingNumber.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.studentCode is string && data.studentCode.size() >= 1 && data.studentCode.size() <= 20 && data.studentCode.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.studentFullName is string && data.studentFullName.size() >= 1 && data.studentFullName.size() <= 220 &&
+      data.nickname is string && data.nickname.size() <= 50 &&
+      data.gradeRoom is string && data.gradeRoom.size() >= 1 && data.gradeRoom.size() <= 50 &&
+      data.dormitory is string && data.dormitory.size() >= 1 && data.dormitory.size() <= 80 &&
+      data.dormRoom is string && data.dormRoom.size() >= 1 && data.dormRoom.size() <= 30 &&
+      data.bed is string && data.bed.size() >= 1 && data.bed.size() <= 20 &&
+      data.category is string && data.category.size() >= 1 && data.category.size() <= 100 &&
+      data.status is string && data.status.size() >= 1 && data.status.size() <= 50 &&
+      data.status in [
+        'ลงทะเบียนรับพัสดุ',
+        'รับเข้าส่วนกลาง',
+        'ติดนิติการ',
+        'พัสดุไม่ทราบเจ้าของ',
+        'รอการยืนยัน',
+        'ส่งมอบสำเร็จ'
+      ] &&
+      data.courier is string && data.courier.size() >= 1 && data.courier.size() <= 50 &&
+      data.note is string && data.note.size() <= 300 &&
+      data.receivedDate is string && data.receivedDate.size() >= 8 && data.receivedDate.size() <= 20 &&
+      data.receivedHour is int && data.receivedHour >= 0 && data.receivedHour <= 23 &&
+      (!('deliveredDate' in data) || (data.deliveredDate is string && data.deliveredDate.size() <= 20)) &&
+      data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') && isAuthorizedOwner(data.ownerId) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // 4. Admins Collection (Read-Only for Verified Owner/Admin, Server-Managed Writes)
+    match /admins/{adminId} {
+      allow get: if isVerifiedUser() && isValidId(adminId) && (request.auth.uid == adminId || isBootstrappedAdmin());
+      allow list, create, update, delete: if false;
+    }
+
+    // 5. Students Collection
+    match /students/{studentId} {
+      allow get: if isValidId(studentId) && (isAuthorizedOwner(existing().ownerId) || isAdmin());
+      allow list: if isWorkspaceAccount(resource.data.ownerId) || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid || isBootstrappedAdmin()));
+
+      allow create: if isValidId(studentId) &&
+        isValidStudent(incoming()) &&
+        studentId == incoming().studentCode &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isValidId(studentId) &&
+        isValidStudent(incoming()) &&
+        studentId == incoming().studentCode &&
+        (incoming().createdAt == existing().createdAt || incoming().createdAt == request.time) &&
+        incoming().updatedAt == request.time && (
+          isAdmin() ||
+          (
+            (isAuthorizedOwner(existing().ownerId) || isAuthorizedOwner(incoming().ownerId)) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'studentCode', 'seqNo', 'prefix', 'firstName', 'lastName', 'nickname',
+              'grade', 'room', 'dormitory', 'dormRoom', 'bed', 'ownerId', 'createdAt', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isValidId(studentId) && (isAuthorizedOwner(existing().ownerId) || isAdmin());
+    }
+
+    // 6. Parcels Collection
+    match /parcels/{parcelId} {
+      allow get: if isValidId(parcelId) && (isAuthorizedOwner(existing().ownerId) || isAdmin());
+      allow list: if isWorkspaceAccount(resource.data.ownerId) || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid || isBootstrappedAdmin()));
+
+      allow create: if isValidId(parcelId) &&
+        isValidParcel(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isValidId(parcelId) &&
+        isValidParcel(incoming()) &&
+        (incoming().createdAt == existing().createdAt || incoming().createdAt == request.time) &&
+        incoming().updatedAt == request.time && (
+          isAdmin() ||
+          (
+            (isAuthorizedOwner(existing().ownerId) || isAuthorizedOwner(incoming().ownerId)) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'trackingNumber', 'studentCode', 'studentFullName', 'nickname',
+              'gradeRoom', 'dormitory', 'dormRoom', 'bed', 'category', 'status',
+              'courier', 'note', 'receivedDate', 'receivedHour', 'deliveredDate',
+              'ownerId', 'createdAt', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isValidId(parcelId) && (isAuthorizedOwner(existing().ownerId) || isAdmin());
+    }
+  }
+}

@@ -1,0 +1,264 @@
+{
+  "entities": {
+    "Student": {
+      "title": "Student",
+      "description": "ข้อมูลนักเรียนประจำหอพักสำหรับอ้างอิงการคัดแยกพัสดุ",
+      "type": "object",
+      "properties": {
+        "studentCode": {
+          "type": "string",
+          "description": "รหัสนักเรียน",
+          "minLength": 1,
+          "maxLength": 20,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "seqNo": {
+          "type": "number",
+          "description": "เลขที่ตามทะเบียน"
+        },
+        "prefix": {
+          "type": "string",
+          "description": "คำนำหน้าชื่อ",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "firstName": {
+          "type": "string",
+          "description": "ชื่อจริง",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "lastName": {
+          "type": "string",
+          "description": "นามสกุล",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "nickname": {
+          "type": "string",
+          "description": "ชื่อเล่น",
+          "minLength": 0,
+          "maxLength": 50
+        },
+        "grade": {
+          "type": "string",
+          "description": "ระดับชั้น เช่น ม.4",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "room": {
+          "type": "string",
+          "description": "ห้องเรียน",
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "dormitory": {
+          "type": "string",
+          "description": "ชื่อหอพัก",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "dormRoom": {
+          "type": "string",
+          "description": "หมายเลขห้องพักหอ",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "bed": {
+          "type": "string",
+          "description": "หมายเลขเตียง",
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID ของเจ้าหน้าที่ผู้บันทึกข้อมูล",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "เวลาที่สร้างข้อมูล"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "เวลาที่อัปเดตข้อมูลล่าสุด"
+        }
+      },
+      "required": [
+        "studentCode",
+        "seqNo",
+        "prefix",
+        "firstName",
+        "lastName",
+        "nickname",
+        "grade",
+        "room",
+        "dormitory",
+        "dormRoom",
+        "bed",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Parcel": {
+      "title": "Parcel",
+      "description": "ข้อมูลพัสดุของนักเรียนพร้อมข้อมูลหอพักแบบ Denormalized เพื่อลดการ Read ซ้ำซ้อน",
+      "type": "object",
+      "properties": {
+        "trackingNumber": {
+          "type": "string",
+          "description": "หมายเลขพัสดุจากบาร์โค้ด",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "studentCode": {
+          "type": "string",
+          "description": "รหัสนักเรียนผู้รับ",
+          "minLength": 1,
+          "maxLength": 20,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "studentFullName": {
+          "type": "string",
+          "description": "คำนำหน้า ชื่อ-นามสกุลนักเรียน (Denormalized)",
+          "minLength": 1,
+          "maxLength": 220
+        },
+        "nickname": {
+          "type": "string",
+          "description": "ชื่อเล่นนักเรียน",
+          "minLength": 0,
+          "maxLength": 50
+        },
+        "gradeRoom": {
+          "type": "string",
+          "description": "ระดับชั้นและห้องเรียน",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "dormitory": {
+          "type": "string",
+          "description": "ชื่อหอพักสำหรับคัดแยกสีตะกร้า",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "dormRoom": {
+          "type": "string",
+          "description": "ห้องพักหอ",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "bed": {
+          "type": "string",
+          "description": "หมายเลขเตียง",
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "category": {
+          "type": "string",
+          "description": "ประเภทสิ่งของ (รวมถึงเครื่องสำอาง และอื่นๆ ที่ระบุรายละเอียด)",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "status": {
+          "type": "string",
+          "description": "สถานะปัจจุบันของพัสดุ",
+          "enum": [
+            "ลงทะเบียนรับพัสดุ",
+            "รับเข้าส่วนกลาง",
+            "ติดนิติการ",
+            "พัสดุไม่ทราบเจ้าของ",
+            "รอการยืนยัน",
+            "ส่งมอบสำเร็จ"
+          ],
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "courier": {
+          "type": "string",
+          "description": "บริษัทขนส่ง",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "note": {
+          "type": "string",
+          "description": "หมายเหตุเพิ่มเติม",
+          "minLength": 0,
+          "maxLength": 300
+        },
+        "receivedDate": {
+          "type": "string",
+          "description": "วันที่รับเข้าพัสดุ YYYY-MM-DD",
+          "minLength": 8,
+          "maxLength": 20
+        },
+        "receivedHour": {
+          "type": "number",
+          "description": "ชั่วโมงที่รับเข้า (0-23) สำหรับวิเคราะห์ Peak Hours"
+        },
+        "deliveredDate": {
+          "type": "string",
+          "description": "วันที่นักเรียนเซ็นรับพัสดุ YYYY-MM-DD",
+          "minLength": 0,
+          "maxLength": 20
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID ของเจ้าหน้าที่ผู้สแกนรับพัสดุ",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "เวลาที่รับเข้าระบบ"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "เวลาที่อัปเดตสถานะล่าสุด"
+        }
+      },
+      "required": [
+        "trackingNumber",
+        "studentCode",
+        "studentFullName",
+        "nickname",
+        "gradeRoom",
+        "dormitory",
+        "dormRoom",
+        "bed",
+        "category",
+        "status",
+        "courier",
+        "note",
+        "receivedDate",
+        "receivedHour",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/students/{studentId}": {
+      "schema": {
+        "$ref": "#/entities/Student"
+      },
+      "description": "เก็บข้อมูลทะเบียนนักเรียนและหอพักโดยใช้รหัสนักเรียนเป็น Document ID"
+    },
+    "/parcels/{parcelId}": {
+      "schema": {
+        "$ref": "#/entities/Parcel"
+      },
+      "description": "เก็บรายการพัสดุและการติดตามสถานะทั้งหมด"
+    }
+  }
+}

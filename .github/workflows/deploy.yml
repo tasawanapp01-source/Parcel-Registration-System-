@@ -1,0 +1,56 @@
+name: Deploy Student Parcel System to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# กำหนดสิทธิ์สำหรับใช้ GitHub Pages Action
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# ป้องกันการรัน Deploy ซ้อนกันหลายชุดในเวลาเดียว
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: 2. Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 3. Install Dependencies
+        run: npm ci
+
+      - name: 4. Build Production Bundle (Vite + React + Tailwind)
+        run: npm run build
+
+      - name: 5. Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: 6. Upload Build Artifact (dist/)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist'
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: 7. Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
