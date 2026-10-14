@@ -33,6 +33,8 @@ export const TrackingView: React.FC = () => {
     getStudentParcelCounts,
     openWeeklyWarningPopup,
     quotaMetrics,
+    canCurrentMemberEdit,
+    canCurrentMemberDelete,
   } = useParcelSystem();
 
   const [searchKeyword, setSearchKeyword] = useState<string>('');
@@ -412,7 +414,13 @@ export const TrackingView: React.FC = () => {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    {parcel.status === 'ส่งมอบสำเร็จ' && (
+                    {!canCurrentMemberEdit && (
+                      <span className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-500 text-xs font-medium border border-slate-200">
+                        สิทธิ์ค้นหาเท่านั้น (ไม่อนุญาตให้แก้ไข)
+                      </span>
+                    )}
+
+                    {canCurrentMemberEdit && parcel.status === 'ส่งมอบสำเร็จ' && (
                       <button
                         type="button"
                         onClick={() => updateParcelStatus(parcel.id, 'ลงทะเบียนรับพัสดุ', undefined, '')}
@@ -423,7 +431,7 @@ export const TrackingView: React.FC = () => {
                       </button>
                     )}
 
-                    {parcel.status !== 'ส่งมอบสำเร็จ' && (
+                    {canCurrentMemberEdit && parcel.status !== 'ส่งมอบสำเร็จ' && (
                       <button
                         type="button"
                         onClick={() => updateParcelStatus(parcel.id, 'ส่งมอบสำเร็จ')}
@@ -434,7 +442,7 @@ export const TrackingView: React.FC = () => {
                       </button>
                     )}
 
-                    {parcel.status !== 'ติดนิติการ' && parcel.status !== 'ส่งมอบสำเร็จ' && (
+                    {canCurrentMemberEdit && parcel.status !== 'ติดนิติการ' && parcel.status !== 'ส่งมอบสำเร็จ' && (
                       <button
                         type="button"
                         onClick={() =>
@@ -451,7 +459,7 @@ export const TrackingView: React.FC = () => {
                       </button>
                     )}
 
-                    {parcel.status !== 'รอการยืนยัน' && parcel.status !== 'ส่งมอบสำเร็จ' && (
+                    {canCurrentMemberEdit && parcel.status !== 'รอการยืนยัน' && parcel.status !== 'ส่งมอบสำเร็จ' && (
                       <button
                         type="button"
                         onClick={() => updateParcelStatus(parcel.id, 'รอการยืนยัน')}
@@ -462,14 +470,17 @@ export const TrackingView: React.FC = () => {
                       </button>
                     )}
 
-                    <button
-                      type="button"
-                      aria-label={`ลบพัสดุ ${parcel.trackingNumber}`}
-                      onClick={() => deleteParcel(parcel.id)}
-                      className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 transition-colors cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {canCurrentMemberDelete && (
+                      <button
+                        type="button"
+                        aria-label={`ลบพัสดุ ${parcel.trackingNumber}`}
+                        onClick={() => deleteParcel(parcel.id)}
+                        className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 transition-colors cursor-pointer"
+                        title="ลบพัสดุ"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );

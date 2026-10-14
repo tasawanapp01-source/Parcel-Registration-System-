@@ -21,7 +21,17 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { Student, Parcel, PendingWriteItem, getRelativeDateString } from '../types/parcel';
+import {
+  Student,
+  Parcel,
+  Member,
+  MemberRole,
+  RolePermission,
+  AppMenuKey,
+  ALL_MENU_KEYS,
+  PendingWriteItem,
+  getRelativeDateString,
+} from '../types/parcel';
 
 // ค่าคงที่สำหรับบัญชีหลักของระบบที่เชื่อมต่ออัตโนมัติ (Tasawan_app01@pcccr.ac.th)
 export const AUTO_CLOUD_EMAIL = 'Tasawan_app01@pcccr.ac.th';
@@ -179,6 +189,67 @@ function buildValidStudentPayload(st: Student, ownerId: string) {
   };
 }
 
+function sanitizeMenuList(menus: unknown): AppMenuKey[] {
+  if (!Array.isArray(menus)) return ['inbound'];
+  const validSet = new Set<string>(ALL_MENU_KEYS);
+  const filtered = menus
+    .map((m) => String(m || '').trim())
+    .filter((m): m is AppMenuKey => validSet.has(m));
+  return Array.from(new Set(filtered)).slice(0, 10);
+}
+
+function buildValidMemberPayload(m: Member, ownerId: string) {
+  const safeId = sanitizeId(m.memberId, 64);
+  const safeRole: MemberRole =
+    m.role === 'ผู้ดูแลระบบ'
+      ? 'ผู้ดูแลระบบ'
+      : m.role === 'ครู'
+      ? 'ครู'
+      : 'เจ้าหน้าที่';
+
+  return {
+    memberId: safeId,
+    username: sanitizeString(m.username, 1, 80, 'user'),
+    password: sanitizeString(m.password, 1, 100, '1234'),
+    fullName: sanitizeString(m.fullName, 1, 150, 'ผู้ใช้งานระบบ'),
+    role: safeRole,
+    allowedMenus: sanitizeMenuList(m.allowedMenus),
+    useCustomMenus: Boolean(m.useCustomMenus),
+    canEdit: m.canEdit !== undefined ? Boolean(m.canEdit) : safeRole !== 'ครู',
+    canDelete: m.canDelete !== undefined ? Boolean(m.canDelete) : safeRole === 'ผู้ดูแลระบบ',
+    active: m.active !== false,
+    ownerId,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+}
+
+function buildValidRolePermissionPayload(rp: RolePermission, ownerId: string) {
+  const safeRoleId =
+    rp.roleId === 'admin'
+      ? 'admin'
+      : rp.roleId === 'teacher'
+      ? 'teacher'
+      : 'staff';
+  const safeRoleName: MemberRole =
+    safeRoleId === 'admin'
+      ? 'ผู้ดูแลระบบ'
+      : safeRoleId === 'teacher'
+      ? 'ครู'
+      : 'เจ้าหน้าที่';
+
+  return {
+    roleId: safeRoleId,
+    roleName: safeRoleName,
+    allowedMenus: sanitizeMenuList(rp.allowedMenus),
+    canEdit: rp.canEdit !== undefined ? Boolean(rp.canEdit) : safeRoleId !== 'teacher',
+    canDelete: rp.canDelete !== undefined ? Boolean(rp.canDelete) : safeRoleId === 'admin',
+    ownerId,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+}
+
 /**
  * ระบบ Firestore Batched Writes สำหรับนำเข้าข้อมูลนักเรียนจำนวนมาก (Bulk Import)
  * แบ่งข้อมูลออกเป็นก้อนละไม่เกิน 450 รายการ (จำกัดสูงสุดของ Firestore คือ 500 รายการต่อ 1 Batch)
@@ -244,7 +315,7 @@ export async function flushPendingQueueToFirestore(
     const batch = writeBatch(db);
 
     for (const item of chunk) {
-      const maxIdLen = item.collection === 'students' ? 20 : 64;
+      const maxIdLen = item.collection === 'students' || item.collection === 'role_permissions' ? 20 : 64;
       const safeDocId = sanitizeId(item.docId, maxIdLen);
       const ref = doc(db, item.collection, safeDocId);
 
@@ -260,6 +331,16 @@ export async function flushPendingQueueToFirestore(
         const payload = buildValidParcelPayload(p, effectiveOwnerId);
         const pRef = doc(db, 'parcels', payload.trackingNumber);
         batch.set(pRef, payload);
+      } else if (item.collection === 'members' && item.data) {
+        const m = item.data as Member;
+        const payload = buildValidMemberPayload(m, effectiveOwnerId);
+        const mRef = doc(db, 'members', payload.memberId);
+        batch.set(mRef, payload);
+      } else if (item.collection === 'role_permissions' && item.data) {
+        const rp = item.data as RolePermission;
+        const payload = buildValidRolePermissionPayload(rp, effectiveOwnerId);
+        const rpRef = doc(db, 'role_permissions', payload.roleId);
+        batch.set(rpRef, payload);
       }
     }
 
@@ -331,6 +412,63 @@ function mapDocToParcel(docId: string, d: Record<string, unknown>, fallbackOwner
   };
 }
 
+function mapDocToMember(docId: string, d: Record<string, unknown>, fallbackOwnerId: string): Member {
+  const rawRole = String(d.role || 'เจ้าหน้าที่');
+  const role: MemberRole =
+    rawRole === 'ผู้ดูแลระบบ'
+      ? 'ผู้ดูแลระบบ'
+      : rawRole === 'ครู'
+      ? 'ครู'
+      : 'เจ้าหน้าที่';
+
+  return {
+    memberId: String(d.memberId || docId),
+    username: String(d.username || ''),
+    password: String(d.password || ''),
+    fullName: String(d.fullName || ''),
+    role,
+    allowedMenus: sanitizeMenuList(d.allowedMenus),
+    useCustomMenus: Boolean(d.useCustomMenus),
+    canEdit: d.canEdit !== undefined ? Boolean(d.canEdit) : role !== 'ครู',
+    canDelete: d.canDelete !== undefined ? Boolean(d.canDelete) : role === 'ผู้ดูแลระบบ',
+    active: d.active !== false,
+    ownerId: String(d.ownerId || fallbackOwnerId),
+    createdAt: formatFirestoreTimestamp(d.createdAt),
+    updatedAt: formatFirestoreTimestamp(d.updatedAt),
+  };
+}
+
+function mapDocToRolePermission(
+  docId: string,
+  d: Record<string, unknown>,
+  fallbackOwnerId: string
+): RolePermission {
+  const rawId = String(d.roleId || docId);
+  const roleId: RolePermission['roleId'] =
+    rawId === 'admin'
+      ? 'admin'
+      : rawId === 'teacher'
+      ? 'teacher'
+      : 'staff';
+  const roleName: MemberRole =
+    roleId === 'admin'
+      ? 'ผู้ดูแลระบบ'
+      : roleId === 'teacher'
+      ? 'ครู'
+      : 'เจ้าหน้าที่';
+
+  return {
+    roleId,
+    roleName,
+    allowedMenus: sanitizeMenuList(d.allowedMenus),
+    canEdit: d.canEdit !== undefined ? Boolean(d.canEdit) : roleId !== 'teacher',
+    canDelete: d.canDelete !== undefined ? Boolean(d.canDelete) : roleId === 'admin',
+    ownerId: String(d.ownerId || fallbackOwnerId),
+    createdAt: formatFirestoreTimestamp(d.createdAt),
+    updatedAt: formatFirestoreTimestamp(d.updatedAt),
+  };
+}
+
 /**
  * ดึงข้อมูลจาก Firestore ภายใต้บัญชี Tasawan_app01@pcccr.ac.th (และ UID ที่ล็อกอินถ้ามี) แล้วนำมาอัปเดตลง Local Cache
  */
@@ -340,11 +478,15 @@ export async function fetchCloudDataToLocalCache(
 ): Promise<{
   students: Student[];
   parcels: Parcel[];
+  members: Member[];
+  rolePermissions: RolePermission[];
   readsCount: number;
 }> {
   let readsCount = 0;
   const studentMap = new Map<string, Student>();
   const parcelMap = new Map<string, Parcel>();
+  const memberMap = new Map<string, Member>();
+  const rolePermMap = new Map<string, RolePermission>();
 
   const ownerIdsToFetch = Array.from(
     new Set(
@@ -382,11 +524,41 @@ export async function fetchCloudDataToLocalCache(
         handleFirestoreError(error, OperationType.LIST, 'parcels');
       }
     }
+
+    try {
+      const mQuery = query(collection(db, 'members'), where('ownerId', '==', ownerKey));
+      const mSnap = await getDocs(mQuery);
+      readsCount += mSnap.size || 1;
+      mSnap.forEach((docSnap) => {
+        const m = mapDocToMember(docSnap.id, docSnap.data(), AUTO_CLOUD_OWNER_ID);
+        memberMap.set(m.memberId, m);
+      });
+    } catch (error) {
+      if (ownerKey === AUTO_CLOUD_OWNER_ID) {
+        handleFirestoreError(error, OperationType.LIST, 'members');
+      }
+    }
+
+    try {
+      const rpQuery = query(collection(db, 'role_permissions'), where('ownerId', '==', ownerKey));
+      const rpSnap = await getDocs(rpQuery);
+      readsCount += rpSnap.size || 1;
+      rpSnap.forEach((docSnap) => {
+        const rp = mapDocToRolePermission(docSnap.id, docSnap.data(), AUTO_CLOUD_OWNER_ID);
+        rolePermMap.set(rp.roleId, rp);
+      });
+    } catch (error) {
+      if (ownerKey === AUTO_CLOUD_OWNER_ID) {
+        handleFirestoreError(error, OperationType.LIST, 'role_permissions');
+      }
+    }
   }
 
   return {
     students: Array.from(studentMap.values()),
     parcels: Array.from(parcelMap.values()),
+    members: Array.from(memberMap.values()),
+    rolePermissions: Array.from(rolePermMap.values()),
     readsCount,
   };
 }
@@ -397,11 +569,15 @@ export async function fetchCloudDataToLocalCache(
 export function subscribeToWorkspaceCloudData(
   ownerId: string = AUTO_CLOUD_OWNER_ID,
   onStudentsSnapshot: (students: Student[]) => void,
-  onParcelsSnapshot: (parcels: Parcel[]) => void
+  onParcelsSnapshot: (parcels: Parcel[]) => void,
+  onMembersSnapshot?: (members: Member[]) => void,
+  onRolePermissionsSnapshot?: (rolePermissions: RolePermission[]) => void
 ): () => void {
   const effectiveOwnerId = ownerId || AUTO_CLOUD_OWNER_ID;
   const stQuery = query(collection(db, 'students'), where('ownerId', '==', effectiveOwnerId));
   const pQuery = query(collection(db, 'parcels'), where('ownerId', '==', effectiveOwnerId));
+  const mQuery = query(collection(db, 'members'), where('ownerId', '==', effectiveOwnerId));
+  const rpQuery = query(collection(db, 'role_permissions'), where('ownerId', '==', effectiveOwnerId));
 
   const unsubStudents = onSnapshot(
     stQuery,
@@ -439,9 +615,49 @@ export function subscribeToWorkspaceCloudData(
     }
   );
 
+  const unsubMembers = onSnapshot(
+    mQuery,
+    (snapshot) => {
+      if (!onMembersSnapshot) return;
+      const list: Member[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push(mapDocToMember(docSnap.id, docSnap.data(), effectiveOwnerId));
+      });
+      onMembersSnapshot(list);
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'members');
+      } catch {
+        // logged via handleFirestoreError
+      }
+    }
+  );
+
+  const unsubRolePerms = onSnapshot(
+    rpQuery,
+    (snapshot) => {
+      if (!onRolePermissionsSnapshot) return;
+      const list: RolePermission[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push(mapDocToRolePermission(docSnap.id, docSnap.data(), effectiveOwnerId));
+      });
+      onRolePermissionsSnapshot(list);
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'role_permissions');
+      } catch {
+        // logged via handleFirestoreError
+      }
+    }
+  );
+
   return () => {
     unsubStudents();
     unsubParcels();
+    unsubMembers();
+    unsubRolePerms();
   };
 }
 

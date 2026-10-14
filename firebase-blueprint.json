@@ -245,6 +245,169 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "Member": {
+      "title": "Member",
+      "description": "ข้อมูลสมาชิกผู้ใช้งานระบบ แบ่งเป็น ผู้ดูแลระบบ, เจ้าหน้าที่, ครู และ ผู้ใช้ พร้อมสิทธิ์การเข้าถึงเมนูและการแก้ไข/ลบข้อมูล",
+      "type": "object",
+      "properties": {
+        "memberId": {
+          "type": "string",
+          "description": "รหัสอ้างอิงสมาชิก",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "username": {
+          "type": "string",
+          "description": "ชื่อผู้ใช้สำหรับเข้าสู่ระบบ",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "password": {
+          "type": "string",
+          "description": "รหัสผ่านสำหรับเข้าสู่ระบบ",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "fullName": {
+          "type": "string",
+          "description": "ชื่อ-นามสกุลของสมาชิก",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "role": {
+          "type": "string",
+          "description": "ระดับผู้ใช้งาน",
+          "enum": [
+            "ผู้ดูแลระบบ",
+            "เจ้าหน้าที่",
+            "ครู",
+            "ผู้ใช้"
+          ],
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "allowedMenus": {
+          "type": "array",
+          "description": "รายการรหัสเมนูที่อนุญาตให้เข้าถึง"
+        },
+        "useCustomMenus": {
+          "type": "boolean",
+          "description": "กำหนดสิทธิ์เมนูเฉพาะรายบุคคลหรือไม่"
+        },
+        "canEdit": {
+          "type": "boolean",
+          "description": "อนุญาตให้แก้ไขข้อมูลหรือไม่"
+        },
+        "canDelete": {
+          "type": "boolean",
+          "description": "อนุญาตให้ลบข้อมูลหรือไม่"
+        },
+        "active": {
+          "type": "boolean",
+          "description": "สถานะเปิดใช้งานบัญชี"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID เจ้าของระบบหลัก",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "เวลาที่สร้างสมาชิก"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "เวลาที่แก้ไขสมาชิก"
+        }
+      },
+      "required": [
+        "memberId",
+        "username",
+        "password",
+        "fullName",
+        "role",
+        "allowedMenus",
+        "useCustomMenus",
+        "active",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "RolePermission": {
+      "title": "RolePermission",
+      "description": "การตั้งค่าอนุญาตการเข้าถึงเมนูตามระดับผู้ใช้ (ผู้ดูแลระบบ, เจ้าหน้าที่, ครู)",
+      "type": "object",
+      "properties": {
+        "roleId": {
+          "type": "string",
+          "description": "รหัสระดับผู้ใช้ (admin, staff, teacher, user)",
+          "enum": [
+            "admin",
+            "staff",
+            "teacher",
+            "user"
+          ],
+          "minLength": 1,
+          "maxLength": 20,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "roleName": {
+          "type": "string",
+          "description": "ชื่อระดับผู้ใช้",
+          "enum": [
+            "ผู้ดูแลระบบ",
+            "เจ้าหน้าที่",
+            "ครู",
+            "ผู้ใช้"
+          ],
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "allowedMenus": {
+          "type": "array",
+          "description": "รายการเมนูที่อนุญาตสำหรับระดับนี้"
+        },
+        "canEdit": {
+          "type": "boolean",
+          "description": "อนุญาตให้แก้ไขข้อมูลในระดับนี้เป็นค่าเริ่มต้น"
+        },
+        "canDelete": {
+          "type": "boolean",
+          "description": "อนุญาตให้ลบข้อมูลในระดับนี้เป็นค่าเริ่มต้น"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID เจ้าของระบบหลัก",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "เวลาที่สร้าง"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "เวลาที่แก้ไขล่าสุด"
+        }
+      },
+      "required": [
+        "roleId",
+        "roleName",
+        "allowedMenus",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -259,6 +422,18 @@
         "$ref": "#/entities/Parcel"
       },
       "description": "เก็บรายการพัสดุและการติดตามสถานะทั้งหมด"
+    },
+    "/members/{memberId}": {
+      "schema": {
+        "$ref": "#/entities/Member"
+      },
+      "description": "เก็บข้อมูลบัญชีสมาชิก ระดับสิทธิ์ (ผู้ดูแลระบบ/ผู้ใช้) และสิทธิ์เมนูรายบุคคล"
+    },
+    "/role_permissions/{roleId}": {
+      "schema": {
+        "$ref": "#/entities/RolePermission"
+      },
+      "description": "เก็บการตั้งค่าอนุญาตการเข้าถึงเมนูของแต่ละระดับผู้ใช้"
     }
   }
 }

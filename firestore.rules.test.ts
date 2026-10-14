@@ -6,7 +6,7 @@
 export interface SecurityTestCase {
   id: number;
   name: string;
-  collection: 'students' | 'parcels';
+  collection: 'students' | 'parcels' | 'members' | 'role_permissions';
   operation: 'create' | 'update' | 'get' | 'list' | 'delete';
   auth: { uid: string; email: string; email_verified: boolean } | null;
   docId: string;

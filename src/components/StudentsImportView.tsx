@@ -174,6 +174,8 @@ export const StudentsImportView: React.FC = () => {
     openWeeklyWarningPopup,
     isSyncing,
     syncProgress,
+    canCurrentMemberEdit,
+    canCurrentMemberDelete,
   } = useParcelSystem();
 
   const [pastedText, setPastedText] = useState<string>('');
@@ -1632,25 +1634,32 @@ export const StudentsImportView: React.FC = () => {
                               </td>
                               <td className="py-2.5 px-3 text-center whitespace-nowrap">
                                 <div className="inline-flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    title={`แก้ไขข้อมูลนักเรียนรหัส ${st.studentCode}`}
-                                    aria-label={`แก้ไขข้อมูลนักเรียนรหัส ${st.studentCode}`}
-                                    onClick={() => handleOpenEditStudentModal(st)}
-                                    className="min-h-[32px] px-2.5 py-1 inline-flex items-center gap-1 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-900 hover:text-white transition-colors cursor-pointer"
-                                  >
-                                    <Pencil className="w-3.5 h-3.5" />
-                                    <span>แก้ไข</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    title={`ลบนักเรียนรหัส ${st.studentCode}`}
-                                    aria-label={`ลบนักเรียนรหัส ${st.studentCode}`}
-                                    onClick={() => deleteStudent(st.studentCode)}
-                                    className="min-h-[32px] min-w-[32px] inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
+                                  {canCurrentMemberEdit && (
+                                    <button
+                                      type="button"
+                                      title={`แก้ไขข้อมูลนักเรียนรหัส ${st.studentCode}`}
+                                      aria-label={`แก้ไขข้อมูลนักเรียนรหัส ${st.studentCode}`}
+                                      onClick={() => handleOpenEditStudentModal(st)}
+                                      className="min-h-[32px] px-2.5 py-1 inline-flex items-center gap-1 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-900 hover:text-white transition-colors cursor-pointer"
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                      <span>แก้ไข</span>
+                                    </button>
+                                  )}
+                                  {canCurrentMemberDelete && (
+                                    <button
+                                      type="button"
+                                      title={`ลบนักเรียนรหัส ${st.studentCode}`}
+                                      aria-label={`ลบนักเรียนรหัส ${st.studentCode}`}
+                                      onClick={() => deleteStudent(st.studentCode)}
+                                      className="min-h-[32px] min-w-[32px] inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                  {!canCurrentMemberEdit && !canCurrentMemberDelete && (
+                                    <span className="text-[11px] text-slate-400">ดูข้อมูล</span>
+                                  )}
                                 </div>
                               </td>
                             </tr>

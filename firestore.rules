@@ -48,6 +48,21 @@ service cloud.firestore {
       return isWorkspaceAccount(ownerId) || (isVerifiedUser() && ownerId == request.auth.uid);
     }
 
+    function isValidMenuList(menus) {
+      return menus is list &&
+        menus.size() <= 10 &&
+        menus.hasOnly([
+          'inbound',
+          'tracking',
+          'manifest',
+          'students',
+          'dashboard',
+          'deliverables',
+          'members'
+        ]) &&
+        (menus.size() == 0 || (menus[0] is string && menus[0].size() >= 1 && menus[0].size() <= 30));
+    }
+
     // 3. Entity Validation Blueprints (Anti-Update-Gap)
     function isValidStudent(data) {
       return data.keys().hasAll([
@@ -117,6 +132,54 @@ service cloud.firestore {
       data.updatedAt is timestamp;
     }
 
+    function isValidMember(data) {
+      return data.keys().hasAll([
+        'memberId', 'username', 'password', 'fullName', 'role',
+        'allowedMenus', 'useCustomMenus', 'active',
+        'ownerId', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'memberId', 'username', 'password', 'fullName', 'role',
+        'allowedMenus', 'useCustomMenus', 'active',
+        'canEdit', 'canDelete',
+        'ownerId', 'createdAt', 'updatedAt'
+      ]) &&
+      data.memberId is string && data.memberId.size() >= 1 && data.memberId.size() <= 64 && data.memberId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.username is string && data.username.size() >= 1 && data.username.size() <= 80 &&
+      data.password is string && data.password.size() >= 1 && data.password.size() <= 100 &&
+      data.fullName is string && data.fullName.size() >= 1 && data.fullName.size() <= 150 &&
+      data.role is string && data.role.size() >= 1 && data.role.size() <= 40 &&
+      data.role in ['ผู้ดูแลระบบ', 'เจ้าหน้าที่', 'ครู', 'ผู้ใช้'] &&
+      isValidMenuList(data.allowedMenus) &&
+      data.useCustomMenus is bool &&
+      data.active is bool &&
+      (!('canEdit' in data) || data.canEdit is bool) &&
+      (!('canDelete' in data) || data.canDelete is bool) &&
+      data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') && isAuthorizedOwner(data.ownerId) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidRolePermission(data) {
+      return data.keys().hasAll([
+        'roleId', 'roleName', 'allowedMenus',
+        'ownerId', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'roleId', 'roleName', 'allowedMenus',
+        'canEdit', 'canDelete',
+        'ownerId', 'createdAt', 'updatedAt'
+      ]) &&
+      data.roleId is string && data.roleId.size() >= 1 && data.roleId.size() <= 20 && data.roleId in ['admin', 'staff', 'teacher', 'user'] &&
+      data.roleName is string && data.roleName.size() >= 1 && data.roleName.size() <= 40 && data.roleName in ['ผู้ดูแลระบบ', 'เจ้าหน้าที่', 'ครู', 'ผู้ใช้'] &&
+      isValidMenuList(data.allowedMenus) &&
+      (!('canEdit' in data) || data.canEdit is bool) &&
+      (!('canDelete' in data) || data.canDelete is bool) &&
+      data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') && isAuthorizedOwner(data.ownerId) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
     // 4. Admins Collection (Read-Only for Verified Owner/Admin, Server-Managed Writes)
     match /admins/{adminId} {
       allow get: if isVerifiedUser() && isValidId(adminId) && (request.auth.uid == adminId || isBootstrappedAdmin());
@@ -179,6 +242,67 @@ service cloud.firestore {
         );
 
       allow delete: if isValidId(parcelId) && (isAuthorizedOwner(existing().ownerId) || isAdmin());
+    }
+
+    // 7. Members Collection
+    match /members/{memberId} {
+      allow get: if isValidId(memberId) && (isAuthorizedOwner(existing().ownerId) || isAdmin());
+      allow list: if isWorkspaceAccount(resource.data.ownerId) || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid || isBootstrappedAdmin()));
+
+      allow create: if isValidId(memberId) &&
+        isValidMember(incoming()) &&
+        memberId == incoming().memberId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isValidId(memberId) &&
+        isValidMember(incoming()) &&
+        memberId == incoming().memberId &&
+        (incoming().createdAt == existing().createdAt || incoming().createdAt == request.time) &&
+        incoming().updatedAt == request.time && (
+          isAdmin() ||
+          (
+            (isAuthorizedOwner(existing().ownerId) || isAuthorizedOwner(incoming().ownerId)) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'memberId', 'username', 'password', 'fullName', 'role',
+              'allowedMenus', 'useCustomMenus', 'active',
+              'canEdit', 'canDelete',
+              'ownerId', 'createdAt', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isValidId(memberId) && (isAuthorizedOwner(existing().ownerId) || isAdmin());
+    }
+
+    // 8. Role Permissions Collection
+    match /role_permissions/{roleId} {
+      allow get: if isValidId(roleId) && (isAuthorizedOwner(existing().ownerId) || isAdmin());
+      allow list: if isWorkspaceAccount(resource.data.ownerId) || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid || isBootstrappedAdmin()));
+
+      allow create: if isValidId(roleId) &&
+        isValidRolePermission(incoming()) &&
+        roleId == incoming().roleId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isValidId(roleId) &&
+        isValidRolePermission(incoming()) &&
+        roleId == incoming().roleId &&
+        (incoming().createdAt == existing().createdAt || incoming().createdAt == request.time) &&
+        incoming().updatedAt == request.time && (
+          isAdmin() ||
+          (
+            (isAuthorizedOwner(existing().ownerId) || isAuthorizedOwner(incoming().ownerId)) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'roleId', 'roleName', 'allowedMenus',
+              'canEdit', 'canDelete',
+              'ownerId', 'createdAt', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isValidId(roleId) && (isAuthorizedOwner(existing().ownerId) || isAdmin());
     }
   }
 }

@@ -73,12 +73,129 @@ export interface DormitoryTheme {
   hexColor: string;
 }
 
+export type AppMenuKey =
+  | 'inbound'
+  | 'tracking'
+  | 'manifest'
+  | 'students'
+  | 'dashboard'
+  | 'deliverables'
+  | 'members';
+
+export type MemberRole = 'ผู้ดูแลระบบ' | 'เจ้าหน้าที่' | 'ครู' | 'ผู้ใช้';
+
+export interface AppMenuDefinition {
+  key: AppMenuKey;
+  label: string;
+  shortLabel: string;
+  description: string;
+}
+
+export const APP_MENU_DEFINITIONS: AppMenuDefinition[] = [
+  {
+    key: 'inbound',
+    label: 'รับเข้าพัสดุ',
+    shortLabel: 'รับเข้า',
+    description: 'สแกนบาร์โค้ด ลงทะเบียนรับเข้าพัสดุ และคัดแยกหอพัก',
+  },
+  {
+    key: 'tracking',
+    label: 'ติดตามค้นหา',
+    shortLabel: 'ค้นหา',
+    description: 'ค้นหาพัสดุ อัปเดตสถานะการส่งมอบ และบันทึกการรับพัสดุ',
+  },
+  {
+    key: 'manifest',
+    label: 'ใบนำส่งหอพัก',
+    shortLabel: 'ใบนำส่ง',
+    description: 'พิมพ์ใบนำส่งพัสดุประจำหอพัก (A4) สำหรับเซ็นรับ',
+  },
+  {
+    key: 'students',
+    label: 'ข้อมูลนักเรียน',
+    shortLabel: 'นักเรียน',
+    description: 'นำเข้า เพิ่ม แก้ไข และจัดการฐานข้อมูลทะเบียนนักเรียน',
+  },
+  {
+    key: 'dashboard',
+    label: 'สถิติแดชบอร์ด',
+    shortLabel: 'สถิติ',
+    description: 'ดูภาพรวมสถิติพัสดุรายวัน รายหอพัก และปริมาณงาน',
+  },
+  {
+    key: 'members',
+    label: 'จัดการสมาชิก & สิทธิ์เมนู',
+    shortLabel: 'สมาชิก/สิทธิ์',
+    description: 'เพิ่ม ลบ แก้ไข สมาชิก (ผู้ดูแลระบบ, เจ้าหน้าที่, ครู) และหน้าอนุญาตการเข้าถึงเมนู',
+  },
+  {
+    key: 'deliverables',
+    label: 'ติดตั้ง GitHub Pages & Action',
+    shortLabel: 'ติดตั้งระบบ',
+    description: 'คู่มือและไฟล์สำหรับติดตั้งระบบขึ้นใช้งานจริง',
+  },
+];
+
+export const ALL_MENU_KEYS: AppMenuKey[] = [
+  'inbound',
+  'tracking',
+  'manifest',
+  'students',
+  'dashboard',
+  'members',
+  'deliverables',
+];
+
+export const DEFAULT_STAFF_MENU_KEYS: AppMenuKey[] = [
+  'inbound',
+  'tracking',
+  'manifest',
+];
+
+export const DEFAULT_TEACHER_MENU_KEYS: AppMenuKey[] = [
+  'inbound',
+  'tracking',
+];
+
+export const DEFAULT_USER_MENU_KEYS: AppMenuKey[] = [
+  'inbound',
+  'tracking',
+  'manifest',
+];
+
+export interface Member {
+  memberId: string;
+  username: string;
+  password: string;
+  fullName: string;
+  role: MemberRole;
+  allowedMenus: AppMenuKey[];
+  useCustomMenus: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  active: boolean;
+  ownerId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RolePermission {
+  roleId: 'admin' | 'staff' | 'teacher' | 'user';
+  roleName: MemberRole;
+  allowedMenus: AppMenuKey[];
+  canEdit?: boolean;
+  canDelete?: boolean;
+  ownerId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PendingWriteItem {
   id: string;
-  collection: 'students' | 'parcels';
+  collection: 'students' | 'parcels' | 'members' | 'role_permissions';
   docId: string;
   action: 'upsert' | 'delete';
-  data?: Student | Parcel;
+  data?: Student | Parcel | Member | RolePermission;
   queuedAt: string;
 }
 
@@ -355,6 +472,87 @@ export function formatThaiSlashDate(dateStr?: string): string {
  */
 export const INITIAL_STUDENTS: Student[] = [];
 export const INITIAL_PARCELS: Parcel[] = [];
+
+export const INITIAL_ROLE_PERMISSIONS: RolePermission[] = [
+  {
+    roleId: 'admin',
+    roleName: 'ผู้ดูแลระบบ',
+    allowedMenus: [...ALL_MENU_KEYS],
+    canEdit: true,
+    canDelete: true,
+    ownerId: 'tasawan_app01_pcccr_ac_th',
+    createdAt: '2026-10-08T00:00:00.000Z',
+    updatedAt: '2026-10-08T00:00:00.000Z',
+  },
+  {
+    roleId: 'staff',
+    roleName: 'เจ้าหน้าที่',
+    allowedMenus: [...DEFAULT_STAFF_MENU_KEYS],
+    canEdit: true,
+    canDelete: false,
+    ownerId: 'tasawan_app01_pcccr_ac_th',
+    createdAt: '2026-10-08T00:00:00.000Z',
+    updatedAt: '2026-10-08T00:00:00.000Z',
+  },
+  {
+    roleId: 'teacher',
+    roleName: 'ครู',
+    allowedMenus: [...DEFAULT_TEACHER_MENU_KEYS],
+    canEdit: false,
+    canDelete: false,
+    ownerId: 'tasawan_app01_pcccr_ac_th',
+    createdAt: '2026-10-08T00:00:00.000Z',
+    updatedAt: '2026-10-08T00:00:00.000Z',
+  },
+];
+
+export const INITIAL_MEMBERS: Member[] = [
+  {
+    memberId: 'admin_default',
+    username: 'admin',
+    password: '213894120',
+    fullName: 'ผู้ดูแลระบบหลัก (Admin)',
+    role: 'ผู้ดูแลระบบ',
+    allowedMenus: [...ALL_MENU_KEYS],
+    useCustomMenus: false,
+    canEdit: true,
+    canDelete: true,
+    active: true,
+    ownerId: 'tasawan_app01_pcccr_ac_th',
+    createdAt: '2026-10-08T00:00:00.000Z',
+    updatedAt: '2026-10-08T00:00:00.000Z',
+  },
+  {
+    memberId: 'staff_default',
+    username: 'staff',
+    password: '1234',
+    fullName: 'เจ้าหน้าที่ห้องพัสดุ',
+    role: 'เจ้าหน้าที่',
+    allowedMenus: [...DEFAULT_STAFF_MENU_KEYS],
+    useCustomMenus: false,
+    canEdit: true,
+    canDelete: false,
+    active: true,
+    ownerId: 'tasawan_app01_pcccr_ac_th',
+    createdAt: '2026-10-08T00:00:00.000Z',
+    updatedAt: '2026-10-08T00:00:00.000Z',
+  },
+  {
+    memberId: 'teacher_default',
+    username: 'teacher',
+    password: '1234',
+    fullName: 'ครูประจำหอพัก',
+    role: 'ครู',
+    allowedMenus: [...DEFAULT_TEACHER_MENU_KEYS],
+    useCustomMenus: false,
+    canEdit: false,
+    canDelete: false,
+    active: true,
+    ownerId: 'tasawan_app01_pcccr_ac_th',
+    createdAt: '2026-10-08T00:00:00.000Z',
+    updatedAt: '2026-10-08T00:00:00.000Z',
+  },
+];
 
 export const WEEKLY_PARCEL_WARNING_LIMIT = 3; // เกิน 3 ชิ้นต่อสัปดาห์ (ตั้งแต่ 4 ชิ้นขึ้นไป) แสดง Popup เตือน
 

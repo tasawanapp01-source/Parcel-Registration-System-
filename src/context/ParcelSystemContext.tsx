@@ -4,6 +4,16 @@ import {
   Parcel,
   ParcelCategory,
   ParcelStatus,
+  Member,
+  MemberRole,
+  RolePermission,
+  AppMenuKey,
+  ALL_MENU_KEYS,
+  DEFAULT_STAFF_MENU_KEYS,
+  DEFAULT_TEACHER_MENU_KEYS,
+  DEFAULT_USER_MENU_KEYS,
+  INITIAL_MEMBERS,
+  INITIAL_ROLE_PERMISSIONS,
   PendingWriteItem,
   QuotaMetrics,
   INITIAL_STUDENTS,
@@ -46,6 +56,9 @@ const LEGACY_KEYS = [
 const STORAGE_KEYS = {
   STUDENTS: 'spms_students_clean_v3',
   PARCELS: 'spms_parcels_clean_v3',
+  MEMBERS: 'spms_members_clean_v1',
+  ROLE_PERMISSIONS: 'spms_role_permissions_clean_v1',
+  CURRENT_MEMBER_ID: 'spms_current_member_id_v1',
   PENDING_WRITES: 'spms_pending_writes_clean_v3',
   QUOTA_METRICS: 'spms_quota_metrics_clean_v3',
   SYNC_MODE: 'spms_sync_mode_auto_v4',
@@ -70,6 +83,19 @@ export interface NewParcelInput {
   };
 }
 
+export interface UpsertMemberInput {
+  memberId?: string;
+  username: string;
+  password: string;
+  fullName: string;
+  role: MemberRole;
+  allowedMenus: AppMenuKey[];
+  useCustomMenus: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  active: boolean;
+}
+
 export interface WeeklyWarningPopupState {
   isOpen: boolean;
   focusedStudent: StudentParcelCountStats | null;
@@ -80,6 +106,24 @@ interface ParcelSystemContextValue {
   user: User | null;
   connectedEmail: string;
   authReady: boolean;
+  currentMember: Member | null;
+  members: Member[];
+  rolePermissions: RolePermission[];
+  allowedMenusForCurrentMember: AppMenuKey[];
+  canCurrentMemberEdit: boolean;
+  canCurrentMemberDelete: boolean;
+  loginWithCredentials: (username: string, password: string) => { success: boolean; message: string };
+  loginWithGoogleAccount: () => Promise<{ success: boolean; message: string }>;
+  logoutMember: () => void;
+  upsertMember: (input: UpsertMemberInput) => Promise<Member>;
+  deleteMember: (memberId: string) => Promise<void>;
+  updateRolePermission: (
+    roleId: 'admin' | 'staff' | 'teacher' | 'user',
+    allowedMenus: AppMenuKey[],
+    canEdit?: boolean,
+    canDelete?: boolean
+  ) => Promise<void>;
+  getEffectiveMemberMenus: (member: Member) => AppMenuKey[];
   students: Student[];
   studentMap: Map<string, Student>;
   parcels: Parcel[];
@@ -182,6 +226,74 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
           : p.status,
     }));
   });
+  const [members, setMembers] = useState<Member[]>(() => {
+    const loaded = loadFromStorage<Member[]>(STORAGE_KEYS.MEMBERS, INITIAL_MEMBERS);
+    const list = loaded.length > 0 ? loaded : INITIAL_MEMBERS;
+    const hasTeacher = list.some((m) => m.role === 'ครู');
+    let merged = list.map((m) => {
+      const updated: Member = { ...m, ownerId: AUTO_CLOUD_OWNER_ID };
+      if (m.username === 'admin') {
+        updated.password = '213894120';
+        updated.canEdit = true;
+        updated.canDelete = true;
+      }
+      if ((m.role as string) === 'ผู้ใช้') {
+        updated.role = 'เจ้าหน้าที่';
+        if (updated.canEdit === undefined) updated.canEdit = true;
+        if (updated.canDelete === undefined) updated.canDelete = false;
+      }
+      if (m.role === 'ครู') {
+        if (updated.canEdit === undefined) updated.canEdit = false;
+        if (updated.canDelete === undefined) updated.canDelete = false;
+      }
+      return updated;
+    });
+
+    if (!hasTeacher) {
+      const defaultTeacher = INITIAL_MEMBERS.find((m) => m.role === 'ครู');
+      if (defaultTeacher) {
+        merged = [...merged, { ...defaultTeacher, ownerId: AUTO_CLOUD_OWNER_ID }];
+      }
+    }
+    return merged;
+  });
+  const [rolePermissions, setRolePermissions] = useState<RolePermission[]>(() => {
+    const loaded = loadFromStorage<RolePermission[]>(
+      STORAGE_KEYS.ROLE_PERMISSIONS,
+      INITIAL_ROLE_PERMISSIONS
+    );
+    const list = loaded.length > 0 ? loaded : INITIAL_ROLE_PERMISSIONS;
+    const hasTeacher = list.some((rp) => rp.roleId === 'teacher' || rp.roleName === 'ครู');
+    const migrated: RolePermission[] = list.map((rp) => {
+      if ((rp.roleId as string) === 'user' || (rp.roleName as string) === 'ผู้ใช้') {
+        return {
+          ...rp,
+          roleId: 'staff' as const,
+          roleName: 'เจ้าหน้าที่' as const,
+          canEdit: rp.canEdit !== undefined ? rp.canEdit : true,
+          canDelete: rp.canDelete !== undefined ? rp.canDelete : false,
+          ownerId: AUTO_CLOUD_OWNER_ID,
+        };
+      }
+      return {
+        ...rp,
+        canEdit: rp.canEdit !== undefined ? rp.canEdit : rp.roleId !== 'teacher',
+        canDelete: rp.canDelete !== undefined ? rp.canDelete : rp.roleId === 'admin',
+        ownerId: AUTO_CLOUD_OWNER_ID,
+      };
+    });
+
+    if (!hasTeacher) {
+      const teacherRole = INITIAL_ROLE_PERMISSIONS.find((rp) => rp.roleId === 'teacher');
+      if (teacherRole) {
+        migrated.push({ ...teacherRole, ownerId: AUTO_CLOUD_OWNER_ID });
+      }
+    }
+    return migrated;
+  });
+  const [currentMemberId, setCurrentMemberId] = useState<string | null>(() =>
+    loadFromStorage<string | null>(STORAGE_KEYS.CURRENT_MEMBER_ID, null)
+  );
   const [pendingWrites, setPendingWrites] = useState<PendingWriteItem[]>(() =>
     loadFromStorage<PendingWriteItem[]>(STORAGE_KEYS.PENDING_WRITES, [])
   );
@@ -214,6 +326,8 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const initialOverLimitAlertShownRef = useRef<boolean>(false);
   const studentsRef = useRef<Student[]>(students);
   const parcelsRef = useRef<Parcel[]>(parcels);
+  const membersRef = useRef<Member[]>(members);
+  const rolePermissionsRef = useRef<RolePermission[]>(rolePermissions);
   const pendingWritesRef = useRef<PendingWriteItem[]>(pendingWrites);
 
   useEffect(() => {
@@ -223,6 +337,14 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
   useEffect(() => {
     parcelsRef.current = parcels;
   }, [parcels]);
+
+  useEffect(() => {
+    membersRef.current = members;
+  }, [members]);
+
+  useEffect(() => {
+    rolePermissionsRef.current = rolePermissions;
+  }, [rolePermissions]);
 
   useEffect(() => {
     pendingWritesRef.current = pendingWrites;
@@ -268,6 +390,34 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
       console.error('Failed to persist parcels to localStorage:', e);
     }
   }, [parcels]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.MEMBERS, JSON.stringify(members));
+    } catch (e) {
+      console.error('Failed to persist members to localStorage:', e);
+    }
+  }, [members]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.ROLE_PERMISSIONS, JSON.stringify(rolePermissions));
+    } catch (e) {
+      console.error('Failed to persist rolePermissions to localStorage:', e);
+    }
+  }, [rolePermissions]);
+
+  useEffect(() => {
+    try {
+      if (currentMemberId) {
+        localStorage.setItem(STORAGE_KEYS.CURRENT_MEMBER_ID, JSON.stringify(currentMemberId));
+      } else {
+        localStorage.removeItem(STORAGE_KEYS.CURRENT_MEMBER_ID);
+      }
+    } catch (e) {
+      console.error('Failed to persist currentMemberId to localStorage:', e);
+    }
+  }, [currentMemberId]);
 
   useEffect(() => {
     try {
@@ -323,11 +473,15 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
         const {
           students: cloudStudents,
           parcels: cloudParcels,
+          members: cloudMembers,
+          rolePermissions: cloudRolePermissions,
           readsCount,
         } = await fetchCloudDataToLocalCache(AUTO_CLOUD_OWNER_ID, firebaseAuthUser?.uid);
 
         const cloudStudentCodes = new Set(cloudStudents.map((s) => s.studentCode));
         const cloudParcelIds = new Set(cloudParcels.map((p) => p.id));
+        const cloudMemberIds = new Set(cloudMembers.map((m) => m.memberId));
+        const cloudRolePermIds = new Set(cloudRolePermissions.map((rp) => rp.roleId));
 
         // 3. ตรวจสอบข้อมูลในเครื่องที่ยังไม่ได้ขึ้น Cloud แล้วอัปโหลดให้อัตโนมัติทันที
         const localUnsyncedStudents = studentsRef.current.filter(
@@ -364,6 +518,44 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
           writesUsed += writtenParcels;
         }
 
+        const localUnsyncedMembers = membersRef.current.filter(
+          (m) => !cloudMemberIds.has(m.memberId)
+        );
+        if (localUnsyncedMembers.length > 0) {
+          const memberQueue: PendingWriteItem[] = localUnsyncedMembers.map((m) => ({
+            id: `auto_member_${m.memberId}_${Date.now()}`,
+            collection: 'members',
+            docId: m.memberId,
+            action: 'upsert',
+            data: { ...m, ownerId: AUTO_CLOUD_OWNER_ID },
+            queuedAt: new Date().toISOString(),
+          }));
+          const writtenMembers = await flushPendingQueueToFirestore(
+            memberQueue,
+            AUTO_CLOUD_OWNER_ID
+          );
+          writesUsed += writtenMembers;
+        }
+
+        const localUnsyncedRolePerms = rolePermissionsRef.current.filter(
+          (rp) => !cloudRolePermIds.has(rp.roleId)
+        );
+        if (localUnsyncedRolePerms.length > 0) {
+          const rpQueue: PendingWriteItem[] = localUnsyncedRolePerms.map((rp) => ({
+            id: `auto_rp_${rp.roleId}_${Date.now()}`,
+            collection: 'role_permissions',
+            docId: rp.roleId,
+            action: 'upsert',
+            data: { ...rp, ownerId: AUTO_CLOUD_OWNER_ID },
+            queuedAt: new Date().toISOString(),
+          }));
+          const writtenRps = await flushPendingQueueToFirestore(
+            rpQueue,
+            AUTO_CLOUD_OWNER_ID
+          );
+          writesUsed += writtenRps;
+        }
+
         // 4. รวมข้อมูลจาก Cloud และในเครื่องให้ตรงกัน 100%
         const mergedStudentsMap = new Map<string, Student>();
         for (const s of studentsRef.current) {
@@ -388,6 +580,30 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
           (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
         setParcels(finalParcels);
+
+        const mergedMembersMap = new Map<string, Member>();
+        for (const m of membersRef.current) {
+          mergedMembersMap.set(m.memberId, { ...m, ownerId: AUTO_CLOUD_OWNER_ID });
+        }
+        for (const cm of cloudMembers) {
+          mergedMembersMap.set(cm.memberId, { ...cm, ownerId: AUTO_CLOUD_OWNER_ID });
+        }
+        const finalMembers = Array.from(mergedMembersMap.values());
+        if (finalMembers.length > 0) {
+          setMembers(finalMembers);
+        }
+
+        const mergedRolePermsMap = new Map<string, RolePermission>();
+        for (const rp of rolePermissionsRef.current) {
+          mergedRolePermsMap.set(rp.roleId, { ...rp, ownerId: AUTO_CLOUD_OWNER_ID });
+        }
+        for (const crp of cloudRolePermissions) {
+          mergedRolePermsMap.set(crp.roleId, { ...crp, ownerId: AUTO_CLOUD_OWNER_ID });
+        }
+        const finalRolePerms = Array.from(mergedRolePermsMap.values());
+        if (finalRolePerms.length > 0) {
+          setRolePermissions(finalRolePerms);
+        }
 
         const isoNow = new Date().toISOString();
         setQuotaMetrics((prev) => ({
@@ -450,6 +666,26 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
             return Array.from(map.values()).sort(
               (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
             );
+          });
+        }
+      },
+      (cloudMembers) => {
+        if (cloudMembers.length > 0) {
+          setMembers((prev) => {
+            const map = new Map<string, Member>();
+            for (const m of prev) map.set(m.memberId, m);
+            for (const cm of cloudMembers) map.set(cm.memberId, cm);
+            return Array.from(map.values());
+          });
+        }
+      },
+      (cloudRolePerms) => {
+        if (cloudRolePerms.length > 0) {
+          setRolePermissions((prev) => {
+            const map = new Map<string, RolePermission>();
+            for (const rp of prev) map.set(rp.roleId, rp);
+            for (const crp of cloudRolePerms) map.set(crp.roleId, crp);
+            return Array.from(map.values());
           });
         }
       }
@@ -1161,11 +1397,387 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
     showToast(`ระบบยังคงเชื่อมต่ออัตโนมัติภายใต้บัญชี ${AUTO_CLOUD_EMAIL}`, 'info');
   }, [showToast]);
 
+  // คำนวณรายการเมนูที่สมาชิกแต่ละคนสามารถเข้าถึงได้จริง (ตามสิทธิ์รายบุคคล หรือ ตามระดับสมาชิก ผู้ดูแลระบบ / เจ้าหน้าที่ / ครู)
+  const getEffectiveMemberMenus = useCallback(
+    (member: Member): AppMenuKey[] => {
+      if (member.useCustomMenus) {
+        return member.allowedMenus.length > 0 ? member.allowedMenus : ['inbound'];
+      }
+      const roleKey =
+        member.role === 'ผู้ดูแลระบบ'
+          ? 'admin'
+          : member.role === 'ครู'
+          ? 'teacher'
+          : 'staff';
+      const foundRole = rolePermissions.find(
+        (rp) => rp.roleId === roleKey || rp.roleName === member.role
+      );
+      if (foundRole && foundRole.allowedMenus.length > 0) {
+        return foundRole.allowedMenus;
+      }
+      if (member.role === 'ผู้ดูแลระบบ') return [...ALL_MENU_KEYS];
+      if (member.role === 'ครู') return [...DEFAULT_TEACHER_MENU_KEYS];
+      return [...DEFAULT_STAFF_MENU_KEYS];
+    },
+    [rolePermissions]
+  );
+
+  const currentMember = useMemo<Member | null>(() => {
+    if (!currentMemberId) return null;
+    const found = members.find((m) => m.memberId === currentMemberId);
+    if (!found || !found.active) return null;
+    return found;
+  }, [currentMemberId, members]);
+
+  const allowedMenusForCurrentMember = useMemo<AppMenuKey[]>(() => {
+    if (!currentMember) return [];
+    return getEffectiveMemberMenus(currentMember);
+  }, [currentMember, getEffectiveMemberMenus]);
+
+  // สิทธิ์การแก้ไขข้อมูล: ผู้ดูแลระบบได้เสมอ, ส่วนสมาชิกอื่นตรวจสอบตาม canEdit รายบุคคล หรือตาม Role
+  const canCurrentMemberEdit = useMemo<boolean>(() => {
+    if (!currentMember) return false;
+    if (currentMember.role === 'ผู้ดูแลระบบ') return true;
+    if (currentMember.canEdit !== undefined) return Boolean(currentMember.canEdit);
+    const roleKey = currentMember.role === 'ครู' ? 'teacher' : 'staff';
+    const foundRole = rolePermissions.find(
+      (rp) => rp.roleId === roleKey || rp.roleName === currentMember.role
+    );
+    if (foundRole && foundRole.canEdit !== undefined) return Boolean(foundRole.canEdit);
+    return currentMember.role !== 'ครู';
+  }, [currentMember, rolePermissions]);
+
+  // สิทธิ์การลบข้อมูล: ผู้ดูแลระบบได้เสมอ, สมาชิกอื่นตรวจสอบตาม canDelete รายบุคคล หรือตาม Role
+  const canCurrentMemberDelete = useMemo<boolean>(() => {
+    if (!currentMember) return false;
+    if (currentMember.role === 'ผู้ดูแลระบบ') return true;
+    if (currentMember.canDelete !== undefined) return Boolean(currentMember.canDelete);
+    const roleKey = currentMember.role === 'ครู' ? 'teacher' : 'staff';
+    const foundRole = rolePermissions.find(
+      (rp) => rp.roleId === roleKey || rp.roleName === currentMember.role
+    );
+    if (foundRole && foundRole.canDelete !== undefined) return Boolean(foundRole.canDelete);
+    return false;
+  }, [currentMember, rolePermissions]);
+
+  const loginWithCredentials = useCallback(
+    (usernameInput: string, passwordInput: string): { success: boolean; message: string } => {
+      const cleanUser = usernameInput.trim().toLowerCase();
+      const cleanPass = passwordInput.trim();
+
+      if (!cleanUser || !cleanPass) {
+        return { success: false, message: 'กรุณากรอกชื่อผู้ใช้และรหัสผ่านให้ครบถ้วน' };
+      }
+
+      const matched = members.find(
+        (m) => m.username.trim().toLowerCase() === cleanUser && m.password === cleanPass
+      );
+
+      if (!matched) {
+        return { success: false, message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' };
+      }
+
+      if (!matched.active) {
+        return { success: false, message: 'บัญชีผู้ใช้นี้ถูกระงับการใช้งานชั่วคราว กรุณาติดต่อผู้ดูแลระบบ' };
+      }
+
+      setCurrentMemberId(matched.memberId);
+      showToast(`เข้าสู่ระบบสำเร็จ: ${matched.fullName} (${matched.role})`, 'success');
+      return { success: true, message: 'เข้าสู่ระบบสำเร็จ' };
+    },
+    [members, showToast]
+  );
+
+  const loginWithGoogleAccount = useCallback(async (): Promise<{
+    success: boolean;
+    message: string;
+  }> => {
+    try {
+      const loggedInUser = await signInWithGooglePopup();
+      const emailLower = (loggedInUser.email || '').trim().toLowerCase();
+      const matched = members.find(
+        (m) =>
+          m.username.trim().toLowerCase() === emailLower ||
+          (emailLower === AUTO_CLOUD_EMAIL.toLowerCase() && m.role === 'ผู้ดูแลระบบ')
+      );
+
+      if (matched) {
+        if (!matched.active) {
+          return { success: false, message: 'บัญชีนี้ถูกปิดการใช้งาน' };
+        }
+        setCurrentMemberId(matched.memberId);
+        showToast(`เข้าสู่ระบบด้วย Google สำเร็จ: ${matched.fullName} (${matched.role})`, 'success');
+        return { success: true, message: 'เข้าสู่ระบบสำเร็จ' };
+      }
+
+      const fallbackAdmin = members.find((m) => m.role === 'ผู้ดูแลระบบ' && m.active) || members[0];
+      if (fallbackAdmin) {
+        setCurrentMemberId(fallbackAdmin.memberId);
+        showToast(
+          `เข้าสู่ระบบสำเร็จภายใต้ ${loggedInUser.email || AUTO_CLOUD_EMAIL} (${fallbackAdmin.role})`,
+          'success'
+        );
+        return { success: true, message: 'เข้าสู่ระบบสำเร็จ' };
+      }
+
+      return { success: false, message: 'ไม่พบบัญชีสมาชิกที่ผูกกับอีเมลนี้' };
+    } catch {
+      return { success: false, message: 'ยกเลิกหรือเกิดข้อผิดพลาดในการเข้าสู่ระบบด้วย Google' };
+    }
+  }, [members, showToast]);
+
+  const logoutMember = useCallback(() => {
+    setCurrentMemberId(null);
+    showToast('ออกจากระบบเรียบร้อยแล้ว', 'info');
+  }, [showToast]);
+
+  const upsertMember = useCallback(
+    async (input: UpsertMemberInput): Promise<Member> => {
+      const isoNow = new Date().toISOString();
+      const isExisting = Boolean(
+        input.memberId && members.some((m) => m.memberId === input.memberId)
+      );
+      const existingMember = isExisting
+        ? members.find((m) => m.memberId === input.memberId)
+        : undefined;
+
+      const generatedId =
+        input.memberId && input.memberId.trim()
+          ? sanitizeId(input.memberId.trim(), 64)
+          : sanitizeId(`mem_${Date.now()}_${Math.floor(Math.random() * 1000)}`, 64);
+
+      const safeRole: MemberRole =
+        input.role === 'ผู้ดูแลระบบ'
+          ? 'ผู้ดูแลระบบ'
+          : input.role === 'ครู'
+          ? 'ครู'
+          : 'เจ้าหน้าที่';
+
+      const cleanAllowedMenus: AppMenuKey[] =
+        input.allowedMenus && input.allowedMenus.length > 0
+          ? Array.from(new Set(input.allowedMenus))
+          : safeRole === 'ผู้ดูแลระบบ'
+          ? [...ALL_MENU_KEYS]
+          : safeRole === 'ครู'
+          ? [...DEFAULT_TEACHER_MENU_KEYS]
+          : [...DEFAULT_STAFF_MENU_KEYS];
+
+      // ป้องกันผู้ดูแลระบบปิดเมนู 'members' ของตัวเองจนไม่มีใครจัดการสมาชิกได้
+      if (
+        safeRole === 'ผู้ดูแลระบบ' &&
+        input.useCustomMenus &&
+        !cleanAllowedMenus.includes('members')
+      ) {
+        cleanAllowedMenus.push('members');
+      }
+
+      const defaultCanEdit = safeRole === 'ผู้ดูแลระบบ' ? true : safeRole === 'ครู' ? false : true;
+      const defaultCanDelete = safeRole === 'ผู้ดูแลระบบ' ? true : false;
+
+      const memberObj: Member = {
+        memberId: generatedId,
+        username: input.username.trim().slice(0, 80),
+        password: input.password.trim().slice(0, 100),
+        fullName: input.fullName.trim().slice(0, 150),
+        role: safeRole,
+        allowedMenus: cleanAllowedMenus,
+        useCustomMenus: Boolean(input.useCustomMenus),
+        canEdit: input.canEdit !== undefined ? Boolean(input.canEdit) : defaultCanEdit,
+        canDelete: input.canDelete !== undefined ? Boolean(input.canDelete) : defaultCanDelete,
+        active: input.active !== false,
+        ownerId: AUTO_CLOUD_OWNER_ID,
+        createdAt: existingMember ? existingMember.createdAt : isoNow,
+        updatedAt: isoNow,
+      };
+
+      setMembers((prev) => {
+        const exists = prev.some((m) => m.memberId === memberObj.memberId);
+        if (exists) {
+          return prev.map((m) => (m.memberId === memberObj.memberId ? memberObj : m));
+        }
+        return [...prev, memberObj];
+      });
+
+      const queueItem: PendingWriteItem = {
+        id: `member_upsert_${memberObj.memberId}_${Date.now()}`,
+        collection: 'members',
+        docId: memberObj.memberId,
+        action: 'upsert',
+        data: memberObj,
+        queuedAt: isoNow,
+      };
+
+      if (syncMode === 'auto_cloud') {
+        try {
+          await flushPendingQueueToFirestore([queueItem], AUTO_CLOUD_OWNER_ID);
+          setQuotaMetrics((prev) => ({
+            ...prev,
+            firestoreWritesUsed: prev.firestoreWritesUsed + 1,
+            lastSyncedAt: isoNow,
+          }));
+          showToast(
+            `${isExisting ? 'แก้ไขข้อมูลสมาชิก' : 'เพิ่มสมาชิกใหม่'} "${memberObj.fullName}" (${memberObj.role}) สำเร็จ`,
+            'success'
+          );
+          return memberObj;
+        } catch {
+          // fallback to queue
+        }
+      }
+
+      setPendingWrites((prev) => [...prev, queueItem]);
+      showToast(
+        `${isExisting ? 'แก้ไขข้อมูลสมาชิก' : 'เพิ่มสมาชิกใหม่'} "${memberObj.fullName}" (${memberObj.role}) เรียบร้อยแล้ว`,
+        'success'
+      );
+      return memberObj;
+    },
+    [members, syncMode, showToast]
+  );
+
+  const deleteMember = useCallback(
+    async (memberId: string): Promise<void> => {
+      const target = members.find((m) => m.memberId === memberId);
+      if (!target) return;
+
+      const remainingAdmins = members.filter(
+        (m) => m.memberId !== memberId && m.role === 'ผู้ดูแลระบบ' && m.active
+      );
+      if (target.role === 'ผู้ดูแลระบบ' && remainingAdmins.length === 0) {
+        showToast('ไม่สามารถลบผู้ดูแลระบบคนสุดท้ายของระบบได้', 'error');
+        return;
+      }
+
+      const isoNow = new Date().toISOString();
+      setMembers((prev) => prev.filter((m) => m.memberId !== memberId));
+      if (currentMemberId === memberId) {
+        setCurrentMemberId(null);
+      }
+
+      const queueItem: PendingWriteItem = {
+        id: `member_del_${memberId}_${Date.now()}`,
+        collection: 'members',
+        docId: memberId,
+        action: 'delete',
+        queuedAt: isoNow,
+      };
+
+      if (syncMode === 'auto_cloud') {
+        try {
+          await flushPendingQueueToFirestore([queueItem], AUTO_CLOUD_OWNER_ID);
+          setQuotaMetrics((prev) => ({
+            ...prev,
+            firestoreWritesUsed: prev.firestoreWritesUsed + 1,
+            lastSyncedAt: isoNow,
+          }));
+          showToast(`ลบสมาชิก "${target.fullName}" เรียบร้อยแล้ว`, 'info');
+          return;
+        } catch {
+          // fallback to queue
+        }
+      }
+
+      setPendingWrites((prev) => [...prev, queueItem]);
+      showToast(`ลบสมาชิก "${target.fullName}" เรียบร้อยแล้ว`, 'info');
+    },
+    [members, currentMemberId, syncMode, showToast]
+  );
+
+  const updateRolePermission = useCallback(
+    async (
+      roleId: 'admin' | 'staff' | 'teacher' | 'user',
+      allowedMenus: AppMenuKey[],
+      canEdit?: boolean,
+      canDelete?: boolean
+    ): Promise<void> => {
+      const isoNow = new Date().toISOString();
+      const safeMenus: AppMenuKey[] = Array.from(new Set(allowedMenus));
+      // บังคับให้ระดับผู้ดูแลระบบมีสิทธิ์เข้าถึงหน้าจัดการสมาชิกและสิทธิ์เมนูเสมอ เพื่อไม่ให้ถูกล็อกออกจากหน้าตั้งค่า
+      if (roleId === 'admin' && !safeMenus.includes('members')) {
+        safeMenus.push('members');
+      }
+      if (safeMenus.length === 0) {
+        safeMenus.push('inbound');
+      }
+
+      const roleName: MemberRole =
+        roleId === 'admin'
+          ? 'ผู้ดูแลระบบ'
+          : roleId === 'teacher'
+          ? 'ครู'
+          : 'เจ้าหน้าที่';
+
+      const existingRole = rolePermissions.find((rp) => rp.roleId === roleId);
+      const updatedRole: RolePermission = {
+        roleId,
+        roleName,
+        allowedMenus: safeMenus,
+        canEdit: canEdit !== undefined ? canEdit : existingRole?.canEdit ?? (roleId !== 'teacher'),
+        canDelete: canDelete !== undefined ? canDelete : existingRole?.canDelete ?? (roleId === 'admin'),
+        ownerId: AUTO_CLOUD_OWNER_ID,
+        createdAt: existingRole ? existingRole.createdAt : isoNow,
+        updatedAt: isoNow,
+      };
+
+      setRolePermissions((prev) => {
+        const exists = prev.some((rp) => rp.roleId === roleId);
+        if (exists) {
+          return prev.map((rp) => (rp.roleId === roleId ? updatedRole : rp));
+        }
+        return [...prev, updatedRole];
+      });
+
+      const queueItem: PendingWriteItem = {
+        id: `role_perm_${roleId}_${Date.now()}`,
+        collection: 'role_permissions',
+        docId: roleId,
+        action: 'upsert',
+        data: updatedRole,
+        queuedAt: isoNow,
+      };
+
+      if (syncMode === 'auto_cloud') {
+        try {
+          await flushPendingQueueToFirestore([queueItem], AUTO_CLOUD_OWNER_ID);
+          setQuotaMetrics((prev) => ({
+            ...prev,
+            firestoreWritesUsed: prev.firestoreWritesUsed + 1,
+            lastSyncedAt: isoNow,
+          }));
+          showToast(
+            `บันทึกสิทธิ์การเข้าถึงเมนูของระดับ "${updatedRole.roleName}" และซิงก์ขึ้น Firebase สำเร็จ`,
+            'success'
+          );
+          return;
+        } catch {
+          // fallback to queue
+        }
+      }
+
+      setPendingWrites((prev) => [...prev, queueItem]);
+      showToast(`บันทึกสิทธิ์การเข้าถึงเมนูของระดับ "${updatedRole.roleName}" เรียบร้อยแล้ว`, 'success');
+    },
+    [rolePermissions, syncMode, showToast]
+  );
+
   const value = useMemo<ParcelSystemContextValue>(
     () => ({
       user,
       connectedEmail,
       authReady,
+      currentMember,
+      members,
+      rolePermissions,
+      allowedMenusForCurrentMember,
+      canCurrentMemberEdit,
+      canCurrentMemberDelete,
+      loginWithCredentials,
+      loginWithGoogleAccount,
+      logoutMember,
+      upsertMember,
+      deleteMember,
+      updateRolePermission,
+      getEffectiveMemberMenus,
       students,
       studentMap,
       parcels,
@@ -1207,6 +1819,19 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
       user,
       connectedEmail,
       authReady,
+      currentMember,
+      members,
+      rolePermissions,
+      allowedMenusForCurrentMember,
+      canCurrentMemberEdit,
+      canCurrentMemberDelete,
+      loginWithCredentials,
+      loginWithGoogleAccount,
+      logoutMember,
+      upsertMember,
+      deleteMember,
+      updateRolePermission,
+      getEffectiveMemberMenus,
       students,
       studentMap,
       parcels,
