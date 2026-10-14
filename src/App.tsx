@@ -227,15 +227,12 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
               type="button"
               onClick={syncPendingToFirebase}
               disabled={isSyncing}
+              title="ดึงข้อมูลล่าสุดจากฐานข้อมูล Firestore"
               className="min-h-[36px] px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-50 rounded-lg transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
               <span className="font-mono tabular-nums">
-                {isSyncing
-                  ? 'ซิงก์...'
-                  : pendingWrites.length > 0
-                  ? `ซิงก์ (${pendingWrites.length})`
-                  : 'ซิงก์ข้อมูล'}
+                {isSyncing ? 'กำลังโหลด...' : 'รีเฟรช Cloud'}
               </span>
             </button>
           </div>
@@ -253,12 +250,13 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
         </div>
       </header>
 
-      {/* แถบแสดงสถานะการเชื่อมต่อ Firebase (ซ่อนบนจอมือถือและไอแพด) */}
+      {/* แถบแสดงสถานะการเชื่อมต่อ Firestore โดยตรง (Live Direct Cloud DB) */}
       <div className="no-print hidden xl:block bg-slate-900 text-slate-200 px-4 md:px-8 py-2 border-b border-slate-800">
         <div className="max-w-7xl mx-auto flex flex-col lg:flex-row lg:items-center justify-between gap-2 text-xs">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="font-semibold text-emerald-400">
-              เชื่อมต่อ Firebase อัตโนมัติ ({connectedEmail}):
+            <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-400">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              ฐานข้อมูล Firestore โดยตรง ({connectedEmail}):
             </span>
             <span>
               นักเรียนในระบบ{' '}
@@ -269,48 +267,14 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
               <strong className="font-mono text-white tabular-nums">
                 {parcels.length}
               </strong>{' '}
-              ชิ้น · ประหยัดการอ่าน{' '}
-              <strong className="font-mono text-emerald-300 tabular-nums">
-                {quotaMetrics.localLookupsSaved}
-              </strong>{' '}
-              Reads
-              {pendingWrites.length > 0 && (
-                <>
-                  {' '}
-                  · คิวรอซิงก์{' '}
-                  <strong className="font-mono text-amber-300 tabular-nums">
-                    {pendingWrites.length}
-                  </strong>{' '}
-                  รายการ
-                </>
-              )}
+              ชิ้น · บันทึก ลบ และแก้ไขลงฐานข้อมูลสดแบบเรียลไทม์ (ไม่เก็บข้อมูลบนเครื่อง)
             </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center bg-slate-800 p-0.5 rounded-lg">
-              <button
-                type="button"
-                onClick={() => setSyncMode('auto_cloud')}
-                className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap cursor-pointer ${
-                  syncMode === 'auto_cloud'
-                    ? 'bg-emerald-600 text-white font-semibold'
-                    : 'text-slate-300 hover:text-white'
-                }`}
-              >
-                ซิงก์ Cloud อัตโนมัติ
-              </button>
-              <button
-                type="button"
-                onClick={() => setSyncMode('local_buffer')}
-                className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap cursor-pointer ${
-                  syncMode === 'local_buffer'
-                    ? 'bg-amber-600 text-white font-semibold'
-                    : 'text-slate-300 hover:text-white'
-                }`}
-              >
-                พักในเครื่อง (Batch)
-              </button>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-950/80 border border-emerald-500/40 text-emerald-300">
+              <CloudCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Direct Cloud Database Active</span>
             </div>
           </div>
         </div>

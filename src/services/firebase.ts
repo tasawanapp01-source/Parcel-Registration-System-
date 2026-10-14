@@ -12,7 +12,11 @@ import {
   collection,
   doc,
   getDocs,
+  getDoc,
   getDocFromServer,
+  setDoc,
+  updateDoc,
+  deleteDoc,
   onSnapshot,
   writeBatch,
   query,
@@ -24,12 +28,16 @@ import firebaseConfig from '../../firebase-applet-config.json';
 import {
   Student,
   Parcel,
+  ParcelStatus,
   Member,
   MemberRole,
   RolePermission,
   AppMenuKey,
   ALL_MENU_KEYS,
-  PendingWriteItem,
+  INITIAL_MEMBERS,
+  INITIAL_ROLE_PERMISSIONS,
+  INITIAL_STUDENTS,
+  INITIAL_PARCELS,
   getRelativeDateString,
 } from '../types/parcel';
 
@@ -132,7 +140,7 @@ export function sanitizeString(
   return val.slice(0, maxLen);
 }
 
-function buildValidParcelPayload(p: Parcel, ownerId: string) {
+export function buildValidParcelPayload(p: Parcel, ownerId: string) {
   const validStatuses = [
     'ลงทะเบียนรับพัสดุ',
     'รับเข้าส่วนกลาง',
@@ -169,7 +177,7 @@ function buildValidParcelPayload(p: Parcel, ownerId: string) {
   };
 }
 
-function buildValidStudentPayload(st: Student, ownerId: string) {
+export function buildValidStudentPayload(st: Student, ownerId: string) {
   const safeCode = sanitizeId(st.studentCode, 20);
   return {
     studentCode: safeCode,
@@ -189,7 +197,7 @@ function buildValidStudentPayload(st: Student, ownerId: string) {
   };
 }
 
-function sanitizeMenuList(menus: unknown): AppMenuKey[] {
+export function sanitizeMenuList(menus: unknown): AppMenuKey[] {
   if (!Array.isArray(menus)) return ['inbound'];
   const validSet = new Set<string>(ALL_MENU_KEYS);
   const filtered = menus
@@ -198,7 +206,7 @@ function sanitizeMenuList(menus: unknown): AppMenuKey[] {
   return Array.from(new Set(filtered)).slice(0, 10);
 }
 
-function buildValidMemberPayload(m: Member, ownerId: string) {
+export function buildValidMemberPayload(m: Member, ownerId: string) {
   const safeId = sanitizeId(m.memberId, 64);
   const safeRole: MemberRole =
     m.role === 'ผู้ดูแลระบบ'
@@ -224,7 +232,7 @@ function buildValidMemberPayload(m: Member, ownerId: string) {
   };
 }
 
-function buildValidRolePermissionPayload(rp: RolePermission, ownerId: string) {
+export function buildValidRolePermissionPayload(rp: RolePermission, ownerId: string) {
   const safeRoleId =
     rp.roleId === 'admin'
       ? 'admin'
@@ -250,18 +258,230 @@ function buildValidRolePermissionPayload(rp: RolePermission, ownerId: string) {
   };
 }
 
+// -------------------------------------------------------------
+// 5. การดำเนินการกับฐานข้อมูล Firestore โดยตรง (Direct CRUD Functions)
+// -------------------------------------------------------------
+
 /**
- * ระบบ Firestore Batched Writes สำหรับนำเข้าข้อมูลนักเรียนจำนวนมาก (Bulk Import)
- * แบ่งข้อมูลออกเป็นก้อนละไม่เกิน 450 รายการ (จำกัดสูงสุดของ Firestore คือ 500 รายการต่อ 1 Batch)
- * เขียนแบบ Atomic Batch โดยไม่ต้องยิง getDoc รายคน ช่วยให้ซิงก์รวดเร็วทันที
+ * บันทึกพัสดุใหม่ลง Firestore โดยตรง
+ */
+export async function createParcelDirectly(
+  parcel: Parcel,
+  ownerId: string = AUTO_CLOUD_OWNER_ID
+): Promise<void> {
+  const safeId = sanitizeId(parcel.trackingNumber || parcel.id, 64);
+  const payload = buildValidParcelPayload(parcel, ownerId);
+  const docRef = doc(db, 'parcels', safeId);
+  try {
+    await setDoc(docRef, payload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `parcels/${safeId}`);
+  }
+}
+
+/**
+ * อัปเดตข้อมูลพัสดุใน Firestore โดยตรง
+ */
+export async function updateParcelDirectly(
+  parcelId: string,
+  updates: Partial<Parcel>,
+  ownerId: string = AUTO_CLOUD_OWNER_ID
+): Promise<void> {
+  const safeId = sanitizeId(parcelId, 64);
+  const docRef = doc(db, 'parcels', safeId);
+  try {
+    // อ่านเอกสารเดิมเพื่อคงค่า createdAt เดิมไว้ตามกฎ Security Rules
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) {
+      // หากยังไม่มีเอกสาร ให้สร้างใหม่ด้วยข้อมูลที่มี
+      const fullParcel: Parcel = {
+        id: safeId,
+        trackingNumber: safeId,
+        studentCode: sanitizeId(updates.studentCode || 'UNKNOWN', 20),
+        studentFullName: updates.studentFullName || '-',
+        nickname: updates.nickname || '',
+        gradeRoom: updates.gradeRoom || '-',
+        dormitory: updates.dormitory || '-',
+        dormRoom: updates.dormRoom || '-',
+        bed: updates.bed || '-',
+        category: updates.category || 'อื่นๆ',
+        status: updates.status || 'ลงทะเบียนรับพัสดุ',
+        courier: updates.courier || 'Flash Express',
+        note: updates.note || '',
+        receivedDate: updates.receivedDate || getRelativeDateString(0),
+        receivedHour: updates.receivedHour ?? 12,
+        deliveredDate: updates.deliveredDate || '',
+        ownerId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      await setDoc(docRef, buildValidParcelPayload(fullParcel, ownerId));
+      return;
+    }
+
+    const currentData = snap.data();
+    const mergedPayload = {
+      trackingNumber: safeId,
+      studentCode: sanitizeId(updates.studentCode ?? currentData.studentCode, 20),
+      studentFullName: sanitizeString(updates.studentFullName ?? currentData.studentFullName, 1, 220, '-'),
+      nickname: sanitizeString(updates.nickname ?? currentData.nickname, 0, 50, ''),
+      gradeRoom: sanitizeString(updates.gradeRoom ?? currentData.gradeRoom, 1, 50, '-'),
+      dormitory: sanitizeString(updates.dormitory ?? currentData.dormitory, 1, 80, '-'),
+      dormRoom: sanitizeString(updates.dormRoom ?? currentData.dormRoom, 1, 30, '-'),
+      bed: sanitizeString(updates.bed ?? currentData.bed, 1, 20, '-'),
+      category: sanitizeString(updates.category ?? currentData.category, 1, 100, 'อื่นๆ'),
+      status: updates.status ?? currentData.status,
+      courier: sanitizeString(updates.courier ?? currentData.courier, 1, 50, 'Flash Express'),
+      note: sanitizeString(updates.note ?? currentData.note, 0, 300, ''),
+      receivedDate: sanitizeString(updates.receivedDate ?? currentData.receivedDate, 8, 20, getRelativeDateString(0)),
+      receivedHour: updates.receivedHour !== undefined ? updates.receivedHour : (currentData.receivedHour ?? 12),
+      deliveredDate: sanitizeString(updates.deliveredDate !== undefined ? updates.deliveredDate : currentData.deliveredDate, 0, 20, ''),
+      ownerId: currentData.ownerId || ownerId,
+      createdAt: currentData.createdAt || serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+
+    await setDoc(docRef, mergedPayload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `parcels/${safeId}`);
+  }
+}
+
+/**
+ * ลบพัสดุออกจาก Firestore โดยตรง
+ */
+export async function deleteParcelDirectly(parcelId: string): Promise<void> {
+  const safeId = sanitizeId(parcelId, 64);
+  const docRef = doc(db, 'parcels', safeId);
+  try {
+    await deleteDoc(docRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `parcels/${safeId}`);
+  }
+}
+
+/**
+ * อัปเดตสถานะพัสดุหลายรายการพร้อมกันใน Firestore ด้วย Atomic Batch
+ */
+export async function bulkUpdateParcelsDirectly(
+  parcelIds: string[],
+  newStatus: ParcelStatus,
+  deliveredDate?: string,
+  ownerId: string = AUTO_CLOUD_OWNER_ID
+): Promise<number> {
+  if (parcelIds.length === 0) return 0;
+  const CHUNK_SIZE = 400;
+  let updatedCount = 0;
+  const effectiveDeliveredDate =
+    newStatus === 'ส่งมอบสำเร็จ'
+      ? (deliveredDate || getRelativeDateString(0)).slice(0, 20)
+      : '';
+
+  for (let i = 0; i < parcelIds.length; i += CHUNK_SIZE) {
+    const chunk = parcelIds.slice(i, i + CHUNK_SIZE);
+    const batch = writeBatch(db);
+
+    for (const pid of chunk) {
+      const safeId = sanitizeId(pid, 64);
+      const docRef = doc(db, 'parcels', safeId);
+      batch.update(docRef, {
+        status: newStatus,
+        deliveredDate: effectiveDeliveredDate,
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    try {
+      await batch.commit();
+      updatedCount += chunk.length;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'parcels/bulk');
+    }
+  }
+
+  return updatedCount;
+}
+
+/**
+ * บันทึกหรือแก้ไขข้อมูลนักเรียนรายคนลง Firestore โดยตรง
+ */
+export async function saveStudentDirectly(
+  student: Student | Omit<Student, 'ownerId' | 'createdAt' | 'updatedAt'>,
+  ownerId: string = AUTO_CLOUD_OWNER_ID
+): Promise<void> {
+  const safeCode = sanitizeId(student.studentCode, 20);
+  const docRef = doc(db, 'students', safeCode);
+  try {
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const current = snap.data();
+      const payload = {
+        ...buildValidStudentPayload(student as Student, ownerId),
+        createdAt: current.createdAt || serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(docRef, payload);
+    } else {
+      const payload = buildValidStudentPayload(student as Student, ownerId);
+      await setDoc(docRef, payload);
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `students/${safeCode}`);
+  }
+}
+
+/**
+ * ลบข้อมูลนักเรียนออกจาก Firestore โดยตรง
+ */
+export async function deleteStudentDirectly(studentCode: string): Promise<void> {
+  const safeCode = sanitizeId(studentCode, 20);
+  const docRef = doc(db, 'students', safeCode);
+  try {
+    await deleteDoc(docRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `students/${safeCode}`);
+  }
+}
+
+/**
+ * ลบข้อมูลนักเรียนหลายคนออกจาก Firestore โดยตรงด้วย Batch
+ */
+export async function bulkDeleteStudentsDirectly(studentCodes: string[]): Promise<number> {
+  if (studentCodes.length === 0) return 0;
+  const CHUNK_SIZE = 400;
+  let deletedCount = 0;
+
+  for (let i = 0; i < studentCodes.length; i += CHUNK_SIZE) {
+    const chunk = studentCodes.slice(i, i + CHUNK_SIZE);
+    const batch = writeBatch(db);
+
+    for (const code of chunk) {
+      const safeCode = sanitizeId(code, 20);
+      const docRef = doc(db, 'students', safeCode);
+      batch.delete(docRef);
+    }
+
+    try {
+      await batch.commit();
+      deletedCount += chunk.length;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'students/bulk_delete');
+    }
+  }
+
+  return deletedCount;
+}
+
+/**
+ * นำเข้านักเรียนจำนวนมาก (Bulk Import) ลง Firestore โดยตรง
  */
 export async function batchImportStudentsToFirestore(
-  students: Student[],
+  students: (Student | Omit<Student, 'ownerId' | 'createdAt' | 'updatedAt'>)[],
   uid: string = AUTO_CLOUD_OWNER_ID,
   onProgress?: (completed: number, total: number) => void
 ): Promise<number> {
   if (students.length === 0) return 0;
-  const CHUNK_SIZE = 450;
+  const CHUNK_SIZE = 400;
   let totalWritten = 0;
   const effectiveOwnerId = uid || AUTO_CLOUD_OWNER_ID;
 
@@ -270,7 +490,7 @@ export async function batchImportStudentsToFirestore(
     const batch = writeBatch(db);
 
     for (const st of chunk) {
-      const payload = buildValidStudentPayload(st, effectiveOwnerId);
+      const payload = buildValidStudentPayload(st as Student, effectiveOwnerId);
       const docRef = doc(db, 'students', payload.studentCode);
       batch.set(docRef, payload);
     }
@@ -290,73 +510,77 @@ export async function batchImportStudentsToFirestore(
 }
 
 /**
- * ระบบซิงก์คิวข้อมูลที่พักไว้ในตัวโปรแกรม (Pending Write Queue) ขึ้นสู่ Firebase Firestore แบบ Batch
+ * บันทึกหรือแก้ไขสมาชิกผู้ใช้ลง Firestore โดยตรง
  */
-export async function flushPendingQueueToFirestore(
-  queue: PendingWriteItem[],
-  uid: string = AUTO_CLOUD_OWNER_ID,
-  onProgress?: (completed: number, total: number) => void
-): Promise<number> {
-  if (queue.length === 0) return 0;
-  const effectiveOwnerId = uid || AUTO_CLOUD_OWNER_ID;
-
-  // ยุบรวมรายการที่ซ้ำ docId เดียวกันให้เหลือสถานะล่าสุดเพียงรายการเดียวก่อนส่งขึ้น Cloud (Write Coalescing)
-  const deduplicatedMap = new Map<string, PendingWriteItem>();
-  for (const item of queue) {
-    deduplicatedMap.set(`${item.collection}:${item.docId}`, item);
-  }
-  const compactList = Array.from(deduplicatedMap.values());
-
-  const CHUNK_SIZE = 400;
-  let completed = 0;
-
-  for (let i = 0; i < compactList.length; i += CHUNK_SIZE) {
-    const chunk = compactList.slice(i, i + CHUNK_SIZE);
-    const batch = writeBatch(db);
-
-    for (const item of chunk) {
-      const maxIdLen = item.collection === 'students' || item.collection === 'role_permissions' ? 20 : 64;
-      const safeDocId = sanitizeId(item.docId, maxIdLen);
-      const ref = doc(db, item.collection, safeDocId);
-
-      if (item.action === 'delete') {
-        batch.delete(ref);
-      } else if (item.collection === 'students' && item.data) {
-        const st = item.data as Student;
-        const payload = buildValidStudentPayload(st, effectiveOwnerId);
-        const stRef = doc(db, 'students', payload.studentCode);
-        batch.set(stRef, payload);
-      } else if (item.collection === 'parcels' && item.data) {
-        const p = item.data as Parcel;
-        const payload = buildValidParcelPayload(p, effectiveOwnerId);
-        const pRef = doc(db, 'parcels', payload.trackingNumber);
-        batch.set(pRef, payload);
-      } else if (item.collection === 'members' && item.data) {
-        const m = item.data as Member;
-        const payload = buildValidMemberPayload(m, effectiveOwnerId);
-        const mRef = doc(db, 'members', payload.memberId);
-        batch.set(mRef, payload);
-      } else if (item.collection === 'role_permissions' && item.data) {
-        const rp = item.data as RolePermission;
-        const payload = buildValidRolePermissionPayload(rp, effectiveOwnerId);
-        const rpRef = doc(db, 'role_permissions', payload.roleId);
-        batch.set(rpRef, payload);
-      }
+export async function saveMemberDirectly(
+  member: Member,
+  ownerId: string = AUTO_CLOUD_OWNER_ID
+): Promise<void> {
+  const safeId = sanitizeId(member.memberId, 64);
+  const docRef = doc(db, 'members', safeId);
+  try {
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const current = snap.data();
+      const payload = {
+        ...buildValidMemberPayload(member, ownerId),
+        createdAt: current.createdAt || serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(docRef, payload);
+    } else {
+      const payload = buildValidMemberPayload(member, ownerId);
+      await setDoc(docRef, payload);
     }
-
-    try {
-      await batch.commit();
-      completed += chunk.length;
-      if (onProgress) {
-        onProgress(completed, compactList.length);
-      }
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'batch_sync');
-    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `members/${safeId}`);
   }
-
-  return compactList.length;
 }
+
+/**
+ * ลบสมาชิกออกจาก Firestore โดยตรง
+ */
+export async function deleteMemberDirectly(memberId: string): Promise<void> {
+  const safeId = sanitizeId(memberId, 64);
+  const docRef = doc(db, 'members', safeId);
+  try {
+    await deleteDoc(docRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `members/${safeId}`);
+  }
+}
+
+/**
+ * บันทึกหรือแก้ไขสิทธิ์ Role Permission ลง Firestore โดยตรง
+ */
+export async function saveRolePermissionDirectly(
+  rolePermission: RolePermission,
+  ownerId: string = AUTO_CLOUD_OWNER_ID
+): Promise<void> {
+  const safeRoleId = sanitizeId(rolePermission.roleId, 20);
+  const docRef = doc(db, 'role_permissions', safeRoleId);
+  try {
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const current = snap.data();
+      const payload = {
+        ...buildValidRolePermissionPayload(rolePermission, ownerId),
+        createdAt: current.createdAt || serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(docRef, payload);
+    } else {
+      const payload = buildValidRolePermissionPayload(rolePermission, ownerId);
+      await setDoc(docRef, payload);
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `role_permissions/${safeRoleId}`);
+  }
+}
+
+// -------------------------------------------------------------
+// 6. การแปลง Document Snapshot และการดึงข้อมูล Real-time
+// -------------------------------------------------------------
 
 function formatFirestoreTimestamp(val: unknown): string {
   if (val instanceof Timestamp) {
@@ -470,9 +694,66 @@ function mapDocToRolePermission(
 }
 
 /**
- * ดึงข้อมูลจาก Firestore ภายใต้บัญชี Tasawan_app01@pcccr.ac.th (และ UID ที่ล็อกอินถ้ามี) แล้วนำมาอัปเดตลง Local Cache
+ * ตรวจสอบและตั้งค่าข้อมูลสมาชิกและสิทธิ์เริ่มต้นบน Firestore หากฐานข้อมูลยังว่างเปล่า
  */
-export async function fetchCloudDataToLocalCache(
+export async function initializeDefaultCloudDataIfEmpty(
+  ownerId: string = AUTO_CLOUD_OWNER_ID
+): Promise<void> {
+  try {
+    // 1. ตรวจสอบ Role Permissions
+    const rpQuery = query(collection(db, 'role_permissions'), where('ownerId', '==', ownerId));
+    const rpSnap = await getDocs(rpQuery);
+    if (rpSnap.empty) {
+      const batch = writeBatch(db);
+      for (const rp of INITIAL_ROLE_PERMISSIONS) {
+        const payload = buildValidRolePermissionPayload(rp, ownerId);
+        const ref = doc(db, 'role_permissions', payload.roleId);
+        batch.set(ref, payload);
+      }
+      await batch.commit();
+    }
+
+    // 2. ตรวจสอบ Members
+    const mQuery = query(collection(db, 'members'), where('ownerId', '==', ownerId));
+    const mSnap = await getDocs(mQuery);
+    if (mSnap.empty) {
+      const batch = writeBatch(db);
+      for (const m of INITIAL_MEMBERS) {
+        const payload = buildValidMemberPayload(m, ownerId);
+        const ref = doc(db, 'members', payload.memberId);
+        batch.set(ref, payload);
+      }
+      await batch.commit();
+    }
+
+    // 3. ตรวจสอบ Students
+    const stQuery = query(collection(db, 'students'), where('ownerId', '==', ownerId));
+    const stSnap = await getDocs(stQuery);
+    if (stSnap.empty) {
+      await batchImportStudentsToFirestore(INITIAL_STUDENTS, ownerId);
+    }
+
+    // 4. ตรวจสอบ Parcels
+    const pQuery = query(collection(db, 'parcels'), where('ownerId', '==', ownerId));
+    const pSnap = await getDocs(pQuery);
+    if (pSnap.empty) {
+      const batch = writeBatch(db);
+      for (const p of INITIAL_PARCELS) {
+        const payload = buildValidParcelPayload(p, ownerId);
+        const ref = doc(db, 'parcels', payload.trackingNumber);
+        batch.set(ref, payload);
+      }
+      await batch.commit();
+    }
+  } catch (error) {
+    console.warn('Initial cloud seed note:', error);
+  }
+}
+
+/**
+ * ดึงข้อมูลสดจาก Firestore ทั้งหมดโดยตรง
+ */
+export async function fetchCloudDataDirectly(
   primaryOwnerId: string = AUTO_CLOUD_OWNER_ID,
   secondaryAuthUid?: string | null
 ): Promise<{
@@ -555,8 +836,10 @@ export async function fetchCloudDataToLocalCache(
   }
 
   return {
-    students: Array.from(studentMap.values()),
-    parcels: Array.from(parcelMap.values()),
+    students: Array.from(studentMap.values()).sort((a, b) => a.seqNo - b.seqNo),
+    parcels: Array.from(parcelMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    ),
     members: Array.from(memberMap.values()),
     rolePermissions: Array.from(rolePermMap.values()),
     readsCount,
@@ -564,7 +847,7 @@ export async function fetchCloudDataToLocalCache(
 }
 
 /**
- * ระบบซิงก์ข้อมูลแบบ Real-time จาก Firestore ภายใต้บัญชี Tasawan_app01@pcccr.ac.th
+ * ติดตามข้อมูลแบบ Real-time Live Sync จาก Firestore โดยตรง
  */
 export function subscribeToWorkspaceCloudData(
   ownerId: string = AUTO_CLOUD_OWNER_ID,
@@ -586,6 +869,7 @@ export function subscribeToWorkspaceCloudData(
       snapshot.forEach((docSnap) => {
         list.push(mapDocToStudent(docSnap.id, docSnap.data(), effectiveOwnerId));
       });
+      list.sort((a, b) => a.seqNo - b.seqNo);
       onStudentsSnapshot(list);
     },
     (error) => {
@@ -604,6 +888,7 @@ export function subscribeToWorkspaceCloudData(
       snapshot.forEach((docSnap) => {
         list.push(mapDocToParcel(docSnap.id, docSnap.data(), effectiveOwnerId));
       });
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       onParcelsSnapshot(list);
     },
     (error) => {

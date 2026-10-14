@@ -666,7 +666,7 @@ export const StudentsImportView: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
           <p className="text-xs font-medium text-slate-500">
-            รองรับการดูรายชื่อแยกตามห้องเรียน · แยกตามหอพัก · เลือกล้างข้อมูลเฉพาะส่วนได้ · ซิงก์ Firebase อัตโนมัติ
+            รองรับการดูรายชื่อแยกตามห้องเรียน · แยกตามหอพัก · เลือกล้างข้อมูลเฉพาะส่วนได้ · บันทึก แก้ไข และลบกับฐานข้อมูล Firestore โดยตรง
           </p>
           <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mt-1">
             ระบบจัดการและนำเข้าข้อมูลนักเรียน (Student Data Management)
@@ -1012,7 +1012,7 @@ export const StudentsImportView: React.FC = () => {
                   ตรวจสอบข้อมูลก่อนนำเข้า: {sourceLabel} (พร้อมนำเข้า {previewRows.length} รายการ)
                 </h3>
                 <p className="text-xs text-slate-600 mt-0.5">
-                  กดปุ่มยืนยันด้านขวาเพื่อบันทึกลงตัวโปรแกรมและซิงก์ขึ้น Firebase Firestore ทันที
+                  กดปุ่มยืนยันด้านขวาเพื่อบันทึกข้อมูลลงฐานข้อมูล Firebase Firestore โดยตรง
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -1022,7 +1022,7 @@ export const StudentsImportView: React.FC = () => {
                   className="min-h-[44px] px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>ยืนยันนำเข้าและซิงก์ขึ้น Firebase ทันที ({previewRows.length} คน)</span>
+                  <span>บันทึกลงฐานข้อมูล Firestore ทันที ({previewRows.length} คน)</span>
                 </button>
                 <button
                   type="button"

@@ -1,6 +1,6 @@
 {
   "name": "Student Parcel Management & Tracking System",
-  "description": "ระบบจัดการ คัดแยก และติดตามพัสดุนักเรียนประจำหอพัก รองรับการนำเข้าข้อมูล CSV/Excel การสแกนบาร์โค้ด พิมพ์ใบรายการ และวิเคราะห์สถิติพร้อมระบบ Local Cache ลดการใช้โควตา Firebase",
+  "description": "ระบบจัดการ คัดแยก และติดตามพัสดุนักเรียนประจำหอพัก บันทึก แก้ไข และลบข้อมูลกับฐานข้อมูล Firebase Firestore โดยตรงแบบเรียลไทม์ รองรับการนำเข้าข้อมูล CSV/Excel การสแกนบาร์โค้ด และพิมพ์ใบรายการ",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
