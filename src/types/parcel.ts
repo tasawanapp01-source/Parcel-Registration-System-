@@ -434,6 +434,69 @@ export function generateUniqueParentTrackingNumber(existingParcels: Parcel[]): s
   return candidate;
 }
 
+/**
+ * สร้างรหัสพัสดุอัตโนมัติ/สุ่มเลขพัสดุตามบริษัทขนส่งที่เลือก (ไม่ซ้ำในระบบ)
+ * สำหรับกรณีไม่สามารถสแกนหรือยิงบาร์โค้ดได้ แต่ยังคงเลือกบริษัทขนส่งได้
+ */
+export function generateUniqueTrackingNumberForCourier(
+  courier: string,
+  existingParcels: Parcel[]
+): string {
+  if (courier === 'ผู้ปกครองฝากส่ง') {
+    return generateUniqueParentTrackingNumber(existingParcels);
+  }
+
+  const existingIds = new Set<string>();
+  for (const p of existingParcels) {
+    if (p.id) existingIds.add(p.id.trim().toUpperCase());
+    if (p.trackingNumber) existingIds.add(p.trackingNumber.trim().toUpperCase());
+  }
+
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const datePart = `${year}${month}${day}`;
+
+  const randDigits = (len: number) => {
+    let res = '';
+    for (let i = 0; i < len; i++) {
+      res += Math.floor(Math.random() * 10).toString();
+    }
+    return res;
+  };
+
+  const randChars = (len: number) => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    let res = '';
+    for (let i = 0; i < len; i++) {
+      res += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return res;
+  };
+
+  let candidate = '';
+  do {
+    if (courier === 'Flash Express') {
+      candidate = `TH${datePart}${randDigits(5)}${randChars(1)}`;
+    } else if (courier === 'Kerry Express') {
+      candidate = `KER${datePart}${randDigits(6)}`;
+    } else if (courier === 'ไปรษณีย์ไทย (EMS)') {
+      candidate = `ED${randDigits(9)}TH`;
+    } else if (courier === 'J&T Express') {
+      candidate = `JT${datePart}${randDigits(6)}`;
+    } else if (courier === 'Shopee Xpress (SPX)') {
+      candidate = `SPXTH${datePart}${randDigits(6)}`;
+    } else if (courier === 'Lex Express') {
+      candidate = `LEX${datePart}${randDigits(6)}`;
+    } else {
+      candidate = `PKG-${datePart}-${randDigits(5)}`;
+    }
+  } while (existingIds.has(candidate.toUpperCase()));
+
+  return candidate;
+}
+
 // ฟังก์ชันคืนค่าวันที่ย้อนหลัง N วัน ในรูปแบบ YYYY-MM-DD (ตามเวลาท้องถิ่น)
 export function getRelativeDateString(daysAgo: number): string {
   const d = new Date();

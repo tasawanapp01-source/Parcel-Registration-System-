@@ -36,11 +36,11 @@ const THAI_MONTHS = [
 const THAI_WEEKDAYS = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
 
 const MANIFEST_STATUS_FILTERS = [
-  { value: 'ALL_REGISTERED', label: 'พัสดุที่ลงทะเบียนทั้งหมด' },
+  { value: 'ALL_REGISTERED', label: 'พัสดุที่ลงทะเบียนแล้ว (รวมติดนิติการ)' },
+  { value: 'UNSIGNED', label: 'พัสดุที่ยังไม่เซ็นรับทั้งหมด' },
+  { value: 'LEGAL_HOLD', label: 'เฉพาะพัสดุติดนิติการ' },
   { value: 'SIGNED', label: 'พัสดุที่เซ็นรับแล้ว' },
-  { value: 'UNSIGNED', label: 'พัสดุที่ยังไม่เซ็นรับ' },
-  { value: 'LEGAL_HOLD', label: 'พัสดุติดนิติการ' },
-  { value: 'UNKNOWN_OWNER', label: 'พัสดุไม่ทราบเจ้าของ' },
+  { value: 'ALL', label: 'พัสดุทั้งหมดทุกสถานะ' },
 ];
 
 function formatThaiDateDisplay(isoDateStr: string): string {
@@ -63,7 +63,6 @@ export const ManifestView: React.FC = () => {
   const {
     students,
     parcels,
-    searchParcelsLocal,
     updateParcelStatus,
     bulkUpdateParcelStatus,
   } = useParcelSystem();
@@ -78,11 +77,26 @@ export const ManifestView: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedParcelIds, setSelectedParcelIds] = useState<string[]>([]);
 
-  // สถานะสำหรับปฏิทินภาษาไทย (Thai Calendar Popover)
+  // วันที่สำหรับบันทึกการส่งมอบ (Default: วันนี้)
+  const todayIso = useMemo(() => getRelativeDateString(0), []);
+  const todayThaiDisplay = useMemo(() => formatThaiDateDisplay(todayIso), [todayIso]);
+
+  // สถานะสำหรับปฏิทินภาษาไทยตัวกรองวันที่รับเข้า (Top Filter Calendar)
   const [isCalendarOpen, setIsCalendarOpen] = useState<boolean>(false);
   const [viewYearAD, setViewYearAD] = useState<number>(() => new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState<number>(() => new Date().getMonth());
   const calendarContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // สถานะสำหรับปฏิทินภาษาไทยเลือกวันที่รับพัสดุ (Delivery Record Calendar in Action Box)
+  const [deliveryRecordDate, setDeliveryRecordDate] = useState<string>(todayIso);
+  const [isDeliveryCalendarOpen, setIsDeliveryCalendarOpen] = useState<boolean>(false);
+  const [deliveryViewYearAD, setDeliveryViewYearAD] = useState<number>(() => new Date().getFullYear());
+  const [deliveryViewMonth, setDeliveryViewMonth] = useState<number>(() => new Date().getMonth());
+  const deliveryCalendarContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // การแบ่งหน้า (Pagination) สำหรับมุมมองหน้าจอ
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(15);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -92,31 +106,85 @@ export const ManifestView: React.FC = () => {
       ) {
         setIsCalendarOpen(false);
       }
+      if (
+        deliveryCalendarContainerRef.current &&
+        !deliveryCalendarContainerRef.current.contains(e.target as Node)
+      ) {
+        setIsDeliveryCalendarOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // แสดงรายการพัสดุตามหอพักและสถานะ (โดยใช้ปฏิทินที่ 3 สำหรับบันทึกวันที่รับพัสดุเมื่อกดยืนยัน)
+  // แสดงรายการพัสดุตามหอพักและสถานะ (นำพัสดุที่ลงทะเบียนแล้วมาแสดงในตารางได้เลย รวมถึงของที่ติดนิติการ เพื่อรอพิมพ์ใบนำส่งให้แต่ละหอพัก)
   const manifestParcels = useMemo(() => {
-    return searchParcelsLocal('', selectedStatus, selectedDormitory, '');
-  }, [searchParcelsLocal, selectedStatus, selectedDormitory]);
+    return parcels.filter((p) => {
+      // 1. กรองตามหอพัก
+      if (selectedDormitory !== 'ALL') {
+        const dorm = (p.dormitory || '').trim();
+        if (dorm !== selectedDormitory.trim()) return false;
+      }
+
+      // 2. กรองตามวันที่รับเข้าถ้ามีการเลือกจากปฏิทิน
+      if (selectedDate) {
+        const pDate = (p.receivedDate || '').trim();
+        if (pDate && pDate !== selectedDate) return false;
+      }
+
+      // 3. กรองตามสถานะ: ให้นำพัสดุที่ลงทะเบียนแล้วมาแสดงในตารางได้เลย เพื่อรอพิมพ์ใบนำส่งให้แต่ละหอพัก ให้รวมถึงของที่ติดนิติการ
+      if (selectedStatus === 'ALL_REGISTERED') {
+        return (
+          p.status === 'ลงทะเบียนรับพัสดุ' ||
+          p.status === 'ติดนิติการ' ||
+          p.status === 'รอการยืนยัน' ||
+          p.status !== 'ส่งมอบสำเร็จ'
+        );
+      }
+      if (selectedStatus === 'UNSIGNED') {
+        return p.status !== 'ส่งมอบสำเร็จ';
+      }
+      if (selectedStatus === 'SIGNED') {
+        return p.status === 'ส่งมอบสำเร็จ';
+      }
+      if (selectedStatus === 'LEGAL_HOLD') {
+        return p.status === 'ติดนิติการ';
+      }
+      if (selectedStatus === 'ALL') {
+        return true;
+      }
+      return p.status === selectedStatus;
+    });
+  }, [parcels, selectedDormitory, selectedDate, selectedStatus]);
+
+  // จัดเรียงรายการพัสดุตาม หอพัก, ห้องพักหอ, และชื่อ เพื่อให้อ่านและพิมพ์นำส่งเป็นระเบียบ
+  const sortedManifestParcels = useMemo(() => {
+    return [...manifestParcels].sort((a, b) => {
+      if (a.dormitory !== b.dormitory) {
+        return (a.dormitory || '').localeCompare(b.dormitory || '', 'th');
+      }
+      if (a.dormRoom !== b.dormRoom) {
+        return (a.dormRoom || '').localeCompare(b.dormRoom || '', 'th', { numeric: true });
+      }
+      return (a.studentFullName || '').localeCompare(b.studentFullName || '', 'th');
+    });
+  }, [manifestParcels]);
 
   const unsignedParcelsInView = useMemo(
-    () => manifestParcels.filter((p) => p.status !== 'ส่งมอบสำเร็จ'),
-    [manifestParcels]
+    () => sortedManifestParcels.filter((p) => p.status !== 'ส่งมอบสำเร็จ'),
+    [sortedManifestParcels]
   );
 
   const signedParcelsInView = useMemo(
-    () => manifestParcels.filter((p) => p.status === 'ส่งมอบสำเร็จ'),
-    [manifestParcels]
+    () => sortedManifestParcels.filter((p) => p.status === 'ส่งมอบสำเร็จ'),
+    [sortedManifestParcels]
   );
 
   // ล้างรายการที่ติ๊กเลือกไว้หากไม่อยู่ในตารางปัจจุบันแล้ว
   useEffect(() => {
-    const visibleIdSet = new Set(manifestParcels.map((p) => p.id));
+    const visibleIdSet = new Set(sortedManifestParcels.map((p) => p.id));
     setSelectedParcelIds((prev) => prev.filter((id) => visibleIdSet.has(id)));
-  }, [manifestParcels]);
+  }, [sortedManifestParcels]);
 
   const selectedSignedIds = useMemo(() => {
     const signedSet = new Set(signedParcelsInView.map((p) => p.id));
@@ -132,8 +200,33 @@ export const ManifestView: React.FC = () => {
   );
 
   const isAllVisibleChecked =
-    manifestParcels.length > 0 &&
-    manifestParcels.every((p) => selectedParcelIds.includes(p.id));
+    sortedManifestParcels.length > 0 &&
+    sortedManifestParcels.every((p) => selectedParcelIds.includes(p.id));
+
+  // รีเซ็ตหน้าเมื่อตัวกรองเปลี่ยน
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedDormitory, selectedStatus, selectedDate]);
+
+  const totalItems = sortedManifestParcels.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+
+  const currentPageParcels = useMemo(() => {
+    return sortedManifestParcels.slice(startIndex, endIndex);
+  }, [sortedManifestParcels, startIndex, endIndex]);
+
+  const isAllCurrentPageChecked =
+    currentPageParcels.length > 0 &&
+    currentPageParcels.every((p) => selectedParcelIds.includes(p.id));
 
   const handleToggleSelectParcel = (parcelId: string) => {
     setSelectedParcelIds((prev) =>
@@ -142,10 +235,12 @@ export const ManifestView: React.FC = () => {
   };
 
   const handleToggleSelectAllVisible = () => {
-    if (isAllVisibleChecked) {
-      setSelectedParcelIds([]);
+    if (isAllCurrentPageChecked) {
+      const pageIds = new Set(currentPageParcels.map((p) => p.id));
+      setSelectedParcelIds((prev) => prev.filter((id) => !pageIds.has(id)));
     } else {
-      setSelectedParcelIds(manifestParcels.map((p) => p.id));
+      const pageIds = currentPageParcels.map((p) => p.id);
+      setSelectedParcelIds((prev) => Array.from(new Set([...prev, ...pageIds])));
     }
   };
 
@@ -164,18 +259,13 @@ export const ManifestView: React.FC = () => {
     window.print();
   };
 
-  const todayIso = getRelativeDateString(0);
-  const todayThaiDisplay = formatThaiDateDisplay(todayIso);
-  // วันที่ที่จะใช้บันทึกเป็น "วันที่รับ" เมื่อยืนยันการรับพัสดุ (จากปฏิทินวันที่รับเข้า หากเว้นว่างใช้วันนี้)
-  const targetReceivedDateToRecord = selectedDate || todayIso;
-
-  // ยืนยันการรับพัสดุ พร้อมบันทึกวันที่รับตามปฏิทินที่เลือก
+  // ยืนยันการรับพัสดุ พร้อมบันทึกวันที่รับตามปฏิทินที่เลือกจากกล่องข้อความ
   const handleConfirmSelectedDelivered = async () => {
     if (selectedParcelIds.length === 0) return;
     await bulkUpdateParcelStatus(
       selectedParcelIds,
       'ส่งมอบสำเร็จ',
-      targetReceivedDateToRecord
+      deliveryRecordDate
     );
     setSelectedParcelIds([]);
   };
@@ -233,6 +323,45 @@ export const ManifestView: React.FC = () => {
     setIsCalendarOpen(false);
   };
 
+  // คำนวณวันในเดือนสำหรับปฏิทินภาษาไทย (เลือกวันที่รับพัสดุในกล่องข้อความ)
+  const deliveryCalendarDays = useMemo(() => {
+    const firstDayOfWeek = new Date(deliveryViewYearAD, deliveryViewMonth, 1).getDay();
+    const daysInMonth = new Date(deliveryViewYearAD, deliveryViewMonth + 1, 0).getDate();
+    const cells: (number | null)[] = [];
+    for (let i = 0; i < firstDayOfWeek; i++) {
+      cells.push(null);
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      cells.push(d);
+    }
+    return cells;
+  }, [deliveryViewYearAD, deliveryViewMonth]);
+
+  const handlePrevDeliveryMonth = () => {
+    if (deliveryViewMonth === 0) {
+      setDeliveryViewMonth(11);
+      setDeliveryViewYearAD((y) => y - 1);
+    } else {
+      setDeliveryViewMonth((m) => m - 1);
+    }
+  };
+
+  const handleNextDeliveryMonth = () => {
+    if (deliveryViewMonth === 11) {
+      setDeliveryViewMonth(0);
+      setDeliveryViewYearAD((y) => y + 1);
+    } else {
+      setDeliveryViewMonth((m) => m + 1);
+    }
+  };
+
+  const handleSelectDeliveryCalendarDay = (day: number) => {
+    const mm = String(deliveryViewMonth + 1).padStart(2, '0');
+    const dd = String(day).padStart(2, '0');
+    setDeliveryRecordDate(`${deliveryViewYearAD}-${mm}-${dd}`);
+    setIsDeliveryCalendarOpen(false);
+  };
+
   const yearOptionsAD = useMemo(() => {
     const currentYear = new Date().getFullYear();
     const years: number[] = [];
@@ -245,51 +374,18 @@ export const ManifestView: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="no-print space-y-5">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200 pb-5">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-slate-200 pb-5">
           <div>
             <p className="text-xs font-medium text-slate-500">
               ระบบออกเอกสารใบรายการนำส่งพัสดุแยกตามตะกร้าสีหอพัก · รองรับกระดาษ A4
             </p>
-            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mt-1">
-              ใบรายการนำส่งและเซ็นรับพัสดุประจำหอพัก (Printable Manifest)
+            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mt-1 leading-snug">
+              <span>ใบรายการนำส่งและเซ็นรับพัสดุประจำหอพัก</span>
+              <br />
+              <span className="text-2xl md:text-3xl font-bold text-emerald-600">
+                (Printable Manifest)
+              </span>
             </h1>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              type="button"
-              onClick={handleConfirmSelectedDelivered}
-              disabled={selectedParcelIds.length === 0}
-              className="min-h-[44px] px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-500 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-2 cursor-pointer"
-            >
-              <CheckSquare className="w-4 h-4" />
-              <span>
-                ยืนยันการรับพัสดุ
-                {selectedParcelIds.length > 0 ? ` (${selectedParcelIds.length} รายการ)` : ''}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleCancelSelectedDelivered}
-              disabled={selectedSignedIds.length === 0}
-              className="min-h-[44px] px-4 py-2.5 bg-red-50 hover:bg-red-600 hover:text-white disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-200 text-red-700 border border-red-200 text-xs font-bold rounded-xl transition-colors flex items-center gap-2 cursor-pointer"
-            >
-              <RotateCcw className="w-4 h-4" />
-              <span>
-                ยกเลิกการรับพัสดุ
-                {selectedSignedIds.length > 0 ? ` (${selectedSignedIds.length} รายการ)` : ''}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handlePrintManifest}
-              className="min-h-[44px] px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl transition-colors flex items-center gap-2 cursor-pointer"
-            >
-              <Printer className="w-4 h-4" />
-              <span>พิมพ์ใบรายการ (Print A4)</span>
-            </button>
           </div>
         </div>
 
@@ -487,40 +583,187 @@ export const ManifestView: React.FC = () => {
         </div>
 
         {/* แถบจัดการเลือกพัสดุที่นักเรียนเซ็นรับแล้ว เพื่อยืนยันการรับพัสดุ หรือยกเลิกการรับพัสดุ */}
-        <div className="bg-emerald-50/80 border border-emerald-200 rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          <div className="flex items-start sm:items-center gap-2.5 text-xs text-emerald-950">
-            <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5 sm:mt-0" />
+        <div className="bg-emerald-50/90 border border-emerald-300 rounded-2xl p-4 flex flex-col xl:flex-row xl:items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-start sm:items-center gap-3 text-xs text-emerald-950">
+            <CheckCircle2 className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5 sm:mt-0" />
             <div>
-              <span>
-                ติ๊กเลือกพัสดุในตารางแล้วกด <strong>"ยืนยันการรับพัสดุ"</strong> (จะบันทึกวันที่รับเป็น{' '}
-                <strong className="font-mono underline">
-                  {formatThaiSlashDate(targetReceivedDateToRecord)}
-                </strong>{' '}
-                ตามปฏิทินช่องที่ 3) หรือกด <strong>"ยกเลิกการรับพัสดุ"</strong> กรณีเช็คผิด
-              </span>
+              <p className="font-bold text-sm text-emerald-900">
+                ติ๊กเลือกพัสดุในตาราง แล้วเลือกวันที่รับพัสดุจากปฏิทินไทย ก่อนยืนยันการรับพัสดุ
+              </p>
+              <p className="text-emerald-800 text-xs mt-0.5">
+                ระบบจะบันทึกวันที่รับเป็น: <strong className="font-mono underline text-emerald-950">{formatThaiDateDisplay(deliveryRecordDate) || formatThaiSlashDate(deliveryRecordDate)}</strong> (หรือกดยกเลิกการรับพัสดุกรณีเช็คผิด)
+              </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {/* ปฏิทินภาษาไทย สำหรับเลือกวันที่รับพัสดุ ก่อนการยืนยันการรับพัสดุ */}
+            <div className="relative" ref={deliveryCalendarContainerRef}>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-emerald-950 whitespace-nowrap">วันที่รับพัสดุ:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const parts = deliveryRecordDate.split('-');
+                    if (parts.length === 3) {
+                      setDeliveryViewYearAD(parseInt(parts[0], 10));
+                      setDeliveryViewMonth(parseInt(parts[1], 10) - 1);
+                    }
+                    setIsDeliveryCalendarOpen((v) => !v);
+                  }}
+                  className="min-h-[40px] px-3.5 py-1.5 bg-white hover:bg-emerald-100/60 border border-emerald-400 rounded-xl text-xs font-bold text-emerald-950 flex items-center gap-2 shadow-sm cursor-pointer"
+                  title="คลิกเพื่อเลือกวันที่รับพัสดุจากปฏิทินภาษาไทย"
+                >
+                  <CalendarIcon className="w-4 h-4 text-emerald-700 shrink-0" />
+                  <span className="font-mono">{formatThaiSlashDate(deliveryRecordDate)}</span>
+                </button>
+              </div>
+
+              {/* Delivery Thai Calendar Popover */}
+              {isDeliveryCalendarOpen && (
+                <div className="absolute z-40 mt-2 right-0 w-80 bg-white border border-slate-300 rounded-2xl shadow-2xl p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-1 pb-2 border-b border-slate-100">
+                    <span className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                      <CalendarIcon className="w-4 h-4 text-emerald-600" />
+                      เลือกวันที่รับพัสดุ (พ.ศ.)
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="ปิดปฏิทิน"
+                      onClick={() => setIsDeliveryCalendarOpen(false)}
+                      className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-1">
+                    <button
+                      type="button"
+                      aria-label="เดือนก่อนหน้า"
+                      onClick={handlePrevDeliveryMonth}
+                      className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-700 cursor-pointer"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+
+                    <div className="flex items-center gap-1.5">
+                      <select
+                        aria-label="เลือกเดือนภาษาไทย"
+                        value={deliveryViewMonth}
+                        onChange={(e) => setDeliveryViewMonth(Number(e.target.value))}
+                        className="px-2 py-1 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none"
+                      >
+                        {THAI_MONTHS.map((mName, idx) => (
+                          <option key={mName} value={idx}>
+                            {mName}
+                          </option>
+                        ))}
+                      </select>
+
+                      <select
+                        aria-label="เลือกปี พ.ศ."
+                        value={deliveryViewYearAD}
+                        onChange={(e) => setDeliveryViewYearAD(Number(e.target.value))}
+                        className="px-2 py-1 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none"
+                      >
+                        {yearOptionsAD.map((yAD) => (
+                          <option key={yAD} value={yAD}>
+                            พ.ศ. {yAD + 543}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <button
+                      type="button"
+                      aria-label="เดือนถัดไป"
+                      onClick={handleNextDeliveryMonth}
+                      className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-700 cursor-pointer"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-500 pt-1">
+                    {THAI_WEEKDAYS.map((wd) => (
+                      <div key={wd} className="py-1">
+                        {wd}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-7 gap-1 text-center text-xs">
+                    {deliveryCalendarDays.map((dayNum, cellIdx) => {
+                      if (!dayNum) {
+                        return <div key={`empty-${cellIdx}`} className="h-8" />;
+                      }
+                      const cellDateIso = `${deliveryViewYearAD}-${String(
+                        deliveryViewMonth + 1
+                      ).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                      const isSelected = deliveryRecordDate === cellDateIso;
+                      const isToday = cellDateIso === todayIso;
+
+                      return (
+                        <button
+                          key={`day-${dayNum}`}
+                          type="button"
+                          onClick={() => handleSelectDeliveryCalendarDay(dayNum)}
+                          className={`h-8 rounded-lg font-mono font-semibold transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-emerald-600 text-white font-bold shadow'
+                              : isToday
+                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-400 font-bold'
+                              : 'hover:bg-slate-100 text-slate-800'
+                          }`}
+                        >
+                          {dayNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeliveryRecordDate(todayIso);
+                        setIsDeliveryCalendarOpen(false);
+                      }}
+                      className="px-2 py-1 text-emerald-700 hover:text-emerald-900 font-semibold cursor-pointer"
+                    >
+                      ใช้วันนี้ ({formatThaiSlashDate(todayIso)})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsDeliveryCalendarOpen(false)}
+                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-semibold cursor-pointer"
+                    >
+                      เสร็จสิ้น
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
               type="button"
               onClick={handleSelectAllUnsigned}
               disabled={unsignedParcelsInView.length === 0}
-              className="min-h-[38px] px-3.5 py-1.5 bg-white hover:bg-emerald-100/60 disabled:opacity-50 text-emerald-900 border border-emerald-300 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+              className="min-h-[40px] px-3.5 py-1.5 bg-white hover:bg-emerald-100/60 disabled:opacity-50 text-emerald-900 border border-emerald-300 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
             >
-              เลือกที่ยังไม่เซ็นรับทั้งหมด ({unsignedParcelsInView.length})
+              เลือกที่ยังไม่เซ็นรับ ({unsignedParcelsInView.length})
             </button>
 
             <button
               type="button"
               onClick={handleConfirmSelectedDelivered}
               disabled={selectedParcelIds.length === 0}
-              className="min-h-[38px] px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 disabled:text-slate-500 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="min-h-[40px] px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 disabled:text-slate-500 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
             >
               <CheckSquare className="w-4 h-4" />
               <span>
-                ยืนยันการรับพัสดุ ({selectedParcelIds.length}) · วันที่{' '}
-                {formatThaiSlashDate(targetReceivedDateToRecord)}
+                ยืนยันการรับพัสดุ ({selectedParcelIds.length}) · {formatThaiSlashDate(deliveryRecordDate)}
               </span>
             </button>
 
@@ -528,10 +771,10 @@ export const ManifestView: React.FC = () => {
               type="button"
               onClick={handleCancelSelectedDelivered}
               disabled={selectedSignedIds.length === 0}
-              className="min-h-[38px] px-3.5 py-1.5 bg-white hover:bg-red-600 hover:text-white disabled:opacity-50 text-red-700 border border-red-300 text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="min-h-[40px] px-3.5 py-1.5 bg-white hover:bg-red-600 hover:text-white disabled:opacity-50 text-red-700 border border-red-300 text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>ยกเลิกการรับพัสดุ ({selectedSignedIds.length})</span>
+              <span>ยกเลิกการรับ ({selectedSignedIds.length})</span>
             </button>
           </div>
         </div>
@@ -562,21 +805,50 @@ export const ManifestView: React.FC = () => {
               {selectedDormitory === 'ALL' ? 'ทุกหอพักรวม' : activeTheme.name}
             </div>
             <div className="text-xs font-mono font-bold text-slate-800 mt-0.5 tabular-nums">
-              {activeTheme.basketCode} ({activeTheme.colorName}) · รวม {manifestParcels.length} ชิ้น
+              {activeTheme.basketCode} ({activeTheme.colorName}) · รวม {sortedManifestParcels.length} ชิ้น
             </div>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left text-xs">
-            <thead>
+        {/* ส่วนแสดงข้อมูลรายการนำส่งพัสดุประจำหอพัก */}
+        <div className="bg-slate-50 border border-slate-300 rounded-xl p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div>
+            <span className="text-slate-500 block">หอพักปลายทาง:</span>
+            <span className="font-bold text-slate-900 text-sm">
+              {selectedDormitory === 'ALL' ? 'ทุกหอพักรวม' : activeTheme.name}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500 block">รหัสตะกร้าคัดแยก:</span>
+            <span className="font-bold text-slate-900 font-mono text-sm">
+              {activeTheme.basketCode} ({activeTheme.colorName})
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500 block">จำนวนรายการนำส่งทั้งหมด:</span>
+            <span className="font-extrabold text-slate-900 text-sm font-mono tabular-nums">
+              {sortedManifestParcels.length} ชิ้น
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500 block">สถานะการลงนามรับมอบ:</span>
+            <span className="font-bold text-emerald-800 text-xs font-mono tabular-nums">
+              เซ็นรับแล้ว {signedParcelsInView.length} / รอเซ็น {unsignedParcelsInView.length} ชิ้น
+            </span>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto print:overflow-visible">
+          <table className="w-full border-collapse text-left text-xs print:text-[11px] print:w-full">
+            <thead className="table-header-group border-y-2 border-slate-900 bg-slate-100 text-slate-900 font-bold">
               <tr className="border-y-2 border-slate-900 bg-slate-100 text-slate-900 font-bold">
                 <th className="no-print py-2.5 px-2.5 border border-slate-300 text-center w-12">
                   <input
                     type="checkbox"
-                    aria-label="เลือกพัสดุทั้งหมดในตาราง"
-                    checked={isAllVisibleChecked}
-                    disabled={manifestParcels.length === 0}
+                    aria-label="เลือกพัสดุทั้งหมดในหน้านี้"
+                    title="เลือก/ยกเลิกเลือก ทุกรายการในหน้านี้"
+                    checked={isAllCurrentPageChecked}
+                    disabled={currentPageParcels.length === 0}
                     onChange={handleToggleSelectAllVisible}
                     className="w-4 h-4 rounded border-slate-400 text-emerald-700 focus:ring-emerald-600 cursor-pointer disabled:opacity-40"
                   />
@@ -595,17 +867,18 @@ export const ManifestView: React.FC = () => {
                 </th>
               </tr>
             </thead>
-            <tbody>
-              {manifestParcels.length === 0 ? (
+            <tbody className="table-row-group">
+              {sortedManifestParcels.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-10 text-center text-slate-500 border border-slate-300">
                     ไม่มีรายการพัสดุที่ตรงกับตัวกรองในขณะนี้
                   </td>
                 </tr>
               ) : (
-                manifestParcels.map((p, idx) => {
+                sortedManifestParcels.map((p, idx) => {
                   const isSigned = p.status === 'ส่งมอบสำเร็จ';
                   const isChecked = selectedParcelIds.includes(p.id);
+                  const isRowInCurrentPage = idx >= startIndex && idx < endIndex;
                   const recordedThaiDate = isSigned
                     ? formatThaiSlashDate(p.deliveredDate || p.receivedDate || p.updatedAt)
                     : '..../...../.....';
@@ -614,9 +887,9 @@ export const ManifestView: React.FC = () => {
                     <tr
                       key={p.id}
                       onClick={() => handleToggleSelectParcel(p.id)}
-                      className={`border-b border-slate-300 transition-colors cursor-pointer hover:bg-slate-50 ${
+                      className={`border-b border-slate-300 transition-colors cursor-pointer hover:bg-slate-50 break-inside-avoid print:break-inside-avoid ${
                         isChecked ? 'bg-emerald-50/60' : ''
-                      }`}
+                      } ${isRowInCurrentPage ? '' : 'hidden print:table-row'}`}
                     >
                       <td
                         className="no-print py-3 px-2.5 border border-slate-300 text-center"
@@ -655,8 +928,14 @@ export const ManifestView: React.FC = () => {
                       </td>
                       <td className="py-3 px-3 border border-slate-300">
                         <div className="font-semibold text-slate-800">{p.category}</div>
-                        <div className="text-[11px] text-slate-500">
-                          สถานะ: {p.status === 'ติดนิติการ' ? 'พัสดุติดนิติการ' : p.status} {p.note ? `· ${p.note}` : ''}
+                        <div className="text-[11px] text-slate-600 mt-0.5">
+                          {p.status === 'ติดนิติการ' ? (
+                            <span className="inline-block px-1.5 py-0.5 font-bold text-red-700 bg-red-50 border border-red-300 rounded text-[11px]">
+                              พัสดุติดนิติการ
+                            </span>
+                          ) : (
+                            <span>สถานะ: {p.status} {p.note ? `· ${p.note}` : ''}</span>
+                          )}
                         </div>
                       </td>
                       <td className="py-3 px-3 border border-slate-300 text-center text-slate-400">
@@ -692,6 +971,115 @@ export const ManifestView: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* ตัวแบ่งหน้า (Pagination) สำหรับมุมมองหน้าจอ - ซ่อนเมื่อสั่งพิมพ์ */}
+        {totalItems > 0 && (
+          <div className="no-print pt-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <div className="flex flex-wrap items-center gap-2 text-slate-600">
+              <span className="font-semibold text-slate-700">แสดง:</span>
+              <select
+                aria-label="จำนวนรายการต่อหน้า"
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-emerald-600"
+              >
+                <option value={10}>10 รายการ / หน้า</option>
+                <option value={15}>15 รายการ / หน้า</option>
+                <option value={20}>20 รายการ / หน้า</option>
+                <option value={30}>30 รายการ / หน้า</option>
+                <option value={50}>50 รายการ / หน้า</option>
+                <option value={9999}>แสดงทั้งหมด ({totalItems} รายการ)</option>
+              </select>
+              <span className="text-slate-500 font-mono">
+                (รายการที่ {startIndex + 1} - {Math.min(endIndex, totalItems)} จากทั้งหมด {totalItems} รายการ)
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                className="min-h-[34px] px-3 py-1 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white text-slate-700 border border-slate-300 rounded-lg font-semibold transition-colors flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>ก่อนหน้า</span>
+              </button>
+
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((pageNum) => {
+                    if (totalPages <= 7) return true;
+                    if (pageNum === 1 || pageNum === totalPages) return true;
+                    return Math.abs(pageNum - currentPage) <= 1;
+                  })
+                  .map((pageNum, idx, arr) => {
+                    const prev = arr[idx - 1];
+                    const showEllipsis = prev && pageNum - prev > 1;
+                    return (
+                      <React.Fragment key={pageNum}>
+                        {showEllipsis && <span className="px-1 text-slate-400">...</span>}
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`min-h-[34px] min-w-[34px] px-2 rounded-lg text-xs font-bold font-mono transition-colors cursor-pointer ${
+                            currentPage === pageNum
+                              ? 'bg-emerald-700 text-white shadow-sm'
+                              : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-300'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      </React.Fragment>
+                    );
+                  })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className="min-h-[34px] px-3 py-1 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white text-slate-700 border border-slate-300 rounded-lg font-semibold transition-colors flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed"
+              >
+                <span>ถัดไป</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* สรุปข้อมูลรายการนำส่งท้ายตาราง */}
+        <div className="pt-4 border-t border-slate-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-700">
+          <p className="font-bold">
+            สรุปข้อมูลรายการนำส่ง: ทั้งสิ้น {sortedManifestParcels.length} รายการ (ส่งมอบสำเร็จแล้ว {signedParcelsInView.length} รายการ, รอส่งมอบ {unsignedParcelsInView.length} รายการ)
+          </p>
+          <p className="text-slate-500 font-mono text-[11px]">
+            * รายการพัสดุลงทะเบียนสำหรับพิมพ์ใบนำส่งประจำหอพัก (รวมรายการติดนิติการ)
+          </p>
+        </div>
+
+        {/* แถบปุ่มพิมพ์เอกสารต่อท้ายตาราง (ซ่อนเมื่อสั่งพิมพ์) */}
+        <div className="no-print pt-5 border-t-2 border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200 mt-2">
+          <div className="text-xs text-slate-600">
+            <p className="font-bold text-sm text-slate-900">
+              พิมพ์ใบรายการนำส่งและเซ็นรับพัสดุประจำหอพัก (Print A4)
+            </p>
+            <p className="text-slate-500 mt-0.5">
+              ระบบจะพิมพ์รายการพัสดุทั้งหมดครบถ้วนทุกชิ้นโดยอัตโนมัติ (ไม่ตัดแบ่งหน้า) และพิมพ์ซ้ำหัวตารางทุกหน้ากระดาษ
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handlePrintManifest}
+            className="w-full sm:w-auto min-h-[46px] px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md hover:shadow-lg shrink-0 ml-auto"
+          >
+            <Printer className="w-5 h-5 text-emerald-400" />
+            <span>พิมพ์ใบรายการ (Print A4)</span>
+          </button>
         </div>
       </section>
     </div>

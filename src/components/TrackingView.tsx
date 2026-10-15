@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   RotateCcw,
   AlertOctagon,
-  Clock,
   Trash2,
   X,
   Database,
@@ -220,7 +219,7 @@ export const TrackingView: React.FC = () => {
           >
             ทั้งหมด ({statusCounts.ALL || 0})
           </button>
-          {PARCEL_STATUSES.map((st) => (
+          {PARCEL_STATUSES.filter((st) => st !== 'รอการยืนยัน').map((st) => (
             <button
               key={st}
               type="button"
@@ -408,7 +407,7 @@ export const TrackingView: React.FC = () => {
                       </div>
                     )}
 
-                    {parcel.note && (
+                    {parcel.note && parcel.note !== 'ส่งตรวจห้องนิติการ/ครูหอพักตามระเบียบ' && (
                       <p className="text-xs text-slate-500 pt-0.5">หมายเหตุ: {parcel.note}</p>
                     )}
                   </div>
@@ -448,25 +447,13 @@ export const TrackingView: React.FC = () => {
                         onClick={() =>
                           updateParcelStatus(
                             parcel.id,
-                            'ติดนิติการ',
-                            'ส่งตรวจห้องนิติการ/ครูหอพักตามระเบียบ'
+                            'ติดนิติการ'
                           )
                         }
                         className="min-h-[44px] px-3 py-2 bg-red-50 hover:bg-red-700 text-red-800 hover:text-white border border-red-200 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
                       >
                         <AlertOctagon className="w-4 h-4" />
                         <span>พัสดุติดนิติการ</span>
-                      </button>
-                    )}
-
-                    {canCurrentMemberEdit && parcel.status !== 'รอการยืนยัน' && parcel.status !== 'ส่งมอบสำเร็จ' && (
-                      <button
-                        type="button"
-                        onClick={() => updateParcelStatus(parcel.id, 'รอการยืนยัน')}
-                        className="min-h-[44px] px-3 py-2 bg-amber-50 hover:bg-amber-600 text-amber-900 hover:text-white border border-amber-200 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
-                      >
-                        <Clock className="w-4 h-4" />
-                        <span>รอการยืนยัน</span>
                       </button>
                     )}
 

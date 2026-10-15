@@ -15,6 +15,7 @@ import {
   Building2,
   ChevronLeft,
   ChevronRight,
+  Dices,
 } from 'lucide-react';
 import { useParcelSystem } from '../context/ParcelSystemContext';
 import { BarcodeCameraScanner, decodeBarcodeFromImageFile } from './BarcodeCameraScanner';
@@ -28,6 +29,7 @@ import {
   getAvailableDormitories,
   detectCourierFromTracking,
   generateUniqueParentTrackingNumber,
+  generateUniqueTrackingNumberForCourier,
   isUnknownOwnerParcel,
 } from '../types/parcel';
 
@@ -126,6 +128,7 @@ export const InboundView: React.FC = () => {
   const [studentGradeRoom, setStudentGradeRoom] = useState<string>('');
   const [studentDormitory, setStudentDormitory] = useState<string>('');
   const [studentDormRoom, setStudentDormRoom] = useState<string>('');
+  const [isManualEditStudentOpen, setIsManualEditStudentOpen] = useState<boolean>(false);
   const [studentFetchFeedback, setStudentFetchFeedback] = useState<{
     type: 'success' | 'warning';
     message: string;
@@ -224,11 +227,27 @@ export const InboundView: React.FC = () => {
     populateStudentFields(matchedStudent);
   }, [matchedStudent, recordLocalSearchSaving, populateStudentFields]);
 
-  // ปุ่มกด "ดึงข้อมูลนักเรียน" จากรหัสนักเรียน หรือคำค้นหาชื่อ/ชื่อเล่น
+  // ปุ่มกด "ดึงข้อมูลนักเรียน" จากรหัสนักเรียน หรือคำค้นหาชื่อ/นามสกุล/ชื่อเล่น/หอพัก
   const handleFetchStudentData = () => {
     setFormError(null);
     const codeQuery = studentCodeInput.trim();
     const textQuery = studentSearchQuery.trim().toLowerCase();
+
+    const matchStudent = (s: Student, q: string) => {
+      const qLower = q.trim().toLowerCase();
+      if (!qLower) return false;
+      const cleanFullName = `${s.prefix || ''}${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
+      const nameWithoutPrefix = `${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
+      return (
+        s.studentCode.toLowerCase().includes(qLower) ||
+        s.firstName.toLowerCase().includes(qLower) ||
+        s.lastName.toLowerCase().includes(qLower) ||
+        s.nickname.toLowerCase().includes(qLower) ||
+        s.dormitory.toLowerCase().includes(qLower) ||
+        cleanFullName.includes(qLower) ||
+        nameWithoutPrefix.includes(qLower)
+      );
+    };
 
     if (codeQuery) {
       const byCode = lookupStudentByCode(codeQuery);
@@ -238,14 +257,8 @@ export const InboundView: React.FC = () => {
         populateStudentFields(byCode);
         return;
       }
-      // ลองค้นหาจากชื่อหรือรหัสบางส่วนในกรณีที่ผู้ใช้พิมพ์ชื่อในช่องรหัส
-      const fuzzyByCodeField = students.find(
-        (s) =>
-          s.studentCode.toLowerCase().includes(codeQuery.toLowerCase()) ||
-          s.firstName.toLowerCase().includes(codeQuery.toLowerCase()) ||
-          s.lastName.toLowerCase().includes(codeQuery.toLowerCase()) ||
-          s.nickname.toLowerCase().includes(codeQuery.toLowerCase())
-      );
+      // ลองค้นหาจากชื่อ นามสกุล หรือรหัสบางส่วนในกรณีที่ผู้ใช้พิมพ์ในช่องรหัส
+      const fuzzyByCodeField = students.find((s) => matchStudent(s, codeQuery));
       if (fuzzyByCodeField) {
         lastAutoPopulatedCodeRef.current = fuzzyByCodeField.studentCode;
         recordLocalSearchSaving();
@@ -255,13 +268,7 @@ export const InboundView: React.FC = () => {
     }
 
     if (textQuery) {
-      const bySearch = students.find(
-        (s) =>
-          s.studentCode.toLowerCase().includes(textQuery) ||
-          s.firstName.toLowerCase().includes(textQuery) ||
-          s.lastName.toLowerCase().includes(textQuery) ||
-          s.nickname.toLowerCase().includes(textQuery)
-      );
+      const bySearch = students.find((s) => matchStudent(s, textQuery));
       if (bySearch) {
         lastAutoPopulatedCodeRef.current = bySearch.studentCode;
         recordLocalSearchSaving();
@@ -275,23 +282,28 @@ export const InboundView: React.FC = () => {
       message:
         students.length === 0
           ? 'ยังไม่มีรายชื่อนักเรียนในแคชของเครื่อง คุณสามารถกรอกข้อมูลนักเรียนในฟอร์มด้านล่างโดยตรง หรือกดปุ่มนำเข้าข้อมูลนักเรียน'
-          : `ไม่พบข้อมูลนักเรียนจากคำค้น "${codeQuery || textQuery}" สามารถกรอกข้อมูลนักเรียนด้านล่างได้โดยตรง`,
+          : `ไม่พบข้อมูลนักเรียนจากคำค้น "${codeQuery || textQuery}" สามารถกดแก้ไข/กรอกข้อมูลเองด้านล่างได้`,
     });
   };
 
-  // กรองรายชื่อนักเรียนจากข้อมูลจริงที่นำเข้าแล้ว
+  // กรองรายชื่อนักเรียนจากข้อมูลจริงที่นำเข้าแล้ว (ค้นหาด้วย รหัส, ชื่อ, นามสกุล, ชื่อเล่น, หอพัก)
   const filteredStudentSuggestions = useMemo(() => {
     const q = (studentSearchQuery.trim() || studentCodeInput.trim()).toLowerCase();
     if (!q) return students.slice(0, 8);
     return students
-      .filter(
-        (s) =>
+      .filter((s) => {
+        const cleanFullName = `${s.prefix || ''}${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
+        const nameWithoutPrefix = `${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
+        return (
           s.studentCode.toLowerCase().includes(q) ||
           s.firstName.toLowerCase().includes(q) ||
           s.lastName.toLowerCase().includes(q) ||
           s.nickname.toLowerCase().includes(q) ||
-          s.dormitory.toLowerCase().includes(q)
-      )
+          s.dormitory.toLowerCase().includes(q) ||
+          cleanFullName.includes(q) ||
+          nameWithoutPrefix.includes(q)
+        );
+      })
       .slice(0, 10);
   }, [students, studentSearchQuery, studentCodeInput]);
 
@@ -311,16 +323,23 @@ export const InboundView: React.FC = () => {
     (selectedCourier: string) => {
       setCourier(selectedCourier);
       setFormError(null);
-      if (selectedCourier === 'ผู้ปกครองฝากส่ง') {
+      if (selectedCourier === 'ผู้ปกครองฝากส่ง' && !trackingNumber.trim().toUpperCase().startsWith('PRT-')) {
         const autoTracking = generateUniqueParentTrackingNumber(parcels);
         setTrackingNumber(autoTracking);
         setLastScannedCode(null);
-      } else if (trackingNumber.trim().toUpperCase().startsWith('PRT-')) {
-        setTrackingNumber('');
       }
     },
     [parcels, trackingNumber]
   );
+
+  // สุ่มเลขพัสดุอัตโนมัติตามบริษัทขนส่งที่เลือก (กรณีบาร์โค้ดเสียหาย หรือยิงบาร์โค้ดไม่ได้)
+  const handleGenerateRandomTracking = useCallback(() => {
+    const generated = generateUniqueTrackingNumberForCourier(courier, parcels);
+    setTrackingNumber(generated);
+    setLastScannedCode(null);
+    setFormError(null);
+    playScanBeep();
+  }, [courier, parcels]);
 
   // จัดการเมื่อสแกนบาร์โค้ดผ่านกล้องสำเร็จ
   const handleBarcodeDetected = useCallback(
@@ -497,6 +516,18 @@ export const InboundView: React.FC = () => {
     setLastScannedCode(null);
     setCustomCategoryDetail('');
     setNote('');
+
+    // เมื่อบันทึกให้ เคลียร์กล่องรับข้อมูล รหัสนักเรียน ,ค้นหาด้วยชื่อ / นามสกุล / ชื่อเล่น / หอพัก และข้อมูลผู้รับ
+    setStudentCodeInput('');
+    setStudentSearchQuery('');
+    setStudentFullName('');
+    setStudentNickname('');
+    setStudentGradeRoom('');
+    setStudentDormitory('');
+    setStudentDormRoom('');
+    setIsManualEditStudentOpen(false);
+    lastAutoPopulatedCodeRef.current = '';
+
     if (trackingInputRef.current) {
       trackingInputRef.current.focus();
     }
@@ -633,7 +664,7 @@ export const InboundView: React.FC = () => {
               </div>
             )}
 
-            <div className="relative flex items-center gap-2">
+            <div className="relative flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <div className="relative flex-1">
                 <input
                   ref={trackingInputRef}
@@ -659,36 +690,38 @@ export const InboundView: React.FC = () => {
                 )}
               </div>
 
-              <button
-                type="button"
-                onClick={handleToggleScanner}
-                title="เปิดกล้องเพื่อสแกนบาร์โค้ด"
-                className="min-h-[52px] px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center gap-2 shrink-0 cursor-pointer transition-colors"
-              >
-                <Camera className="w-4 h-4 shrink-0" />
-                <span className="hidden sm:inline">สแกนโค้ด</span>
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleGenerateRandomTracking}
+                  title="สุ่มสร้างเลขพัสดุ (กรณียิงบาร์โค้ดไม่ได้ แต่ยังคงเลือกบริษัทขนส่งได้)"
+                  className="min-h-[52px] px-3.5 sm:px-4 py-3 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+                >
+                  <Dices className="w-4 h-4 shrink-0" />
+                  <span>สุ่มเลขพัสดุ</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleToggleScanner}
+                  title="เปิดกล้องเพื่อสแกนบาร์โค้ด"
+                  className="min-h-[52px] px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
+                >
+                  <Camera className="w-4 h-4 shrink-0" />
+                  <span className="hidden sm:inline">สแกนโค้ด</span>
+                </button>
+              </div>
             </div>
 
             {/* ปุ่มเลือกบริษัทขนส่ง */}
             <div className="space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="block text-xs font-medium text-slate-500">
-                  บริษัทขนส่ง (ตรวจจับอัตโนมัติจากเลขพัสดุ หรือกดเลือกเอง):
+                  บริษัทขนส่ง (เลือกบริษัทขนส่งได้ หรือตรวจจับอัตโนมัติจากเลขพัสดุ):
                 </span>
-                {courier === 'ผู้ปกครองฝากส่ง' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextCode = generateUniqueParentTrackingNumber(parcels);
-                      setTrackingNumber(nextCode);
-                    }}
-                    className="px-2.5 py-1 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    <span>สุ่มสร้างเลขพัสดุใหม่ (ไม่ซ้ำในฐานข้อมูล)</span>
-                  </button>
-                )}
+                <span className="text-xs font-semibold text-slate-700">
+                  ขนส่งปัจจุบัน: <strong className="text-slate-900">{courier}</strong>
+                </span>
               </div>
               <div className="flex flex-wrap gap-2">
                 {COURIER_LIST.map((c) => (
@@ -698,7 +731,7 @@ export const InboundView: React.FC = () => {
                     onClick={() => handleSelectCourier(c)}
                     className={`min-h-[40px] px-3.5 py-2 text-xs font-semibold rounded-xl border transition-colors whitespace-nowrap cursor-pointer ${
                       courier === c
-                        ? 'bg-slate-900 text-white border-slate-900'
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
                         : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                     }`}
                   >
@@ -770,7 +803,7 @@ export const InboundView: React.FC = () => {
                     htmlFor="student-quick-filter"
                     className="block text-xs font-semibold text-slate-700 mb-1"
                   >
-                    ค้นหาด้วยชื่อ / ชื่อเล่น / หอพัก
+                    ค้นหาด้วยชื่อ / นามสกุล / ชื่อเล่น / หอพัก
                   </label>
                   <div className="relative">
                     <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -785,7 +818,7 @@ export const InboundView: React.FC = () => {
                           handleFetchStudentData();
                         }
                       }}
-                      placeholder="พิมพ์ชื่อ หรือชื่อเล่น..."
+                      placeholder="พิมพ์ชื่อ, นามสกุล, ชื่อเล่น หรือหอพัก..."
                       className="w-full min-h-[46px] pl-9 pr-3 py-2 text-sm text-slate-900 bg-white border border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none"
                     />
                   </div>
@@ -832,7 +865,7 @@ export const InboundView: React.FC = () => {
                           <span className="font-mono font-bold">{st.studentCode}</span>
                           <span>·</span>
                           <span>
-                            {st.firstName} {st.nickname && st.nickname !== '-' ? `(${st.nickname})` : ''}
+                            {st.firstName} {st.lastName && st.lastName !== '-' ? st.lastName : ''} {st.nickname && st.nickname !== '-' ? `(${st.nickname})` : ''}
                           </span>
                           <span className="font-mono text-[11px] opacity-85 tabular-nums">
                             (ส.{stStats.weekCount})
@@ -864,107 +897,222 @@ export const InboundView: React.FC = () => {
               )}
             </div>
 
-            {/* ฟอร์มกรอก/แก้ไขข้อมูลนักเรียนผู้รับพัสดุโดยตรง */}
+            {/* ข้อมูลนักเรียนผู้รับพัสดุ: แสดงเป็นแบบข้อความ ชื่อ นามสกุล ระดับชั้น/ห้อง หอพัก */}
             <div className="space-y-3 pt-1">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs font-bold text-slate-700">
-                  ข้อมูลนักเรียนผู้รับพัสดุ (ดึงอัตโนมัติ หรือกรอก/แก้ไขข้อมูลได้โดยตรง):
+                <span className="text-xs font-bold text-slate-800">
+                  ข้อมูลนักเรียนผู้รับพัสดุ:
                 </span>
-                <button
-                  type="button"
-                  onClick={handleSaveStudentOnly}
-                  className="px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  <span>บันทึกคนนี้ลงทะเบียนนักเรียน</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                <div className="sm:col-span-3">
-                  <label className="block text-xs font-medium text-slate-600 mb-1">คำนำหน้า</label>
-                  <select
-                    aria-label="คำนำหน้าชื่อนักเรียน"
-                    value={studentPrefix}
-                    onChange={(e) => setStudentPrefix(e.target.value)}
-                    className="w-full min-h-[44px] px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-slate-900 focus:outline-none"
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsManualEditStudentOpen((prev) => !prev)}
+                    className="px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg transition-colors cursor-pointer"
                   >
-                    <option value="นาย">นาย</option>
-                    <option value="นางสาว">นางสาว</option>
-                    <option value="ด.ช.">ด.ช.</option>
-                    <option value="ด.ญ.">ด.ญ.</option>
-                  </select>
-                </div>
-
-                <div className="sm:col-span-6">
-                  <label className="block text-xs font-medium text-slate-600 mb-1">
-                    ชื่อ-นามสกุลนักเรียน *
-                  </label>
-                  <input
-                    type="text"
-                    value={studentFullName}
-                    onChange={(e) => setStudentFullName(e.target.value)}
-                    placeholder="กรอกชื่อ-นามสกุลผู้รับ..."
-                    className="w-full min-h-[44px] px-3.5 py-2 text-sm font-semibold text-slate-900 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-slate-900 focus:outline-none"
-                  />
-                </div>
-
-                <div className="sm:col-span-3">
-                  <label className="block text-xs font-medium text-slate-600 mb-1">ชื่อเล่น</label>
-                  <input
-                    type="text"
-                    value={studentNickname}
-                    onChange={(e) => setStudentNickname(e.target.value)}
-                    placeholder="ชื่อเล่น..."
-                    className="w-full min-h-[44px] px-3.5 py-2 text-sm text-slate-900 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-slate-900 focus:outline-none"
-                  />
+                    {isManualEditStudentOpen ? 'ซ่อนฟอร์มแก้ไข' : 'แก้ไข / กรอกข้อมูลเอง'}
+                  </button>
+                  {studentFullName.trim() && (
+                    <button
+                      type="button"
+                      onClick={handleSaveStudentOnly}
+                      className="px-2.5 py-1 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      <span>บันทึกคนนี้ลงทะเบียนนักเรียน</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                <div className="sm:col-span-4">
-                  <label className="block text-xs font-medium text-slate-600 mb-1">
-                    ระดับชั้น/ห้อง
-                  </label>
-                  <input
-                    type="text"
-                    value={studentGradeRoom}
-                    onChange={(e) => setStudentGradeRoom(e.target.value)}
-                    placeholder="ระบุระดับชั้น/ห้อง..."
-                    className="w-full min-h-[44px] px-3.5 py-2 text-sm font-mono text-slate-900 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-slate-900 focus:outline-none"
-                  />
-                </div>
+              {/* การแสดงผลแบบข้อความ ชื่อ นามสกุล ระดับชั้น/ห้อง หอพัก */}
+              <div className="p-4 bg-slate-50 border border-slate-300 rounded-xl space-y-3">
+                {studentFullName.trim() || matchedStudent ? (
+                  <div className="space-y-2.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-500">ชื่อ นามสกุล:</span>
+                      <span className="text-base font-bold text-slate-900">
+                        {studentFullName.trim() ||
+                          `${matchedStudent?.prefix || ''}${matchedStudent?.firstName || ''} ${
+                            matchedStudent?.lastName || ''
+                          }`}{' '}
+                        {(studentNickname.trim() || matchedStudent?.nickname) && (
+                          <span className="font-normal text-slate-600 text-sm">
+                            ({studentNickname.trim() || matchedStudent?.nickname})
+                          </span>
+                        )}
+                      </span>
+                      {(studentCodeInput.trim() || matchedStudent?.studentCode) && (
+                        <span className="font-mono text-xs font-semibold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
+                          รหัส: {studentCodeInput.trim() || matchedStudent?.studentCode}
+                        </span>
+                      )}
+                    </div>
 
-                <div className="sm:col-span-5">
-                  <label className="block text-xs font-medium text-slate-600 mb-1">
-                    หอพัก *
-                  </label>
-                  <input
-                    type="text"
-                    list="dormitory-options-list"
-                    value={studentDormitory}
-                    onChange={(e) => setStudentDormitory(e.target.value)}
-                    placeholder="ระบุชื่อหอพัก..."
-                    className="w-full min-h-[44px] px-3.5 py-2 text-sm font-semibold text-slate-900 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-slate-900 focus:outline-none"
-                  />
-                  <datalist id="dormitory-options-list">
-                    {availableDormitories.map((d) => (
-                      <option key={d} value={d} />
-                    ))}
-                  </datalist>
-                </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div className="bg-white p-3 rounded-lg border border-slate-200">
+                        <span className="text-xs font-medium text-slate-500 block">ระดับชั้น/ห้อง:</span>
+                        <span className="text-sm font-bold text-slate-900 font-mono">
+                          {studentGradeRoom.trim() ||
+                            (matchedStudent
+                              ? `${matchedStudent.grade}${matchedStudent.room ? `/${matchedStudent.room}` : ''}`
+                              : '-')}
+                        </span>
+                      </div>
 
-                <div className="sm:col-span-3">
-                  <label className="block text-xs font-medium text-slate-600 mb-1">ห้องพักหอ</label>
-                  <input
-                    type="text"
-                    value={studentDormRoom}
-                    onChange={(e) => setStudentDormRoom(e.target.value)}
-                    placeholder="ห้องพักหอ"
-                    className="w-full min-h-[44px] px-3 py-2 text-sm font-mono font-bold text-slate-900 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-slate-900 focus:outline-none"
-                  />
-                </div>
+                      <div className="bg-white p-3 rounded-lg border border-slate-200">
+                        <span className="text-xs font-medium text-slate-500 block">หอพัก:</span>
+                        <span className="text-sm font-bold text-slate-900">
+                          {studentDormitory.trim() || matchedStudent?.dormitory || '-'}{' '}
+                          {(studentDormRoom.trim() || matchedStudent?.dormRoom) && (
+                            <span className="font-mono font-normal text-slate-600 text-xs">
+                              (ห้อง {studentDormRoom.trim() || matchedStudent?.dormRoom})
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* ข้อความแสดงผลสรุป */}
+                    <div className="text-xs text-slate-700 bg-white p-2.5 rounded-lg border border-slate-200 font-medium flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="font-bold text-slate-900">ข้อความข้อมูลผู้รับ:</span>
+                      <span>
+                        {studentFullName.trim() ||
+                          `${matchedStudent?.prefix || ''}${matchedStudent?.firstName || ''} ${
+                            matchedStudent?.lastName || ''
+                          }`}
+                      </span>
+                      <span className="text-slate-300">·</span>
+                      <span>
+                        ระดับชั้น/ห้อง:{' '}
+                        {studentGradeRoom.trim() ||
+                          (matchedStudent ? `${matchedStudent.grade}/${matchedStudent.room}` : '-')}
+                      </span>
+                      <span className="text-slate-300">·</span>
+                      <span>
+                        หอพัก:{' '}
+                        {studentDormitory.trim() || matchedStudent?.dormitory || '-'}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-500 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span>
+                      ยังไม่มีข้อมูลนักเรียนผู้รับพัสดุ (กรุณากรอกรหัสนักเรียน หรือค้นหาด้วยชื่อ / นามสกุล / ชื่อเล่น / หอพัก ด้านบนแล้วกดดึงข้อมูล)
+                    </span>
+                    {!isManualEditStudentOpen && (
+                      <button
+                        type="button"
+                        onClick={() => setIsManualEditStudentOpen(true)}
+                        className="text-xs font-bold text-slate-800 hover:text-slate-950 underline self-start sm:self-auto cursor-pointer"
+                      >
+                        + กรอกข้อมูลนักเรียนเอง
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
+
+              {/* ฟอร์มกรอก/แก้ไขข้อมูลนักเรียนด้วยตนเอง (ขยายเมื่อกด 'แก้ไข / กรอกข้อมูลเอง') */}
+              {isManualEditStudentOpen && (
+                <div className="p-4 bg-slate-50 border border-slate-300 rounded-xl space-y-3">
+                  <div className="text-xs font-bold text-slate-700 pb-1 border-b border-slate-200 flex items-center justify-between">
+                    <span>ฟอร์มแก้ไขหรือกรอกข้อมูลนักเรียนด้วยตนเอง:</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsManualEditStudentOpen(false)}
+                      className="text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                    <div className="sm:col-span-3">
+                      <label className="block text-xs font-medium text-slate-600 mb-1">คำนำหน้า</label>
+                      <select
+                        aria-label="คำนำหน้าชื่อนักเรียน"
+                        value={studentPrefix}
+                        onChange={(e) => setStudentPrefix(e.target.value)}
+                        className="w-full min-h-[44px] px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none"
+                      >
+                        <option value="นาย">นาย</option>
+                        <option value="นางสาว">นางสาว</option>
+                        <option value="ด.ช.">ด.ช.</option>
+                        <option value="ด.ญ.">ด.ญ.</option>
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-6">
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        ชื่อ-นามสกุลนักเรียน *
+                      </label>
+                      <input
+                        type="text"
+                        value={studentFullName}
+                        onChange={(e) => setStudentFullName(e.target.value)}
+                        placeholder="กรอกชื่อ-นามสกุลผู้รับ..."
+                        className="w-full min-h-[44px] px-3.5 py-2 text-sm font-semibold text-slate-900 bg-white border border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-3">
+                      <label className="block text-xs font-medium text-slate-600 mb-1">ชื่อเล่น</label>
+                      <input
+                        type="text"
+                        value={studentNickname}
+                        onChange={(e) => setStudentNickname(e.target.value)}
+                        placeholder="ชื่อเล่น..."
+                        className="w-full min-h-[44px] px-3.5 py-2 text-sm text-slate-900 bg-white border border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                    <div className="sm:col-span-4">
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        ระดับชั้น/ห้อง
+                      </label>
+                      <input
+                        type="text"
+                        value={studentGradeRoom}
+                        onChange={(e) => setStudentGradeRoom(e.target.value)}
+                        placeholder="ระบุระดับชั้น/ห้อง..."
+                        className="w-full min-h-[44px] px-3.5 py-2 text-sm font-mono text-slate-900 bg-white border border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-5">
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        หอพัก *
+                      </label>
+                      <input
+                        type="text"
+                        list="dormitory-options-list"
+                        value={studentDormitory}
+                        onChange={(e) => setStudentDormitory(e.target.value)}
+                        placeholder="ระบุชื่อหอพัก..."
+                        className="w-full min-h-[44px] px-3.5 py-2 text-sm font-semibold text-slate-900 bg-white border border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none"
+                      />
+                      <datalist id="dormitory-options-list">
+                        {availableDormitories.map((d) => (
+                          <option key={d} value={d} />
+                        ))}
+                      </datalist>
+                    </div>
+
+                    <div className="sm:col-span-3">
+                      <label className="block text-xs font-medium text-slate-600 mb-1">ห้องพักหอ</label>
+                      <input
+                        type="text"
+                        value={studentDormRoom}
+                        onChange={(e) => setStudentDormRoom(e.target.value)}
+                        placeholder="ห้องพักหอ"
+                        className="w-full min-h-[44px] px-3 py-2 text-sm font-mono font-bold text-slate-900 bg-white border border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </section>
 
