@@ -77,7 +77,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
       role="dialog"
       aria-modal="true"
       aria-label="หน้าตัวอย่างการพิมพ์แบบ HTML ขนาด A4"
-      className="fixed inset-0 z-50 flex flex-col bg-slate-900/90 backdrop-blur-xs modal-print-wrapper overflow-hidden"
+      className="fixed inset-0 z-50 flex flex-col bg-slate-100/95 backdrop-blur-xs modal-print-wrapper overflow-hidden"
     >
       {/* Dynamic @page CSS rule and repeating table header rule for multi-page printouts */}
       <style>{`
@@ -159,25 +159,25 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
         }
       `}</style>
 
-      {/* แถบเครื่องมือควบคุมการพิมพ์ (Toolbar) - ซ่อนอัตโนมัติเมื่อพิมพ์ด้วย class no-print */}
-      <header className="no-print bg-slate-900 border-b border-slate-700/80 px-4 py-3 shrink-0 text-white shadow-lg">
+      {/* แถบเครื่องมือควบคุมการพิมพ์ (Toolbar) โทนสว่าง - ซ่อนอัตโนมัติเมื่อพิมพ์ด้วย class no-print */}
+      <header className="no-print bg-white border-b border-slate-200 px-4 py-3 shrink-0 text-slate-900 shadow-xs">
         <div className="max-w-7xl mx-auto flex flex-col gap-2.5">
           {/* แถวที่ 1: ข้อมูลหัวเรื่อง & สรุป */}
           <div className="flex items-center justify-between gap-3 w-full">
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-400 shrink-0">
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 shrink-0">
                 <Printer className="w-4 h-4" />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-sm sm:text-base font-bold text-white tracking-tight truncate">
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight truncate">
                     ตัวอย่างการพิมพ์ใบนำส่งหอพัก (HTML Print Preview A4)
                   </h2>
-                  <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
+                  <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
                     A4 {isLandscape ? 'แนวนอน' : 'แนวตั้ง'}
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 truncate">
+                <p className="text-xs text-slate-500 truncate">
                   {dormitory === 'ALL' ? 'ทุกหอพักรวมกัน' : activeTheme.name} ({activeTheme.basketCode}) · รวม {parcels.length} ชิ้น
                 </p>
               </div>
@@ -187,7 +187,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
               aria-label="ปิดหน้าต่างตัวอย่าง"
               title="ปิด (Esc)"
             >
@@ -196,16 +196,16 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
           </div>
 
           {/* แถวที่ 2 (ลงมาอยู่บรรทัดใหม่ จัดชิดขวา): แผงควบคุมทั้งหมด */}
-          <div className="flex flex-wrap items-center justify-end gap-2 w-full pt-2 border-t border-slate-800/80">
+          <div className="flex flex-wrap items-center justify-end gap-2 w-full pt-2 border-t border-slate-100">
             {/* เลือกลักษณะการพิมพ์: แนวตั้ง (Portrait) / แนวนอน (Landscape) */}
-            <div className="flex items-center bg-slate-800/90 border border-slate-700 rounded-xl p-1 gap-1">
+            <div className="flex items-center bg-slate-100 border border-slate-200 rounded-xl p-1 gap-1">
               <button
                 type="button"
                 onClick={() => setOrientation('portrait')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                   !isLandscape
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
+                    ? 'bg-white text-emerald-700 shadow-xs border border-slate-200/60'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                 }`}
                 title="พิมพ์แบบแนวตั้ง กระดาษ A4 (210 × 297 มม.) - ปรับความกว้างพอดีหน้ากระดาษ ไม่ล้นขอบ"
               >
@@ -220,8 +220,8 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                 onClick={() => setOrientation('landscape')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                   isLandscape
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
+                    ? 'bg-white text-emerald-700 shadow-xs border border-slate-200/60'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                 }`}
                 title="พิมพ์แบบแนวนอน กระดาษ A4 (297 × 210 มม.)"
               >
@@ -233,14 +233,14 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             </div>
 
             {/* ความหนาแน่นตาราง: ประหยัดหน้า (กะทัดรัด) / ขนาดปกติ */}
-            <div className="flex items-center bg-slate-800/90 border border-slate-700 rounded-xl p-1 gap-1">
+            <div className="flex items-center bg-slate-100 border border-slate-200 rounded-xl p-1 gap-1">
               <button
                 type="button"
                 onClick={() => setDensity('compact')}
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   density === 'compact'
-                    ? 'bg-emerald-700 text-white font-bold'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-white text-emerald-700 font-bold shadow-xs border border-slate-200/60'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                 }`}
                 title="โหมดกะทัดรัด (แนะนำ): บรรจุได้ 25-30 รายการต่อหน้า ประหยัดกระดาษ"
               >
@@ -251,8 +251,8 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                 onClick={() => setDensity('normal')}
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   density === 'normal'
-                    ? 'bg-slate-700 text-white font-bold'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-white text-slate-900 font-bold shadow-xs border border-slate-200/60'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                 }`}
                 title="ระยะบรรทัดปกติ"
               >
@@ -261,23 +261,23 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             </div>
 
             {/* ปรับสัดส่วนการมองเห็น: ซูม 100% */}
-            <div className="flex items-center bg-slate-800/90 border border-slate-700 rounded-xl px-2 py-1 gap-1.5 text-xs text-slate-300">
+            <div className="flex items-center bg-slate-100 border border-slate-200 rounded-xl px-2 py-1 gap-1.5 text-xs text-slate-700">
               <button
                 type="button"
                 onClick={() => setZoomLevel((z) => Math.max(50, z - 10))}
                 disabled={zoomLevel <= 50}
-                className="p-1 hover:text-white disabled:opacity-40 cursor-pointer"
+                className="p-1 text-slate-500 hover:text-slate-800 disabled:opacity-40 cursor-pointer"
                 title="ลดขนาดตัวอย่าง"
                 aria-label="ลดขนาดตัวอย่าง"
               >
                 <ZoomOut className="w-3.5 h-3.5" />
               </button>
-              <span className="font-mono font-bold w-16 text-center">ซูม {zoomLevel}%</span>
+              <span className="font-mono font-bold w-16 text-center text-slate-800">ซูม {zoomLevel}%</span>
               <button
                 type="button"
                 onClick={() => setZoomLevel((z) => Math.min(130, z + 10))}
                 disabled={zoomLevel >= 130}
-                className="p-1 hover:text-white disabled:opacity-40 cursor-pointer"
+                className="p-1 text-slate-500 hover:text-slate-800 disabled:opacity-40 cursor-pointer"
                 title="เพิ่มขนาดตัวอย่าง"
                 aria-label="เพิ่มขนาดตัวอย่าง"
               >
@@ -286,7 +286,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
               <button
                 type="button"
                 onClick={() => setZoomLevel(100)}
-                className="px-1.5 py-0.5 text-[10px] bg-slate-700 hover:bg-slate-600 rounded text-slate-200 cursor-pointer ml-0.5 font-medium"
+                className="px-1.5 py-0.5 text-[10px] bg-white hover:bg-slate-50 rounded text-slate-700 border border-slate-200 cursor-pointer ml-0.5 font-medium shadow-2xs"
                 title="รีเซ็ตเป็น 100%"
               >
                 100%
@@ -297,7 +297,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             <button
               type="button"
               onClick={handlePrint}
-              className="min-h-[36px] px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-md hover:shadow-emerald-600/30"
+              className="min-h-[36px] px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow-emerald-600/20"
             >
               <Printer className="w-4 h-4" />
               <span>สั่งพิมพ์ (Print A4)</span>
@@ -307,7 +307,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             <button
               type="button"
               onClick={onClose}
-              className="min-h-[36px] px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-800 text-slate-200 hover:text-white text-xs font-semibold rounded-xl border border-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="min-h-[36px] px-3.5 py-1.5 bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-700 hover:text-slate-900 text-xs font-semibold rounded-xl border border-slate-300 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
             >
               <X className="w-4 h-4" />
               <span>ปิด</span>
@@ -316,8 +316,8 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
         </div>
       </header>
 
-      {/* พื้นที่แสดงตัวอย่างเอกสาร A4 (Interactive Canvas) */}
-      <main className="flex-1 overflow-y-auto print-preview-scroll-area p-3 sm:p-5 lg:p-7 flex justify-center items-start bg-slate-900/60">
+      {/* พื้นที่แสดงตัวอย่างเอกสาร A4 (Interactive Canvas) โทนสว่าง สะอาดตา */}
+      <main className="flex-1 overflow-y-auto print-preview-scroll-area p-3 sm:p-5 lg:p-7 flex justify-center items-start bg-slate-100/90">
         <div
           style={{
             transform: zoomLevel !== 100 ? `scale(${zoomLevel / 100})` : undefined,
