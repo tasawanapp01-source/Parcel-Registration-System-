@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   PackagePlus,
   Search,
@@ -15,6 +15,8 @@ import {
   UserCheck,
   UserCog,
   GraduationCap,
+  Settings,
+  ChevronDown,
 } from 'lucide-react';
 import { ParcelSystemProvider, useParcelSystem } from './context/ParcelSystemContext';
 import { Member, AppMenuKey, APP_MENU_DEFINITIONS } from './types/parcel';
@@ -52,6 +54,35 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
   } = useParcelSystem();
 
   const [activeTab, setActiveTab] = useState<AppMenuKey>('inbound');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isMobileSettingsOpen, setIsMobileSettingsOpen] = useState(false);
+  const settingsMenuRef = useRef<HTMLDivElement>(null);
+
+  // ปิดเมนูตั้งค่าเมื่อคลิกข้างนอก
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        settingsMenuRef.current &&
+        !settingsMenuRef.current.contains(event.target as Node)
+      ) {
+        setIsSettingsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // ปิดเมนูตั้งค่าเมื่อกด Esc
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsSettingsOpen(false);
+        setIsMobileSettingsOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // ปรับ activeTab อัตโนมัติหากผู้ใช้ไม่มีสิทธิ์เข้าถึงหน้านั้นๆ
   useEffect(() => {
@@ -69,216 +100,319 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
 
   const isMenuAllowed = (key: AppMenuKey) => allowedMenusForCurrentMember.includes(key);
 
+  const isSettingsActive = ['students', 'members', 'deliverables'].includes(activeTab);
+  const hasAnySettingsMenu =
+    isMenuAllowed('students') ||
+    isMenuAllowed('members') ||
+    isMenuAllowed('deliverables');
+
+  const getMemberDisplayName = (member: Member) => {
+    const roleLabel =
+      member.role === 'ผู้ดูแลระบบ' ? 'ผู้ดูแลระบบหลัก (Admin)' : member.role;
+    if (
+      !member.fullName ||
+      member.fullName === roleLabel ||
+      member.fullName === 'ผู้ดูแลระบบหลัก (Admin)' ||
+      member.fullName === 'ผู้ดูแลระบบ'
+    ) {
+      return roleLabel;
+    }
+    return `${roleLabel}: ${member.fullName}`;
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 pb-20 md:pb-10">
-      {/* Top Bar Contract: 3 Zones (1. Wordmark, 2. Text Nav Links, 3. Account, Sync & Logout) */}
-      <header className="no-print sticky top-0 z-30 bg-white/95 backdrop-blur-xs border-b border-slate-200 px-4 md:px-8 h-14 flex items-center justify-between gap-4">
-        <a
-          href="#inbound"
-          onClick={(e) => {
-            e.preventDefault();
-            if (isMenuAllowed('inbound')) setActiveTab('inbound');
-          }}
-          className="text-base md:text-lg font-extrabold tracking-tight text-slate-900 whitespace-nowrap shrink-0"
-        >
-          Parcel Registration System
-        </a>
-
-        {/* Desktop Nav Links - กรองเฉพาะเมนูที่ผู้ใช้ปัจจุบันได้รับอนุญาต */}
-        <nav
-          aria-label="เมนูหลักของระบบ"
-          className="hidden lg:flex items-center gap-5 text-sm font-medium text-slate-600"
-        >
-          {isMenuAllowed('inbound') && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('inbound')}
-              className={`py-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                activeTab === 'inbound'
-                  ? 'text-slate-900 font-bold underline underline-offset-8 decoration-2'
-                  : 'hover:text-slate-900 hover:underline underline-offset-8'
-              }`}
-            >
-              รับเข้าพัสดุ
-            </button>
-          )}
-
-          {isMenuAllowed('tracking') && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('tracking')}
-              className={`py-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                activeTab === 'tracking'
-                  ? 'text-slate-900 font-bold underline underline-offset-8 decoration-2'
-                  : 'hover:text-slate-900 hover:underline underline-offset-8'
-              }`}
-            >
-              ติดตามค้นหา
-            </button>
-          )}
-
-          {isMenuAllowed('manifest') && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('manifest')}
-              className={`py-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                activeTab === 'manifest'
-                  ? 'text-slate-900 font-bold underline underline-offset-8 decoration-2'
-                  : 'hover:text-slate-900 hover:underline underline-offset-8'
-              }`}
-            >
-              ใบนำส่งหอพัก
-            </button>
-          )}
-
-          {isMenuAllowed('students') && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('students')}
-              className={`py-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                activeTab === 'students'
-                  ? 'text-slate-900 font-bold underline underline-offset-8 decoration-2'
-                  : 'hover:text-slate-900 hover:underline underline-offset-8'
-              }`}
-            >
-              ข้อมูลนักเรียน
-            </button>
-          )}
-
-          {isMenuAllowed('dashboard') && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('dashboard')}
-              className={`py-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                activeTab === 'dashboard'
-                  ? 'text-slate-900 font-bold underline underline-offset-8 decoration-2'
-                  : 'hover:text-slate-900 hover:underline underline-offset-8'
-              }`}
-            >
-              สถิติแดชบอร์ด
-            </button>
-          )}
-
-          {isMenuAllowed('members') && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('members')}
-              className={`py-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                activeTab === 'members'
-                  ? 'text-indigo-700 font-bold underline underline-offset-8 decoration-2'
-                  : 'hover:text-indigo-600 hover:underline underline-offset-8'
-              }`}
-            >
-              จัดการสมาชิก & สิทธิ์
-            </button>
-          )}
-
-          {isMenuAllowed('deliverables') && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('deliverables')}
-              className={`py-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                activeTab === 'deliverables'
-                  ? 'text-slate-900 font-bold underline underline-offset-8 decoration-2'
-                  : 'hover:text-slate-900 hover:underline underline-offset-8'
-              }`}
-            >
-              ติดตั้งระบบ
-            </button>
-          )}
-        </nav>
-
-        {/* User Info & Actions Zone */}
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Member Profile Badge */}
-          <div className="flex items-center gap-2 pl-2 pr-2.5 py-1 bg-slate-100/90 border border-slate-200/90 rounded-xl text-xs">
-            <div
-              className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${
-                currentMember.role === 'ผู้ดูแลระบบ'
-                  ? 'bg-indigo-600 text-white'
-                  : currentMember.role === 'ครู'
-                  ? 'bg-amber-600 text-white'
-                  : 'bg-emerald-600 text-white'
-              }`}
-              title={currentMember.role}
-            >
-              {currentMember.role === 'ผู้ดูแลระบบ' ? (
-                <ShieldCheck className="w-3.5 h-3.5" />
-              ) : currentMember.role === 'ครู' ? (
-                <GraduationCap className="w-3.5 h-3.5" />
-              ) : (
-                <UserCheck className="w-3.5 h-3.5" />
-              )}
-            </div>
-
-            <div className="flex flex-col text-left max-w-[120px] sm:max-w-[180px]">
-              <span className="font-semibold text-slate-900 truncate leading-tight">
-                {currentMember.fullName}
-              </span>
-              <span className="text-[10px] text-slate-500 font-medium leading-none">
-                {currentMember.role}
-              </span>
-            </div>
-          </div>
-
-          {/* Sync action (Desktop) */}
-          <div className="hidden xl:flex items-center gap-2">
-            <button
-              type="button"
-              onClick={syncPendingToFirebase}
-              disabled={isSyncing}
-              title="ดึงข้อมูลล่าสุดจากฐานข้อมูล Firestore"
-              className="min-h-[36px] px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-50 rounded-lg transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span className="font-mono tabular-nums">
-                {isSyncing ? 'กำลังโหลด...' : 'รีเฟรช Cloud'}
-              </span>
-            </button>
-          </div>
-
-          {/* Logout button */}
-          <button
-            type="button"
-            onClick={logoutMember}
-            title="ออกจากระบบ"
-            className="min-h-[36px] px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+      {/* Top Bar: 2 แถว (แถว 1: ชื่อระบบ & เมนูนำทางรวมถึงเมนูตั้งค่า, แถว 2: ปุ่มผู้ดูแลระบบหลัก (Admin) และปุ่มออกจากระบบ รวมเป็นปุ่มเดียว) */}
+      <header className="no-print sticky top-0 z-30 bg-white shadow-xs">
+        {/* แถวที่ 1: ชื่อระบบ & เมนูนำทางหลัก */}
+        <div className="bg-white/95 backdrop-blur-xs border-b border-slate-200 px-4 md:px-8 h-14 flex items-center justify-between gap-4">
+          <a
+            href="#inbound"
+            onClick={(e) => {
+              e.preventDefault();
+              if (isMenuAllowed('inbound')) setActiveTab('inbound');
+            }}
+            className="text-base md:text-lg font-extrabold tracking-tight text-slate-900 whitespace-nowrap shrink-0 flex items-center gap-2"
           >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">ออกจากระบบ</span>
-          </button>
+            <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+              SP
+            </div>
+            <span>Parcel Registration System</span>
+          </a>
+
+          {/* Desktop Nav Links - กรองเฉพาะเมนูที่ผู้ใช้ปัจจุบันได้รับอนุญาต */}
+          <nav
+            aria-label="เมนูหลักของระบบ"
+            className="hidden lg:flex items-center gap-6 text-sm font-medium text-slate-600"
+          >
+            {isMenuAllowed('inbound') && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('inbound')}
+                className={`py-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                  activeTab === 'inbound'
+                    ? 'text-slate-900 font-bold underline underline-offset-8 decoration-2'
+                    : 'hover:text-slate-900 hover:underline underline-offset-8'
+                }`}
+              >
+                รับเข้าพัสดุ
+              </button>
+            )}
+
+            {isMenuAllowed('tracking') && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('tracking')}
+                className={`py-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                  activeTab === 'tracking'
+                    ? 'text-slate-900 font-bold underline underline-offset-8 decoration-2'
+                    : 'hover:text-slate-900 hover:underline underline-offset-8'
+                }`}
+              >
+                ติดตามค้นหา
+              </button>
+            )}
+
+            {isMenuAllowed('manifest') && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('manifest')}
+                className={`py-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                  activeTab === 'manifest'
+                    ? 'text-slate-900 font-bold underline underline-offset-8 decoration-2'
+                    : 'hover:text-slate-900 hover:underline underline-offset-8'
+                }`}
+              >
+                ใบนำส่งหอพัก
+              </button>
+            )}
+
+            {isMenuAllowed('dashboard') && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('dashboard')}
+                className={`py-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                  activeTab === 'dashboard'
+                    ? 'text-slate-900 font-bold underline underline-offset-8 decoration-2'
+                    : 'hover:text-slate-900 hover:underline underline-offset-8'
+                }`}
+              >
+                สถิติแดชบอร์ด
+              </button>
+            )}
+
+            {/* เมนูตั้งค่า (รวม ข้อมูลนักเรียน, จัดการสมาชิก & สิทธิ์, ติดตั้งระบบ, และปุ่มรีเฟรช Cloud) */}
+            {hasAnySettingsMenu && (
+              <div className="relative" ref={settingsMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsOpen((prev) => !prev)}
+                  className={`py-1 whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 cursor-pointer ${
+                    isSettingsActive
+                      ? 'text-indigo-600 font-bold underline underline-offset-8 decoration-2'
+                      : 'hover:text-slate-900 hover:underline underline-offset-8'
+                  }`}
+                  aria-expanded={isSettingsOpen}
+                  aria-haspopup="true"
+                >
+                  <Settings className="w-4 h-4" />
+                  <span>ตั้งค่า</span>
+                  {isSettingsActive && (
+                    <span className="text-[11px] px-2 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-md font-semibold no-underline">
+                      {activeTab === 'students'
+                        ? 'ข้อมูลนักเรียน'
+                        : activeTab === 'members'
+                        ? 'จัดการสมาชิก & สิทธิ์'
+                        : 'ติดตั้งระบบ'}
+                    </span>
+                  )}
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 transition-transform duration-150 ${
+                      isSettingsOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {/* Dropdown Menu รายการตั้งค่า */}
+                {isSettingsOpen && (
+                  <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 animate-in fade-in slide-in-from-top-1">
+                    <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 flex items-center justify-between">
+                      <span>เมนูตั้งค่าระบบ</span>
+                      <span className="text-[9px] font-normal text-emerald-600 font-mono">Live Firestore DB</span>
+                    </div>
+
+                    {isMenuAllowed('students') && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('students');
+                          setIsSettingsOpen(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2.5 transition-colors cursor-pointer ${
+                          activeTab === 'students'
+                            ? 'bg-indigo-50 text-indigo-700 font-bold'
+                            : 'text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                          <Users className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <div className="font-semibold leading-tight">ข้อมูลนักเรียน</div>
+                          <div className="text-[10px] text-slate-400">นำเข้าและจัดการทะเบียนนักเรียน</div>
+                        </div>
+                      </button>
+                    )}
+
+                    {isMenuAllowed('members') && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('members');
+                          setIsSettingsOpen(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2.5 transition-colors cursor-pointer ${
+                          activeTab === 'members'
+                            ? 'bg-indigo-50 text-indigo-700 font-bold'
+                            : 'text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                          <UserCog className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <div className="font-semibold leading-tight">จัดการสมาชิก & สิทธิ์</div>
+                          <div className="text-[10px] text-slate-400">กำหนดสิทธิ์และบัญชีผู้ใช้งาน</div>
+                        </div>
+                      </button>
+                    )}
+
+                    {isMenuAllowed('deliverables') && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('deliverables');
+                          setIsSettingsOpen(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2.5 transition-colors cursor-pointer ${
+                          activeTab === 'deliverables'
+                            ? 'bg-indigo-50 text-indigo-700 font-bold'
+                            : 'text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="w-6 h-6 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                          <BookOpen className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <div className="font-semibold leading-tight">ติดตั้งระบบ</div>
+                          <div className="text-[10px] text-slate-400">คู่มือและไฟล์ติดตั้ง GitHub Pages</div>
+                        </div>
+                      </button>
+                    )}
+
+                    {/* ปุ่มรีเฟรช Cloud ย้ายมาไว้ในเมนูตั้งค่า */}
+                    <div className="mt-1 pt-1.5 border-t border-slate-100 px-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          syncPendingToFirebase();
+                          setIsSettingsOpen(false);
+                        }}
+                        disabled={isSyncing}
+                        className="w-full px-2.5 py-2 text-left text-xs flex items-center justify-between rounded-lg hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-50 text-slate-700"
+                        title="ดึงข้อมูลล่าสุดจากฐานข้อมูล Firestore"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-6 h-6 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0">
+                            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-900">
+                              {isSyncing ? 'กำลังซิงค์...' : 'รีเฟรช Cloud'}
+                            </div>
+                            <div className="text-[10px] text-slate-400">ดึงข้อมูลล่าสุดจาก Firestore</div>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-mono text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 font-semibold">
+                          Live DB
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </nav>
+        </div>
+
+        {/* แถวที่ 2 (วางไว้บรรทัดใหม่): ข้อมูล Direct Cloud DB (แสดงเฉพาะ Desktop ซ่อนบนมือถือและแท็บเล็ต) และปุ่มรวมผู้ดูแลระบบ+ออกจากระบบ */}
+        <div className="bg-slate-50/95 border-b border-slate-200/90 px-4 md:px-8 py-2 flex items-center justify-end lg:justify-between gap-2.5 text-xs">
+          {/* ข้อมูลการเชื่อมต่อฐานข้อมูล Cloud DB สด - ซ่อนบนหน้าจอมือถือและแท็บเล็ต (hidden บนจอเล็กถึงแท็บเล็ต แสดงเฉพาะ lg ขึ้นไป) */}
+          <div className="hidden lg:flex items-center gap-2 text-slate-600">
+            <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              Direct Cloud DB
+            </span>
+            <span className="text-slate-500 text-xs">
+              ({connectedEmail}): นักเรียน <strong className="text-slate-900 font-mono tabular-nums">{students.length}</strong> คน · พัสดุ <strong className="text-slate-900 font-mono tabular-nums">{parcels.length}</strong> ชิ้น
+            </span>
+          </div>
+
+          {/* ปุ่มผู้ดูแลระบบหลัก (Admin) และปุ่มออกจากระบบ รวมให้เป็นปุ่มเดียวกัน */}
+          <div className="flex items-center ml-auto">
+            <div className="inline-flex items-stretch bg-white border border-slate-300 hover:border-slate-400 rounded-xl shadow-2xs transition-all overflow-hidden">
+              {/* ส่วนที่ 1: สถานะผู้ดูแลระบบหลัก / โปรไฟล์ผู้ใช้งาน */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (isMenuAllowed('members')) setActiveTab('members');
+                }}
+                title={isMenuAllowed('members') ? 'คลิกเพื่อจัดการสมาชิก & สิทธิ์' : 'ข้อมูลผู้ใช้งาน'}
+                className={`px-3 py-1.5 flex items-center gap-2 text-xs transition-colors ${
+                  isMenuAllowed('members')
+                    ? 'cursor-pointer hover:bg-slate-50 text-slate-800 hover:text-indigo-600'
+                    : 'cursor-default text-slate-800'
+                }`}
+              >
+                <div
+                  className={`w-5 h-5 rounded-md flex items-center justify-center text-white shrink-0 ${
+                    currentMember.role === 'ผู้ดูแลระบบ'
+                      ? 'bg-indigo-600'
+                      : currentMember.role === 'ครู'
+                      ? 'bg-amber-600'
+                      : 'bg-emerald-600'
+                  }`}
+                >
+                  {currentMember.role === 'ผู้ดูแลระบบ' ? (
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                  ) : currentMember.role === 'ครู' ? (
+                    <GraduationCap className="w-3.5 h-3.5" />
+                  ) : (
+                    <UserCheck className="w-3.5 h-3.5" />
+                  )}
+                </div>
+                <span className="font-bold tracking-tight">
+                  {getMemberDisplayName(currentMember)}
+                </span>
+              </button>
+
+              {/* เส้นคั่นกลางปุ่ม */}
+              <div className="w-px bg-slate-200 self-stretch my-1" />
+
+              {/* ส่วนที่ 2: ปุ่มออกจากระบบ */}
+              <button
+                type="button"
+                onClick={logoutMember}
+                title="คลิกเพื่อออกจากระบบ"
+                className="px-3 py-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer group"
+              >
+                <LogOut className="w-3.5 h-3.5 text-slate-400 group-hover:text-rose-600 transition-colors" />
+                <span>ออกจากระบบ</span>
+              </button>
+            </div>
+          </div>
         </div>
       </header>
-
-      {/* แถบแสดงสถานะการเชื่อมต่อ Firestore โดยตรง (Live Direct Cloud DB) */}
-      <div className="no-print hidden xl:block bg-slate-900 text-slate-200 px-4 md:px-8 py-2 border-b border-slate-800">
-        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row lg:items-center justify-between gap-2 text-xs">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-400">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              ฐานข้อมูล Firestore โดยตรง ({connectedEmail}):
-            </span>
-            <span>
-              นักเรียนในระบบ{' '}
-              <strong className="font-mono text-white tabular-nums">
-                {students.length}
-              </strong>{' '}
-              คน · พัสดุทั้งหมด{' '}
-              <strong className="font-mono text-white tabular-nums">
-                {parcels.length}
-              </strong>{' '}
-              ชิ้น · บันทึก ลบ และแก้ไขลงฐานข้อมูลสดแบบเรียลไทม์ (ไม่เก็บข้อมูลบนเครื่อง)
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-950/80 border border-emerald-500/40 text-emerald-300">
-              <CloudCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Direct Cloud Database Active</span>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* แจ้งเตือนสถานะการทำงาน (Toast Notification) */}
       {toastMessage && (
@@ -432,19 +566,6 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
           </button>
         )}
 
-        {isMenuAllowed('students') && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('students')}
-            className={`min-h-[48px] px-2 flex flex-col items-center justify-center rounded-lg transition-colors ${
-              activeTab === 'students' ? 'text-indigo-600 font-bold' : 'text-slate-500'
-            }`}
-          >
-            <Users className="w-5 h-5" />
-            <span className="text-[10px] mt-1 whitespace-nowrap">นักเรียน</span>
-          </button>
-        )}
-
         {isMenuAllowed('dashboard') && (
           <button
             type="button"
@@ -458,19 +579,154 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
           </button>
         )}
 
-        {isMenuAllowed('members') && (
+        {hasAnySettingsMenu && (
           <button
             type="button"
-            onClick={() => setActiveTab('members')}
+            onClick={() => setIsMobileSettingsOpen(true)}
             className={`min-h-[48px] px-2 flex flex-col items-center justify-center rounded-lg transition-colors ${
-              activeTab === 'members' ? 'text-indigo-600 font-bold' : 'text-slate-500'
+              isSettingsActive ? 'text-indigo-600 font-bold' : 'text-slate-500'
             }`}
           >
-            <UserCog className="w-5 h-5" />
-            <span className="text-[10px] mt-1 whitespace-nowrap">สมาชิก</span>
+            <Settings className="w-5 h-5" />
+            <span className="text-[10px] mt-1 whitespace-nowrap">ตั้งค่า</span>
           </button>
         )}
       </nav>
+
+      {/* เมนูตั้งค่าสำหรับมือถือ (Mobile Settings Modal Sheet) */}
+      {isMobileSettingsOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="เมนูตั้งค่าระบบ"
+          onClick={() => setIsMobileSettingsOpen(false)}
+          className="no-print lg:hidden fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-t-2xl sm:rounded-2xl max-w-sm w-full p-4 space-y-3 shadow-2xl border border-slate-200"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <Settings className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">เมนูตั้งค่าระบบ</h3>
+                  <p className="text-[10px] text-slate-400">เลือกหน้าที่ต้องการตั้งค่า</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="ปิดเมนูตั้งค่า"
+                onClick={() => setIsMobileSettingsOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {isMenuAllowed('students') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('students');
+                    setIsMobileSettingsOpen(false);
+                  }}
+                  className={`w-full p-3 text-left rounded-xl flex items-center gap-3 transition-colors ${
+                    activeTab === 'students'
+                      ? 'bg-indigo-50 border border-indigo-200 text-indigo-900 font-bold'
+                      : 'bg-slate-50 hover:bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                    <Users className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold">ข้อมูลนักเรียน</div>
+                    <div className="text-[10px] text-slate-500 font-normal">นำเข้าและจัดการทะเบียนนักเรียน</div>
+                  </div>
+                </button>
+              )}
+
+              {isMenuAllowed('members') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('members');
+                    setIsMobileSettingsOpen(false);
+                  }}
+                  className={`w-full p-3 text-left rounded-xl flex items-center gap-3 transition-colors ${
+                    activeTab === 'members'
+                      ? 'bg-indigo-50 border border-indigo-200 text-indigo-900 font-bold'
+                      : 'bg-slate-50 hover:bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                    <UserCog className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold">จัดการสมาชิก & สิทธิ์</div>
+                    <div className="text-[10px] text-slate-500 font-normal">จัดการผู้ใช้และสิทธิ์เข้าถึงเมนู</div>
+                  </div>
+                </button>
+              )}
+
+              {isMenuAllowed('deliverables') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('deliverables');
+                    setIsMobileSettingsOpen(false);
+                  }}
+                  className={`w-full p-3 text-left rounded-xl flex items-center gap-3 transition-colors ${
+                    activeTab === 'deliverables'
+                      ? 'bg-indigo-50 border border-indigo-200 text-indigo-900 font-bold'
+                      : 'bg-slate-50 hover:bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                    <BookOpen className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold">ติดตั้งระบบ</div>
+                    <div className="text-[10px] text-slate-500 font-normal">คู่มือและไฟล์ติดตั้ง GitHub Pages</div>
+                  </div>
+                </button>
+              )}
+
+              {/* ปุ่มรีเฟรช Cloud สำหรับมือถือ */}
+              <div className="pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    syncPendingToFirebase();
+                    setIsMobileSettingsOpen(false);
+                  }}
+                  disabled={isSyncing}
+                  className="w-full p-3 text-left rounded-xl flex items-center justify-between bg-slate-900 hover:bg-slate-800 text-white transition-colors cursor-pointer disabled:opacity-50 shadow-xs"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-7 h-7 rounded-lg bg-slate-800 flex items-center justify-center shrink-0">
+                      <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold">
+                        {isSyncing ? 'กำลังโหลดข้อมูล...' : 'รีเฟรช Cloud'}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-normal">ดึงข้อมูลล่าสุดจากฐานข้อมูล Firestore</div>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/40 font-semibold">
+                    Live Sync
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
