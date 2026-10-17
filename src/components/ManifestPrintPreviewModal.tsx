@@ -156,42 +156,43 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
       `}</style>
 
       {/* แถบเครื่องมือควบคุมการพิมพ์ (Toolbar) - ซ่อนอัตโนมัติเมื่อพิมพ์ด้วย class no-print */}
-      <header className="no-print bg-slate-900 border-b border-slate-700/80 px-4 py-2.5 shrink-0 text-white shadow-lg">
-        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-3">
-          {/* ข้อมูลหัวเรื่อง & สรุป */}
-          <div className="flex items-center gap-3 w-full lg:w-auto justify-between lg:justify-start">
-            <div className="flex items-center gap-2.5">
+      <header className="no-print bg-slate-900 border-b border-slate-700/80 px-4 py-3 shrink-0 text-white shadow-lg">
+        <div className="max-w-7xl mx-auto flex flex-col gap-2.5">
+          {/* แถวที่ 1: ข้อมูลหัวเรื่อง & สรุป */}
+          <div className="flex items-center justify-between gap-3 w-full">
+            <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-400 shrink-0">
                 <Printer className="w-4 h-4" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-bold text-white tracking-tight">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-sm sm:text-base font-bold text-white tracking-tight truncate">
                     ตัวอย่างการพิมพ์ใบนำส่งหอพัก (HTML Print Preview A4)
                   </h2>
-                  <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
                     A4 {isLandscape ? 'แนวนอน' : 'แนวตั้ง'}
                   </span>
                 </div>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-400 truncate">
                   {dormitory === 'ALL' ? 'ทุกหอพักรวมกัน' : activeTheme.name} ({activeTheme.basketCode}) · รวม {parcels.length} ชิ้น
                 </p>
               </div>
             </div>
 
-            {/* ปุ่มปิดสำหรับหน้าจอมือถือ */}
+            {/* ปุ่มปิดกากบาทแบบรวดเร็ว */}
             <button
               type="button"
               onClick={onClose}
-              className="lg:hidden p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
               aria-label="ปิดหน้าต่างตัวอย่าง"
+              title="ปิด (Esc)"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          {/* แผงควบคุม: เลือกแนวตั้ง/แนวนอน, ความหนาแน่น, และการซูม */}
-          <div className="flex flex-wrap items-center justify-center gap-2.5 w-full lg:w-auto">
+          {/* แถวที่ 2 (ลงมาอยู่บรรทัดใหม่ จัดชิดขวา): แผงควบคุมทั้งหมด */}
+          <div className="flex flex-wrap items-center justify-end gap-2 w-full pt-2 border-t border-slate-800/80">
             {/* เลือกลักษณะการพิมพ์: แนวตั้ง (Portrait) / แนวนอน (Landscape) */}
             <div className="flex items-center bg-slate-800/90 border border-slate-700 rounded-xl p-1 gap-1">
               <button
@@ -227,8 +228,8 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
               </button>
             </div>
 
-            {/* ความหนาแน่นตารางเพื่อลดภาระการพิมพ์และประหยัดหน้ากระดาษ */}
-            <div className="hidden sm:flex items-center bg-slate-800/90 border border-slate-700 rounded-xl p-1 gap-1">
+            {/* ความหนาแน่นตาราง: ประหยัดหน้า (กะทัดรัด) / ขนาดปกติ */}
+            <div className="flex items-center bg-slate-800/90 border border-slate-700 rounded-xl p-1 gap-1">
               <button
                 type="button"
                 onClick={() => setDensity('compact')}
@@ -255,8 +256,8 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
               </button>
             </div>
 
-            {/* ปรับสัดส่วนการมองเห็น (Zoom Control) */}
-            <div className="hidden md:flex items-center bg-slate-800/90 border border-slate-700 rounded-xl px-2 py-1 gap-1.5 text-xs text-slate-300">
+            {/* ปรับสัดส่วนการมองเห็น: ซูม 100% */}
+            <div className="flex items-center bg-slate-800/90 border border-slate-700 rounded-xl px-2 py-1 gap-1.5 text-xs text-slate-300">
               <button
                 type="button"
                 onClick={() => setZoomLevel((z) => Math.max(50, z - 10))}
@@ -267,7 +268,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
               >
                 <ZoomOut className="w-3.5 h-3.5" />
               </button>
-              <span className="font-mono font-bold w-10 text-center">{zoomLevel}%</span>
+              <span className="font-mono font-bold w-16 text-center">ซูม {zoomLevel}%</span>
               <button
                 type="button"
                 onClick={() => setZoomLevel((z) => Math.min(130, z + 10))}
@@ -281,33 +282,32 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
               <button
                 type="button"
                 onClick={() => setZoomLevel(100)}
-                className="px-1.5 py-0.5 text-[10px] bg-slate-700 hover:bg-slate-600 rounded text-slate-200 cursor-pointer ml-0.5"
+                className="px-1.5 py-0.5 text-[10px] bg-slate-700 hover:bg-slate-600 rounded text-slate-200 cursor-pointer ml-0.5 font-medium"
                 title="รีเซ็ตเป็น 100%"
               >
                 100%
               </button>
             </div>
 
-            {/* ปุ่มกดสั่งพิมพ์ และ ปุ่มปิด */}
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handlePrint}
-                className="min-h-[36px] px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-md hover:shadow-emerald-600/30"
-              >
-                <Printer className="w-4 h-4" />
-                <span>สั่งพิมพ์ (Print A4)</span>
-              </button>
+            {/* ปุ่มกดสั่งพิมพ์: สั่งพิมพ์ (Print A4) */}
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="min-h-[36px] px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-md hover:shadow-emerald-600/30"
+            >
+              <Printer className="w-4 h-4" />
+              <span>สั่งพิมพ์ (Print A4)</span>
+            </button>
 
-              <button
-                type="button"
-                onClick={onClose}
-                className="hidden lg:flex min-h-[36px] px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold rounded-xl border border-slate-700 transition-colors items-center gap-1.5 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-                <span>ปิด</span>
-              </button>
-            </div>
+            {/* ปุ่มปิด */}
+            <button
+              type="button"
+              onClick={onClose}
+              className="min-h-[36px] px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-800 text-slate-200 hover:text-white text-xs font-semibold rounded-xl border border-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+              <span>ปิด</span>
+            </button>
           </div>
         </div>
       </header>
