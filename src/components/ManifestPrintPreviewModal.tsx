@@ -86,7 +86,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             size: A4 ${orientation};
             margin: 6mm 6mm 6mm 6mm;
           }
-          /* 1. พื้นหลังหน้ากระดาษ เอกสาร และพื้นที่ภายนอกตาราง เป็นสีขาวล้วน ไม่ใส่สี */
+          /* 1. หน้าการพิมพ์จริง: พื้นหลังทั้งหมดเป็นสีขาวล้วน ไม่ใส่สีพื้นหลัง */
           html, body {
             background-color: #FFFFFF !important;
             background: #FFFFFF !important;
@@ -97,6 +97,8 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             height: auto !important;
             overflow: visible !important;
             color: #000000 !important;
+            -webkit-print-color-adjust: economy !important;
+            print-color-adjust: economy !important;
           }
           .no-print,
           .print-container {
@@ -131,7 +133,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             background: #FFFFFF !important;
           }
 
-          /* 2. ตารางและพื้นหลังตารางปกติไม่ใส่สี (เป็นสีขาวล้วน) */
+          /* 2. หน้าการพิมพ์จริง: ไม่ต้องใส่สีตารางและพื้นหลัง (ทุกส่วนของตารางเป็นสีขาว ไม่ใส่สี) */
           table {
             width: 100% !important;
             max-width: 100% !important;
@@ -140,7 +142,32 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             box-sizing: border-box !important;
             background-color: #FFFFFF !important;
             background: #FFFFFF !important;
+            border: 1px solid #000000 !important;
           }
+
+          /* หัวตารางพิมพ์จริง: ไม่ใส่สีพื้นหลัง เป็นสีขาว เส้นขอบคมชัด */
+          thead {
+            display: table-header-group !important;
+          }
+          thead tr {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+            border-top: 2px solid #000000 !important;
+            border-bottom: 2px solid #000000 !important;
+            background-color: #FFFFFF !important;
+            background: #FFFFFF !important;
+          }
+          thead th {
+            background-color: #FFFFFF !important;
+            background: #FFFFFF !important;
+            color: #000000 !important;
+            border: 1px solid #334155 !important;
+            border-top: 2px solid #000000 !important;
+            border-bottom: 2px solid #000000 !important;
+            font-weight: 700 !important;
+          }
+
+          /* เนื้อหาตารางพิมพ์จริง: ไม่ใส่สีพื้นหลัง เป็นสีขาว */
           tbody {
             display: table-row-group !important;
             background-color: #FFFFFF !important;
@@ -149,45 +176,23 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
           tbody tr {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
-          }
-          /* พื้นหลังแถวตารางปกติ ไม่ใส่สี (สีขาวล้วน) */
-          tbody tr:not(.print-highlight-legal):not(.print-highlight-infirmary),
-          tbody tr:not(.print-highlight-legal):not(.print-highlight-infirmary) td {
             background-color: #FFFFFF !important;
             background: #FFFFFF !important;
           }
-
-          /* 3. ให้ใส่เฉพาะ: สีหัวตาราง */
-          thead, thead tr, thead th {
-            display: table-header-group !important;
-            background-color: #F1F5F9 !important;
-            background: #F1F5F9 !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          thead tr {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-          }
-
-          /* 4. ให้ใส่เฉพาะ: สีไฮไลท์แถวตาราง (ติดนิติการ และ ติดต่องานพยาบาล) */
+          tbody tr td,
           tbody tr.print-highlight-legal,
-          tbody tr.print-highlight-legal td {
-            background-color: #FEF1F0 !important;
-            background: #FEF1F0 !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
+          tbody tr.print-highlight-legal td,
           tbody tr.print-highlight-infirmary,
           tbody tr.print-highlight-infirmary td {
-            background-color: #FFFBEB !important;
-            background: #FFFBEB !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
+            background-color: #FFFFFF !important;
+            background: #FFFFFF !important;
+            color: #000000 !important;
+            border: 1px solid #64748B !important;
           }
 
-          /* ป้ายตะกร้าหอพัก: พื้นหลังสีขาวล้วน ไม่ใส่สีพื้นหลัง */
-          .dorm-basket-badge {
+          /* ป้ายตะกร้าหอพัก: ไม่ใส่สีพื้นหลัง เป็นสีขาว */
+          .dorm-basket-badge,
+          .dorm-basket-badge * {
             background-color: #FFFFFF !important;
             background: #FFFFFF !important;
           }
@@ -410,21 +415,21 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
           <div className="w-full overflow-hidden">
             {isLandscape ? (
               /* =================== มุมมองแนวนอน (A4 Landscape Layout: 100% Width) =================== */
-              <table className="w-full table-fixed border-collapse text-left border border-slate-300 bg-white">
-                <thead className="table-header-group border-y-2 border-slate-900 bg-slate-100 text-slate-900 font-bold text-[10.5px]">
-                  <tr className="border-y-2 border-slate-900 bg-slate-100">
-                    <th className="py-2 px-1 border border-slate-300 text-center w-[4%] bg-slate-100 font-bold text-slate-900">ลำดับ</th>
-                    <th className="py-2 px-2 border border-slate-300 w-[18%] bg-slate-100 font-bold text-slate-900">เลขพัสดุ (Tracking)</th>
-                    <th className="py-2 px-2 border border-slate-300 w-[11%] bg-slate-100 font-bold text-slate-900">ขนส่ง</th>
-                    <th className="py-2 px-1 border border-slate-300 text-center w-[9%] bg-slate-100 font-bold text-slate-900">รหัส นร.</th>
-                    <th className="py-2 px-2 border border-slate-300 w-[19%] bg-slate-100 font-bold text-slate-900">
+              <table className="w-full table-fixed border-collapse text-left border border-slate-400 bg-white">
+                <thead className="table-header-group border-y-2 border-slate-900 bg-white text-slate-900 font-bold text-[10.5px]">
+                  <tr className="border-y-2 border-slate-900 bg-white">
+                    <th className="py-2 px-1 border border-slate-400 text-center align-middle w-[4%] bg-white font-bold text-slate-900">ลำดับ</th>
+                    <th className="py-2 px-2 border border-slate-400 text-left align-middle w-[18%] bg-white font-bold text-slate-900">เลขพัสดุ (Tracking)</th>
+                    <th className="py-2 px-2 border border-slate-400 text-left align-middle w-[11%] bg-white font-bold text-slate-900">ขนส่ง</th>
+                    <th className="py-2 px-1 border border-slate-400 text-center align-middle w-[9%] bg-white font-bold text-slate-900">รหัส นร.</th>
+                    <th className="py-2 px-2 border border-slate-400 text-left align-middle w-[20%] bg-white font-bold text-slate-900">
                       ชื่อ-นามสกุลนักเรียน (ชื่อเล่น · ชั้น)
                     </th>
-                    <th className="py-2 px-2 border border-slate-300 w-[25%] bg-slate-100 font-bold text-slate-900">ประเภทสิ่งของ</th>
-                    <th className="py-2 px-1.5 border border-slate-300 w-[7%] text-center bg-slate-100 font-bold text-slate-900">
+                    <th className="py-2 px-2 border border-slate-400 text-left align-middle w-[24%] bg-white font-bold text-slate-900">ประเภทสิ่งของ</th>
+                    <th className="py-2 px-1.5 border border-slate-400 text-center align-middle w-[7%] bg-white font-bold text-slate-900">
                       ลายมือชื่อผู้รับ
                     </th>
-                    <th className="py-2 px-1.5 border border-slate-300 w-[7%] text-center bg-slate-100 font-bold text-slate-900">
+                    <th className="py-2 px-1.5 border border-slate-400 text-center align-middle w-[7%] bg-white font-bold text-slate-900">
                       วันที่รับ
                     </th>
                   </tr>
@@ -528,24 +533,20 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
               </table>
             ) : (
               /* =================== มุมมองแนวตั้ง (A4 Portrait Layout: 100% Width Perfectly Fit) =================== */
-              <table className="w-full table-fixed border-collapse text-left border border-slate-300 bg-white">
-                <thead className="table-header-group border-y-2 border-slate-900 bg-slate-100 text-slate-900 font-bold text-[10px]">
-                  <tr className="border-y-2 border-slate-900 bg-slate-100">
-                    <th className="py-2 px-1 border border-slate-300 text-center w-[5%] bg-slate-100 font-bold text-slate-900">ลำดับ</th>
-                    <th className="py-2 px-2 border border-slate-300 w-[15%] bg-slate-100 font-bold text-slate-900">เลขพัสดุ / ขนส่ง</th>
-                    <th className="py-2 px-1 border border-slate-300 text-center w-[8%] bg-slate-100 font-bold text-slate-900">รหัส นร.</th>
-                    {/* ชื่อ-นามสกุลนักเรียน 19% กำหนด truncate เพื่อให้อยู่ใน 1 บรรทัดและไม่ดันตารางล้นขอบกระดาษ */}
-                    <th className="py-2 px-2 border border-slate-300 w-[19%] bg-slate-100 font-bold text-slate-900">
+              <table className="w-full table-fixed border-collapse text-left border border-slate-400 bg-white">
+                <thead className="table-header-group border-y-2 border-slate-900 bg-white text-slate-900 font-bold text-[10px]">
+                  <tr className="border-y-2 border-slate-900 bg-white">
+                    <th className="py-2 px-1 border border-slate-400 text-center align-middle w-[5%] bg-white font-bold text-slate-900">ลำดับ</th>
+                    <th className="py-2 px-2 border border-slate-400 text-left align-middle w-[16%] bg-white font-bold text-slate-900">เลขพัสดุ / ขนส่ง</th>
+                    <th className="py-2 px-1 border border-slate-400 text-center align-middle w-[9%] bg-white font-bold text-slate-900">รหัส นร.</th>
+                    <th className="py-2 px-2 border border-slate-400 text-left align-middle w-[21%] bg-white font-bold text-slate-900">
                       ชื่อ-นามสกุลนักเรียน (ชื่อเล่น · ชั้น)
                     </th>
-                    {/* ประเภทสิ่งของ auto (33% พื้นที่ที่เหลือ รวมครบ 100%) */}
-                    <th className="py-2 px-2 border border-slate-300 w-[33%] bg-slate-100 font-bold text-slate-900">ประเภทสิ่งของ</th>
-                    {/* ลายมือชื่อผู้รับ: 10% */}
-                    <th className="py-2 px-1 border border-slate-300 w-[10%] text-center bg-slate-100 font-bold text-slate-900">
+                    <th className="py-2 px-2 border border-slate-400 text-left align-middle w-[29%] bg-white font-bold text-slate-900">ประเภทสิ่งของ</th>
+                    <th className="py-2 px-1 border border-slate-400 text-center align-middle w-[10%] bg-white font-bold text-slate-900">
                       ลายมือชื่อผู้รับ
                     </th>
-                    {/* วันที่รับ: 10% ฟอนต์แบบเดียวกับคอลัมน์ลายมือชื่อผู้รับ */}
-                    <th className="py-2 px-1 border border-slate-300 w-[10%] text-center bg-slate-100 font-bold text-slate-900">
+                    <th className="py-2 px-1 border border-slate-400 text-center align-middle w-[10%] bg-white font-bold text-slate-900">
                       วันที่รับ
                     </th>
                   </tr>

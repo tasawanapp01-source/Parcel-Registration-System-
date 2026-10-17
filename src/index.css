@@ -26,13 +26,15 @@
     margin: 6mm 6mm 6mm 6mm;
   }
 
-  /* 1. พื้นหลังหน้ากระดาษและพื้นหลังทั่วไปเป็นสีขาว ไม่ใส่สี */
+  /* 1. หน้าการพิมพ์จริง: พื้นหลังทั้งหมดเป็นสีขาวล้วน ไม่ใส่สีพื้นหลัง */
   html, body {
     background-color: #FFFFFF !important;
     background: #FFFFFF !important;
     color: #000000 !important;
     margin: 0 !important;
     padding: 0 !important;
+    -webkit-print-color-adjust: economy !important;
+    print-color-adjust: economy !important;
   }
 
   .no-print,
@@ -68,7 +70,7 @@
     background: #FFFFFF !important;
   }
 
-  /* 2. ตารางและพื้นหลังตารางปกติไม่ใส่สี (เป็นสีขาวล้วน) */
+  /* 2. หน้าการพิมพ์จริง: ไม่ต้องใส่สีตารางและพื้นหลัง (ทุกส่วนของตารางเป็นสีขาว ไม่ใส่สี) */
   table {
     width: 100% !important;
     max-width: 100% !important;
@@ -77,59 +79,58 @@
     box-sizing: border-box !important;
     background-color: #FFFFFF !important;
     background: #FFFFFF !important;
+    border: 1px solid #000000 !important;
   }
 
+  /* หัวตารางพิมพ์จริง: ไม่ใส่สีพื้นหลัง เป็นสีขาว เส้นขอบคมชัด */
+  thead {
+    display: table-header-group !important;
+  }
+  thead tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    border-top: 2px solid #000000 !important;
+    border-bottom: 2px solid #000000 !important;
+    background-color: #FFFFFF !important;
+    background: #FFFFFF !important;
+  }
+  thead th {
+    background-color: #FFFFFF !important;
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    border: 1px solid #334155 !important;
+    border-top: 2px solid #000000 !important;
+    border-bottom: 2px solid #000000 !important;
+    font-weight: 700 !important;
+  }
+
+  /* เนื้อหาตารางพิมพ์จริง: ไม่ใส่สีพื้นหลัง เป็นสีขาว */
   tbody {
     display: table-row-group !important;
     background-color: #FFFFFF !important;
     background: #FFFFFF !important;
   }
-
   tbody tr {
     display: table-row !important;
     break-inside: avoid !important;
     page-break-inside: avoid !important;
-  }
-
-  /* พื้นหลังแถวตารางปกติ ไม่ใส่สี (สีขาวล้วน) */
-  tbody tr:not(.print-highlight-legal):not(.print-highlight-infirmary),
-  tbody tr:not(.print-highlight-legal):not(.print-highlight-infirmary) td {
     background-color: #FFFFFF !important;
     background: #FFFFFF !important;
   }
-
-  /* 3. ให้ใส่เฉพาะ: สีหัวตาราง */
-  thead, thead tr, thead th {
-    display: table-header-group !important;
-    background-color: #F1F5F9 !important;
-    background: #F1F5F9 !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-  thead tr {
-    break-inside: avoid !important;
-    page-break-inside: avoid !important;
-  }
-
-  /* 4. ให้ใส่เฉพาะ: สีไฮไลท์แถวตาราง (ติดนิติการ และ ติดต่องานพยาบาล) */
+  tbody tr td,
   tbody tr.print-highlight-legal,
-  tbody tr.print-highlight-legal td {
-    background-color: #FEF1F0 !important;
-    background: #FEF1F0 !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-
+  tbody tr.print-highlight-legal td,
   tbody tr.print-highlight-infirmary,
   tbody tr.print-highlight-infirmary td {
-    background-color: #FFFBEB !important;
-    background: #FFFBEB !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
+    background-color: #FFFFFF !important;
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    border: 1px solid #64748B !important;
   }
 
-  /* ป้ายตะกร้าหอพัก: พื้นหลังสีขาวล้วน ไม่ใส่สีพื้นหลัง */
-  .dorm-basket-badge {
+  /* ป้ายตะกร้าหอพัก: ไม่ใส่สีพื้นหลัง เป็นสีขาว */
+  .dorm-basket-badge,
+  .dorm-basket-badge * {
     background-color: #FFFFFF !important;
     background: #FFFFFF !important;
   }
