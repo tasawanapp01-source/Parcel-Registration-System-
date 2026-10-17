@@ -86,8 +86,19 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             size: A4 ${orientation};
             margin: 6mm 6mm 6mm 6mm;
           }
+          /* บังคับไม่พิมพ์สีพื้นหลัง ให้ทุกองค์ประกอบเป็นสีขาวล้วน 100% เพื่อประหยัดหมึกพิมพ์ */
+          *, *::before, *::after {
+            background-color: #FFFFFF !important;
+            background: #FFFFFF !important;
+            background-image: none !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+            -webkit-print-color-adjust: economy !important;
+            print-color-adjust: economy !important;
+          }
           html, body {
             background-color: #FFFFFF !important;
+            background: #FFFFFF !important;
             margin: 0 !important;
             padding: 0 !important;
             width: 100% !important;
@@ -95,8 +106,8 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             height: auto !important;
             overflow: visible !important;
             color: #000000 !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
+            -webkit-print-color-adjust: economy !important;
+            print-color-adjust: economy !important;
           }
           .no-print,
           .print-container {
@@ -105,7 +116,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
           .modal-print-wrapper {
             position: static !important;
             inset: auto !important;
-            background: transparent !important;
+            background: #FFFFFF !important;
             padding: 0 !important;
             margin: 0 !important;
             overflow: visible !important;
@@ -122,6 +133,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             width: 100% !important;
             max-width: 100% !important;
             display: block !important;
+            background: #FFFFFF !important;
           }
           .manifest-a4-sheet {
             box-shadow: none !important;
@@ -134,6 +146,8 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             transform: none !important;
             border-radius: 0 !important;
             box-sizing: border-box !important;
+            background-color: #FFFFFF !important;
+            background: #FFFFFF !important;
           }
           table {
             width: 100% !important;
@@ -141,13 +155,21 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             table-layout: fixed !important;
             border-collapse: collapse !important;
             box-sizing: border-box !important;
+            background: #FFFFFF !important;
           }
-          thead {
+          thead, thead tr, thead th {
             display: table-header-group !important;
+            background-color: #FFFFFF !important;
+            background: #FFFFFF !important;
+            color: #000000 !important;
           }
           thead tr {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
+          }
+          tbody, tbody tr, tbody td {
+            background-color: #FFFFFF !important;
+            background: #FFFFFF !important;
           }
           tbody {
             display: table-row-group !important;
@@ -344,11 +366,11 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
               </div>
             </div>
 
-            {/* ป้ายแสดงหอพักและรหัสตะกร้าสีขนาดกะทัดรัด */}
+            {/* ป้ายแสดงหอพักและรหัสตะกร้าสีขนาดกะทัดรัด (พิมพ์แบบพื้นหลังขาวเพื่อลดภาระสีเครื่องพิมพ์) */}
             <div
-              className={`border ${activeTheme.borderClass} ${activeTheme.bgClass} rounded-lg px-2.5 py-1 text-right shrink-0`}
+              className={`border ${activeTheme.borderClass} ${activeTheme.bgClass} print:bg-white print:border-slate-800 rounded-lg px-2.5 py-1 text-right shrink-0`}
             >
-              <div className={`text-xs sm:text-sm font-extrabold leading-tight ${activeTheme.textClass}`}>
+              <div className={`text-xs sm:text-sm font-extrabold leading-tight ${activeTheme.textClass} print:text-slate-900`}>
                 {dormitory === 'ALL' ? 'ทุกหอพักรวม' : activeTheme.name}
               </div>
               <div className="text-[10px] font-mono font-bold text-slate-800">
@@ -362,8 +384,8 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             {isLandscape ? (
               /* =================== มุมมองแนวนอน (A4 Landscape Layout: 100% Width) =================== */
               <table className="w-full table-fixed border-collapse text-left border border-slate-300">
-                <thead className="table-header-group border-y-2 border-slate-900 bg-slate-100 text-slate-900 font-bold text-[10.5px]">
-                  <tr className="border-y-2 border-slate-900 bg-slate-100">
+                <thead className="table-header-group border-y-2 border-slate-900 bg-slate-100 print:bg-white text-slate-900 font-bold text-[10.5px]">
+                  <tr className="border-y-2 border-slate-900 bg-slate-100 print:bg-white">
                     <th className="py-1.5 px-1 border border-slate-300 text-center w-[4%]">ลำดับ</th>
                     <th className="py-1.5 px-2 border border-slate-300 w-[18%]">เลขพัสดุ (Tracking)</th>
                     <th className="py-1.5 px-2 border border-slate-300 w-[11%]">ขนส่ง</th>
@@ -400,18 +422,11 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                       return (
                         <tr
                           key={p.id}
-                          style={
+                          className={`border-b break-inside-avoid print:bg-white ${
                             isLegalHold
-                              ? { backgroundColor: '#FEF1F0' }
+                              ? 'bg-[#FEF1F0] text-rose-950 font-medium border-rose-300 print:border-slate-300'
                               : isInfirmary
-                              ? { backgroundColor: '#FFFBEB' }
-                              : undefined
-                          }
-                          className={`border-b break-inside-avoid ${
-                            isLegalHold
-                              ? 'bg-[#FEF1F0] text-rose-950 font-medium border-rose-300 print:bg-[#FEF1F0]'
-                              : isInfirmary
-                              ? 'bg-amber-50/70 text-amber-950 font-medium border-amber-300 print:bg-amber-50/70'
+                              ? 'bg-amber-50/70 text-amber-950 font-medium border-amber-300 print:border-slate-300'
                               : idx % 2 === 1
                               ? 'bg-slate-50/40 border-slate-300'
                               : 'bg-white border-slate-300'
@@ -482,8 +497,8 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             ) : (
               /* =================== มุมมองแนวตั้ง (A4 Portrait Layout: 100% Width Perfectly Fit) =================== */
               <table className="w-full table-fixed border-collapse text-left border border-slate-300">
-                <thead className="table-header-group border-y-2 border-slate-900 bg-slate-100 text-slate-900 font-bold text-[10px]">
-                  <tr className="border-y-2 border-slate-900 bg-slate-100">
+                <thead className="table-header-group border-y-2 border-slate-900 bg-slate-100 print:bg-white text-slate-900 font-bold text-[10px]">
+                  <tr className="border-y-2 border-slate-900 bg-slate-100 print:bg-white">
                     <th className="py-1.5 px-1 border border-slate-300 text-center w-[5%]">ลำดับ</th>
                     <th className="py-1.5 px-2 border border-slate-300 w-[15%]">เลขพัสดุ / ขนส่ง</th>
                     <th className="py-1.5 px-1 border border-slate-300 text-center w-[8%]">รหัส นร.</th>
@@ -523,18 +538,11 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                       return (
                         <tr
                           key={p.id}
-                          style={
+                          className={`border-b break-inside-avoid print:bg-white ${
                             isLegalHold
-                              ? { backgroundColor: '#FEF1F0' }
+                              ? 'bg-[#FEF1F0] text-rose-950 font-medium border-rose-300 print:border-slate-300'
                               : isInfirmary
-                              ? { backgroundColor: '#FFFBEB' }
-                              : undefined
-                          }
-                          className={`border-b break-inside-avoid ${
-                            isLegalHold
-                              ? 'bg-[#FEF1F0] text-rose-950 font-medium border-rose-300 print:bg-[#FEF1F0]'
-                              : isInfirmary
-                              ? 'bg-amber-50/70 text-amber-950 font-medium border-amber-300 print:bg-amber-50/70'
+                              ? 'bg-amber-50/70 text-amber-950 font-medium border-amber-300 print:border-slate-300'
                               : idx % 2 === 1
                               ? 'bg-slate-50/40 border-slate-300'
                               : 'bg-white border-slate-300'
