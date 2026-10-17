@@ -26,23 +26,13 @@
     margin: 8mm 10mm 10mm 10mm;
   }
 
-  /* บังคับไม่ให้พิมพ์สีพื้นหลัง ทุกพื้นหลังเป็นสีขาวล้วน 100% เพื่อประหยัดหมึกพิมพ์ */
-  *, *::before, *::after {
-    background-color: #FFFFFF !important;
-    background: #FFFFFF !important;
-    background-image: none !important;
-    box-shadow: none !important;
-    text-shadow: none !important;
-    -webkit-print-color-adjust: economy !important;
-    print-color-adjust: economy !important;
-  }
-
-  body {
+  /* พื้นหลังหน้ากระดาษสีขาวล้วน แต่เปิด print-color-adjust เพื่อให้พิมพ์สีไฮไลท์แถวตารางได้ตามเดิม */
+  html, body {
     background-color: #FFFFFF !important;
     background: #FFFFFF !important;
     color: #000000 !important;
-    -webkit-print-color-adjust: economy !important;
-    print-color-adjust: economy !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   .no-print,

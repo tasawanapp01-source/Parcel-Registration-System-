@@ -17,7 +17,7 @@ import {
   Clock,
   AlertOctagon,
   PackageCheck,
-  Database,
+  PackagePlus,
   Trash2,
   AlertTriangle,
   Users,
@@ -50,10 +50,11 @@ export const DashboardView: React.FC = () => {
     allStudentParcelStats,
     overWeeklyLimitStudents,
     openWeeklyWarningPopup,
-    quotaMetrics,
-    pendingWrites,
     clearAllLocalData,
+    currentMember,
   } = useParcelSystem();
+
+  const isAdmin = currentMember?.role === 'ผู้ดูแลระบบ';
 
   const sortedStudentStats = useMemo(() => {
     return [...allStudentParcelStats]
@@ -246,7 +247,7 @@ export const DashboardView: React.FC = () => {
           </h1>
         </div>
 
-        {(students.length > 0 || parcels.length > 0) && (
+        {isAdmin && (students.length > 0 || parcels.length > 0) && (
           <button
             type="button"
             onClick={clearAllLocalData}
@@ -259,10 +260,14 @@ export const DashboardView: React.FC = () => {
       </div>
 
       {/* ตัวเลขสรุป KPI รวมสถานะพัสดุ (Tabular Numerals) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-2">
-          <span className="text-xs font-semibold text-slate-500">พัสดุรับเข้าวันนี้</span>
-          <div className="text-3xl font-mono font-extrabold text-slate-900 tabular-nums">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+        {/* 1. พัสดุรับเข้าวันนี้: โทนสีฟ้า-น้ำเงิน */}
+        <div className="bg-white border border-sky-300 rounded-2xl p-5 space-y-2 bg-gradient-to-b from-sky-50/60 to-white shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-sky-900">พัสดุรับเข้าวันนี้</span>
+            <PackagePlus className="w-4 h-4 text-sky-600" />
+          </div>
+          <div className="text-3xl font-mono font-extrabold text-sky-700 tabular-nums">
             {kpiStats.inboundToday}
           </div>
           <p className="text-xs text-slate-500 font-mono tabular-nums">
@@ -270,9 +275,13 @@ export const DashboardView: React.FC = () => {
           </p>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-2">
-          <span className="text-xs font-semibold text-slate-500">พัสดุค้างจ่าย (รอนำส่ง/รอรับ)</span>
-          <div className="text-3xl font-mono font-extrabold text-amber-600 tabular-nums">
+        {/* 2. พัสดุค้างจ่าย (รอนำส่ง/รอรับ): โทนสีเทา-ดำ */}
+        <div className="bg-white border border-slate-400/80 rounded-2xl p-5 space-y-2 bg-gradient-to-b from-slate-100 to-white shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-900">พัสดุค้างจ่าย (รอนำส่ง/รอรับ)</span>
+            <Clock className="w-4 h-4 text-slate-700" />
+          </div>
+          <div className="text-3xl font-mono font-extrabold text-slate-900 tabular-nums">
             {kpiStats.pendingDelivery}
           </div>
           <p className="text-xs text-slate-500">
@@ -280,7 +289,8 @@ export const DashboardView: React.FC = () => {
           </p>
         </div>
 
-        <div className="bg-white border border-amber-300 rounded-2xl p-5 space-y-2 bg-gradient-to-b from-amber-50/50 to-white">
+        {/* 3. พัสดุติดต่องานพยาบาล: ต้นแบบโทนสีส้มอำพัน */}
+        <div className="bg-white border border-amber-300 rounded-2xl p-5 space-y-2 bg-gradient-to-b from-amber-50/60 to-white shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-amber-900">พัสดุติดต่องานพยาบาล</span>
             <HeartHandshake className="w-4 h-4 text-amber-600" />
@@ -293,9 +303,10 @@ export const DashboardView: React.FC = () => {
           </p>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-2">
+        {/* 4. พัสดุติดนิติการ: โทนสีแดง */}
+        <div className="bg-white border border-red-300 rounded-2xl p-5 space-y-2 bg-gradient-to-b from-red-50/60 to-white shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-red-700">พัสดุติดนิติการ</span>
+            <span className="text-xs font-semibold text-red-900">พัสดุติดนิติการ</span>
             <AlertOctagon className="w-4 h-4 text-red-600" />
           </div>
           <div className="text-3xl font-mono font-extrabold text-red-600 tabular-nums">
@@ -306,30 +317,18 @@ export const DashboardView: React.FC = () => {
           </p>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-2">
+        {/* 5. ส่งมอบสำเร็จแล้ว: โทนสีเขียว */}
+        <div className="bg-white border border-emerald-300 rounded-2xl p-5 space-y-2 bg-gradient-to-b from-emerald-50/60 to-white shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-emerald-700">ส่งมอบสำเร็จแล้ว</span>
+            <span className="text-xs font-semibold text-emerald-900">ส่งมอบสำเร็จแล้ว</span>
             <PackageCheck className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="text-3xl font-mono font-extrabold text-emerald-700 tabular-nums">
             {kpiStats.delivered}{' '}
-            <span className="text-sm font-semibold text-slate-500">({kpiStats.deliveryRate}%)</span>
+            <span className="text-sm font-semibold text-emerald-600/80">({kpiStats.deliveryRate}%)</span>
           </div>
           <p className="text-xs text-slate-500">
             นักเรียนลงชื่อรับพัสดุที่หอพักเรียบร้อยแล้ว
-          </p>
-        </div>
-
-        <div className="bg-slate-900 text-white rounded-2xl p-5 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-emerald-400">ประหยัดโควตา Firebase</span>
-            <Database className="w-4 h-4 text-emerald-400" />
-          </div>
-          <div className="text-3xl font-mono font-extrabold text-white tabular-nums">
-            {quotaMetrics.localLookupsSaved}
-          </div>
-          <p className="text-xs text-slate-300 font-mono tabular-nums">
-            Reads ที่ประหยัดได้ · รอ Batch {pendingWrites.length} รายการ
           </p>
         </div>
       </div>
