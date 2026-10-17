@@ -86,7 +86,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             size: A4 ${orientation};
             margin: 6mm 6mm 6mm 6mm;
           }
-          /* พื้นหลังหน้ากระดาษและเอกสารเป็นสีขาวล้วน แต่เปิด print-color-adjust เพื่อให้พิมพ์สีไฮไลท์แถวตารางได้ตามเดิม */
+          /* 1. พื้นหลังหน้ากระดาษ เอกสาร และพื้นที่ภายนอกตาราง เป็นสีขาวล้วน ไม่ใส่สี */
           html, body {
             background-color: #FFFFFF !important;
             background: #FFFFFF !important;
@@ -97,17 +97,17 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             height: auto !important;
             overflow: visible !important;
             color: #000000 !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
           }
           .no-print,
           .print-container {
             display: none !important;
           }
-          .modal-print-wrapper {
+          .modal-print-wrapper,
+          .print-preview-scroll-area {
             position: static !important;
             inset: auto !important;
             background: #FFFFFF !important;
+            background-color: #FFFFFF !important;
             padding: 0 !important;
             margin: 0 !important;
             overflow: visible !important;
@@ -115,16 +115,6 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             width: 100% !important;
             max-width: 100% !important;
             display: block !important;
-          }
-          .print-preview-scroll-area {
-            overflow: visible !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            height: auto !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            display: block !important;
-            background: #FFFFFF !important;
           }
           .manifest-a4-sheet {
             box-shadow: none !important;
@@ -140,17 +130,38 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             background-color: #FFFFFF !important;
             background: #FFFFFF !important;
           }
+
+          /* 2. ตารางและพื้นหลังตารางปกติไม่ใส่สี (เป็นสีขาวล้วน) */
           table {
             width: 100% !important;
             max-width: 100% !important;
             table-layout: fixed !important;
             border-collapse: collapse !important;
             box-sizing: border-box !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
+            background-color: #FFFFFF !important;
+            background: #FFFFFF !important;
           }
-          thead {
+          tbody {
+            display: table-row-group !important;
+            background-color: #FFFFFF !important;
+            background: #FFFFFF !important;
+          }
+          tbody tr {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          /* พื้นหลังแถวตารางปกติ ไม่ใส่สี (สีขาวล้วน) */
+          tbody tr:not(.print-highlight-legal):not(.print-highlight-infirmary),
+          tbody tr:not(.print-highlight-legal):not(.print-highlight-infirmary) td {
+            background-color: #FFFFFF !important;
+            background: #FFFFFF !important;
+          }
+
+          /* 3. ให้ใส่เฉพาะ: สีหัวตาราง */
+          thead, thead tr, thead th {
             display: table-header-group !important;
+            background-color: #F1F5F9 !important;
+            background: #F1F5F9 !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
@@ -158,25 +169,26 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
-          tbody {
-            display: table-row-group !important;
-          }
-          tr {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          /* ไฮไลท์สีแถวตารางพัสดุติดนิติการและพัสดุติดต่องานพยาบาล พิมพ์ได้ตามเดิมเหมือนตัวอย่างการพิมพ์ */
-          tr.row-legal-hold,
-          tr.print-highlight-legal {
+
+          /* 4. ให้ใส่เฉพาะ: สีไฮไลท์แถวตาราง (ติดนิติการ และ ติดต่องานพยาบาล) */
+          tbody tr.print-highlight-legal,
+          tbody tr.print-highlight-legal td {
             background-color: #FEF1F0 !important;
+            background: #FEF1F0 !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
-          tr.row-infirmary,
-          tr.print-highlight-infirmary {
+          tbody tr.print-highlight-infirmary,
+          tbody tr.print-highlight-infirmary td {
             background-color: #FFFBEB !important;
+            background: #FFFBEB !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          /* 5. ให้ใส่เฉพาะ: สีตะกร้าหอพัก */
+          .dorm-basket-badge,
+          .dorm-basket-badge * {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
@@ -368,15 +380,30 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
               </div>
             </div>
 
-            {/* ป้ายแสดงหอพักและรหัสตะกร้าสีขนาดกะทัดรัด (จัดรูปแบบเหมือนตัวอย่างการพิมพ์) */}
+            {/* ป้ายแสดงหอพักและรหัสตะกร้าสีขนาดกะทัดรัด (ใส่สีเฉพาะตะกร้าหอพัก) */}
             <div
-              className={`border ${activeTheme.borderClass} ${activeTheme.bgClass} rounded-lg px-2.5 py-1 text-right shrink-0`}
+              className={`dorm-basket-badge border ${activeTheme.borderClass} ${activeTheme.bgClass} rounded-lg px-2.5 py-1 text-right shrink-0`}
+              style={{
+                borderColor: activeTheme.hexColor || undefined,
+                WebkitPrintColorAdjust: 'exact',
+                printColorAdjust: 'exact',
+              }}
             >
               <div className={`text-xs sm:text-sm font-extrabold leading-tight ${activeTheme.textClass}`}>
                 {dormitory === 'ALL' ? 'ทุกหอพักรวม' : activeTheme.name}
               </div>
-              <div className="text-[10px] font-mono font-bold text-slate-800">
-                {activeTheme.basketCode} ({activeTheme.colorName})
+              <div className="text-[10px] font-mono font-bold text-slate-800 flex items-center justify-end gap-1.5 mt-0.5">
+                <span
+                  className="inline-block w-2.5 h-2.5 rounded-full border border-slate-900/20 shrink-0"
+                  style={{
+                    backgroundColor: activeTheme.hexColor,
+                    WebkitPrintColorAdjust: 'exact',
+                    printColorAdjust: 'exact',
+                  }}
+                />
+                <span>
+                  {activeTheme.basketCode} ({activeTheme.colorName})
+                </span>
               </div>
             </div>
           </header>
@@ -426,9 +453,9 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                           key={p.id}
                           style={
                             isLegalHold
-                              ? { backgroundColor: '#FEF1F0' }
+                              ? { backgroundColor: '#FEF1F0', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }
                               : isInfirmary
-                              ? { backgroundColor: '#FFFBEB' }
+                              ? { backgroundColor: '#FFFBEB', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }
                               : undefined
                           }
                           className={`border-b break-inside-avoid ${
@@ -436,8 +463,6 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                               ? 'bg-[#FEF1F0] text-rose-950 font-medium border-rose-300 print-highlight-legal print:bg-[#FEF1F0]'
                               : isInfirmary
                               ? 'bg-amber-50/70 text-amber-950 font-medium border-amber-300 print-highlight-infirmary print:bg-[#FFFBEB]'
-                              : idx % 2 === 1
-                              ? 'bg-slate-50/40 border-slate-300'
                               : 'bg-white border-slate-300'
                           }`}
                         >
@@ -549,9 +574,9 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                           key={p.id}
                           style={
                             isLegalHold
-                              ? { backgroundColor: '#FEF1F0' }
+                              ? { backgroundColor: '#FEF1F0', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }
                               : isInfirmary
-                              ? { backgroundColor: '#FFFBEB' }
+                              ? { backgroundColor: '#FFFBEB', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }
                               : undefined
                           }
                           className={`border-b break-inside-avoid ${
@@ -559,8 +584,6 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                               ? 'bg-[#FEF1F0] text-rose-950 font-medium border-rose-300 print-highlight-legal print:bg-[#FEF1F0]'
                               : isInfirmary
                               ? 'bg-amber-50/70 text-amber-950 font-medium border-amber-300 print-highlight-infirmary print:bg-[#FFFBEB]'
-                              : idx % 2 === 1
-                              ? 'bg-slate-50/40 border-slate-300'
                               : 'bg-white border-slate-300'
                           }`}
                         >

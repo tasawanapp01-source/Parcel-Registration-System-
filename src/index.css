@@ -23,16 +23,16 @@
 /* รูปแบบสำหรับการสั่งพิมพ์ใบรายการนำส่งพัสดุ (Printable Manifest A4) */
 @media print {
   @page {
-    margin: 8mm 10mm 10mm 10mm;
+    margin: 6mm 6mm 6mm 6mm;
   }
 
-  /* พื้นหลังหน้ากระดาษสีขาวล้วน แต่เปิด print-color-adjust เพื่อให้พิมพ์สีไฮไลท์แถวตารางได้ตามเดิม */
+  /* 1. พื้นหลังหน้ากระดาษและพื้นหลังทั่วไปเป็นสีขาว ไม่ใส่สี */
   html, body {
     background-color: #FFFFFF !important;
     background: #FFFFFF !important;
     color: #000000 !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   .no-print,
@@ -44,10 +44,12 @@
     display: block !important;
   }
 
-  .modal-print-wrapper {
+  .modal-print-wrapper,
+  .print-preview-scroll-area {
     position: static !important;
     inset: auto !important;
-    background: transparent !important;
+    background: #FFFFFF !important;
+    background-color: #FFFFFF !important;
     padding: 0 !important;
     margin: 0 !important;
     overflow: visible !important;
@@ -62,27 +64,74 @@
     margin: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
+    background-color: #FFFFFF !important;
+    background: #FFFFFF !important;
   }
 
+  /* 2. ตารางและพื้นหลังตารางปกติไม่ใส่สี (เป็นสีขาวล้วน) */
   table {
     width: 100% !important;
     max-width: 100% !important;
     table-layout: fixed !important;
     border-collapse: collapse !important;
     box-sizing: border-box !important;
-  }
-
-  thead {
-    display: table-header-group !important;
+    background-color: #FFFFFF !important;
+    background: #FFFFFF !important;
   }
 
   tbody {
     display: table-row-group !important;
+    background-color: #FFFFFF !important;
+    background: #FFFFFF !important;
   }
 
-  tr {
+  tbody tr {
     display: table-row !important;
     break-inside: avoid !important;
     page-break-inside: avoid !important;
+  }
+
+  /* พื้นหลังแถวตารางปกติ ไม่ใส่สี (สีขาวล้วน) */
+  tbody tr:not(.print-highlight-legal):not(.print-highlight-infirmary),
+  tbody tr:not(.print-highlight-legal):not(.print-highlight-infirmary) td {
+    background-color: #FFFFFF !important;
+    background: #FFFFFF !important;
+  }
+
+  /* 3. ให้ใส่เฉพาะ: สีหัวตาราง */
+  thead, thead tr, thead th {
+    display: table-header-group !important;
+    background-color: #F1F5F9 !important;
+    background: #F1F5F9 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  thead tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* 4. ให้ใส่เฉพาะ: สีไฮไลท์แถวตาราง (ติดนิติการ และ ติดต่องานพยาบาล) */
+  tbody tr.print-highlight-legal,
+  tbody tr.print-highlight-legal td {
+    background-color: #FEF1F0 !important;
+    background: #FEF1F0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  tbody tr.print-highlight-infirmary,
+  tbody tr.print-highlight-infirmary td {
+    background-color: #FFFBEB !important;
+    background: #FFFBEB !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* 5. ให้ใส่เฉพาะ: สีตะกร้าหอพัก */
+  .dorm-basket-badge,
+  .dorm-basket-badge * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }
