@@ -77,7 +77,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
       role="dialog"
       aria-modal="true"
       aria-label="หน้าตัวอย่างการพิมพ์แบบ HTML ขนาด A4"
-      className="fixed inset-0 z-50 flex flex-col bg-slate-100/95 backdrop-blur-xs modal-print-wrapper overflow-hidden"
+      className="fixed inset-0 z-50 flex flex-col bg-white modal-print-wrapper overflow-hidden"
     >
       {/* Dynamic @page CSS rule and repeating table header rule for multi-page printouts */}
       <style>{`
@@ -340,8 +340,8 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
         </div>
       </header>
 
-      {/* พื้นที่แสดงตัวอย่างเอกสาร A4 (Interactive Canvas) โทนสว่าง สะอาดตา */}
-      <main className="flex-1 overflow-y-auto print-preview-scroll-area p-3 sm:p-5 lg:p-7 flex justify-center items-start bg-slate-100/90">
+      {/* พื้นที่แสดงตัวอย่างเอกสาร A4 (Interactive Canvas) พื้นหลังสีขาวล้วน */}
+      <main className="flex-1 overflow-y-auto print-preview-scroll-area p-3 sm:p-5 lg:p-7 flex justify-center items-start bg-white">
         <div
           style={{
             transform: zoomLevel !== 100 ? `scale(${zoomLevel / 100})` : undefined,
