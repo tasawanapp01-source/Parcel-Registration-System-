@@ -33,7 +33,8 @@
     print-color-adjust: exact !important;
   }
 
-  .no-print {
+  .no-print,
+  .print-container {
     display: none !important;
   }
 
@@ -52,7 +53,6 @@
     width: 100% !important;
   }
 
-  .print-container,
   .manifest-a4-sheet {
     box-shadow: none !important;
     border: none !important;

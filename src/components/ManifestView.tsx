@@ -120,6 +120,18 @@ export const ManifestView: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // เมื่อผู้ใช้กด Ctrl+P หรือ Cmd+P ในหน้านี้ ให้เปิดหน้าต่างตัวอย่างการพิมพ์ A4 โดยอัตโนมัติ
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        setIsPrintPreviewOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // แสดงรายการพัสดุตามหอพักและสถานะ (นำพัสดุที่ลงทะเบียนแล้วมาแสดงในตารางได้เลย รวมถึงของที่ติดนิติการ เพื่อรอพิมพ์ใบนำส่งให้แต่ละหอพัก)
   const manifestParcels = useMemo(() => {
     return parcels.filter((p) => {
@@ -798,10 +810,10 @@ export const ManifestView: React.FC = () => {
         </div>
       </div>
 
-      {/* ตัวอย่างใบรายการส่งมอบพัสดุ (Printable A4 Document Sheet) */}
+      {/* ตารางรายการพัสดุสำหรับจัดการและลงนามบนหน้าจอ (ซ่อนเมื่อสั่งพิมพ์ เพื่อป้องกันการพิมพ์ตารางซ้ำ 2 ครั้ง เนื่องจากพิมพ์ผ่านแบบฟอร์ม A4 ในหน้าต่างตัวอย่างการพิมพ์) */}
       <section
-        aria-label="เอกสารใบรายการนำส่งพัสดุสำหรับพิมพ์"
-        className="print-container bg-white border border-slate-300 rounded-2xl p-5 md:p-8 space-y-5"
+        aria-label="รายการนำส่งพัสดุและลงนามรับมอบ"
+        className="no-print bg-white border border-slate-300 rounded-2xl p-5 md:p-8 space-y-5"
       >
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 border-b-2 border-slate-900 pb-4">
           <div className="space-y-1">
@@ -919,7 +931,7 @@ export const ManifestView: React.FC = () => {
                           : isChecked
                           ? 'bg-emerald-50/60 border-slate-300'
                           : 'hover:bg-slate-50 border-slate-300'
-                      } ${isRowInCurrentPage ? '' : 'hidden print:table-row'}`}
+                      } ${isRowInCurrentPage ? '' : 'hidden'}`}
                     >
                       <td
                         className="no-print py-2 px-1.5 border border-slate-300 text-center"

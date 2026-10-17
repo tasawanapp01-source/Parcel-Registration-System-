@@ -98,6 +98,10 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
+          .no-print,
+          .print-container {
+            display: none !important;
+          }
           .modal-print-wrapper {
             position: static !important;
             inset: auto !important;
