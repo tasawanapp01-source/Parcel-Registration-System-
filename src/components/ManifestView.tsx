@@ -825,19 +825,28 @@ export const ManifestView: React.FC = () => {
             </p>
           </div>
 
-          <div className={`border-2 ${activeTheme.borderClass} ${activeTheme.bgClass} rounded-xl px-4 py-2.5 text-right shrink-0`}>
+          <div
+            className={`border-2 ${activeTheme.borderClass} bg-white rounded-xl px-4 py-2.5 text-right shrink-0 shadow-2xs`}
+            style={{ borderColor: activeTheme.hexColor || undefined }}
+          >
             <div className="text-xs font-semibold text-slate-600">หอพักปลายทาง / รหัสตะกร้าสี</div>
             <div className={`text-lg font-extrabold ${activeTheme.textClass}`}>
               {selectedDormitory === 'ALL' ? 'ทุกหอพักรวม' : activeTheme.name}
             </div>
-            <div className="text-xs font-mono font-bold text-slate-800 mt-0.5 tabular-nums">
-              {activeTheme.basketCode} ({activeTheme.colorName}) · รวม {sortedManifestParcels.length} ชิ้น
+            <div className="text-xs font-mono font-bold text-slate-800 mt-0.5 tabular-nums flex items-center justify-end gap-1.5">
+              <span
+                className="inline-block w-2.5 h-2.5 rounded-full border border-slate-900/20 shrink-0"
+                style={{ backgroundColor: activeTheme.hexColor }}
+              />
+              <span>
+                {activeTheme.basketCode} ({activeTheme.colorName}) · รวม {sortedManifestParcels.length} ชิ้น
+              </span>
             </div>
           </div>
         </div>
 
-        {/* ส่วนแสดงข้อมูลรายการนำส่งพัสดุประจำหอพัก */}
-        <div className="bg-slate-50 border border-slate-300 rounded-xl p-3.5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        {/* ส่วนแสดงข้อมูลรายการนำส่งพัสดุประจำหอพัก (พื้นหลังสีขาวล้วน) */}
+        <div className="bg-white border border-slate-300 rounded-xl p-3.5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs shadow-2xs">
           <div>
             <span className="text-slate-500 block text-[11px]">หอพักปลายทาง:</span>
             <span className="font-bold text-slate-900 text-sm">
@@ -865,10 +874,10 @@ export const ManifestView: React.FC = () => {
         </div>
 
         <div className="overflow-x-auto print:overflow-visible w-full">
-          <table className="w-full table-fixed border-collapse text-left text-xs print:text-[10px] print:w-full">
+          <table className="w-full table-fixed border-collapse text-left text-xs bg-white border border-slate-300">
             <thead className="table-header-group border-y-2 border-slate-900 bg-slate-100 text-slate-900 font-bold">
               <tr className="border-y-2 border-slate-900 bg-slate-100 text-slate-900 font-bold">
-                <th className="no-print py-2 px-1.5 border border-slate-300 text-center w-8">
+                <th className="no-print py-2.5 px-1.5 border border-slate-300 text-center w-8 bg-slate-100">
                   <input
                     type="checkbox"
                     aria-label="เลือกพัสดุทั้งหมดในหน้านี้"
@@ -879,17 +888,17 @@ export const ManifestView: React.FC = () => {
                     className="w-4 h-4 rounded border-slate-400 text-emerald-700 focus:ring-emerald-600 cursor-pointer disabled:opacity-40"
                   />
                 </th>
-                <th className="py-2 px-1 border border-slate-300 text-center w-[5%]">ลำดับ</th>
-                <th className="py-2 px-2 border border-slate-300 w-[15%]">เลขพัสดุ / ขนส่ง</th>
-                <th className="py-2 px-1 border border-slate-300 text-center w-[8%]">รหัส นร.</th>
-                <th className="py-2 px-2 border border-slate-300 w-[19%]">
+                <th className="py-2.5 px-1 border border-slate-300 text-center w-[5%] bg-slate-100 font-bold text-slate-900">ลำดับ</th>
+                <th className="py-2.5 px-2 border border-slate-300 w-[15%] bg-slate-100 font-bold text-slate-900">เลขพัสดุ / ขนส่ง</th>
+                <th className="py-2.5 px-1 border border-slate-300 text-center w-[8%] bg-slate-100 font-bold text-slate-900">รหัส นร.</th>
+                <th className="py-2.5 px-2 border border-slate-300 w-[19%] bg-slate-100 font-bold text-slate-900">
                   ชื่อ-นามสกุลนักเรียน (ชื่อเล่น · ชั้น)
                 </th>
-                <th className="py-2 px-2 border border-slate-300 w-[33%]">ประเภทสิ่งของ</th>
-                <th className="py-2 px-1 border border-slate-300 w-[10%] text-center">
+                <th className="py-2.5 px-2 border border-slate-300 w-[33%] bg-slate-100 font-bold text-slate-900">ประเภทสิ่งของ</th>
+                <th className="py-2.5 px-1 border border-slate-300 w-[10%] text-center bg-slate-100 font-bold text-slate-900">
                   ลายมือชื่อผู้รับ
                 </th>
-                <th className="py-2 px-1 border border-slate-300 w-[10%] text-center">
+                <th className="py-2.5 px-1 border border-slate-300 w-[10%] text-center bg-slate-100 font-bold text-slate-900">
                   วันที่รับ
                 </th>
               </tr>

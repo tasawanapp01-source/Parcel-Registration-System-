@@ -128,10 +128,9 @@
     print-color-adjust: exact !important;
   }
 
-  /* 5. ให้ใส่เฉพาะ: สีตะกร้าหอพัก */
-  .dorm-basket-badge,
-  .dorm-basket-badge * {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
+  /* ป้ายตะกร้าหอพัก: พื้นหลังสีขาวล้วน ไม่ใส่สีพื้นหลัง */
+  .dorm-basket-badge {
+    background-color: #FFFFFF !important;
+    background: #FFFFFF !important;
   }
 }

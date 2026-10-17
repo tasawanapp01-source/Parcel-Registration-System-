@@ -186,11 +186,10 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             print-color-adjust: exact !important;
           }
 
-          /* 5. ให้ใส่เฉพาะ: สีตะกร้าหอพัก */
-          .dorm-basket-badge,
-          .dorm-basket-badge * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
+          /* ป้ายตะกร้าหอพัก: พื้นหลังสีขาวล้วน ไม่ใส่สีพื้นหลัง */
+          .dorm-basket-badge {
+            background-color: #FFFFFF !important;
+            background: #FFFFFF !important;
           }
         }
       `}</style>
@@ -380,13 +379,12 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
               </div>
             </div>
 
-            {/* ป้ายแสดงหอพักและรหัสตะกร้าสีขนาดกะทัดรัด (ใส่สีเฉพาะตะกร้าหอพัก) */}
+            {/* ป้ายแสดงหอพักและรหัสตะกร้าสี (พื้นหลังสีขาว ไม่ใส่สีพื้นหลัง) */}
             <div
-              className={`dorm-basket-badge border ${activeTheme.borderClass} ${activeTheme.bgClass} rounded-lg px-2.5 py-1 text-right shrink-0`}
+              className={`dorm-basket-badge border-2 ${activeTheme.borderClass} bg-white rounded-lg px-2.5 py-1 text-right shrink-0 shadow-2xs`}
               style={{
                 borderColor: activeTheme.hexColor || undefined,
-                WebkitPrintColorAdjust: 'exact',
-                printColorAdjust: 'exact',
+                backgroundColor: '#FFFFFF',
               }}
             >
               <div className={`text-xs sm:text-sm font-extrabold leading-tight ${activeTheme.textClass}`}>
@@ -412,21 +410,21 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
           <div className="w-full overflow-hidden">
             {isLandscape ? (
               /* =================== มุมมองแนวนอน (A4 Landscape Layout: 100% Width) =================== */
-              <table className="w-full table-fixed border-collapse text-left border border-slate-300">
+              <table className="w-full table-fixed border-collapse text-left border border-slate-300 bg-white">
                 <thead className="table-header-group border-y-2 border-slate-900 bg-slate-100 text-slate-900 font-bold text-[10.5px]">
                   <tr className="border-y-2 border-slate-900 bg-slate-100">
-                    <th className="py-1.5 px-1 border border-slate-300 text-center w-[4%]">ลำดับ</th>
-                    <th className="py-1.5 px-2 border border-slate-300 w-[18%]">เลขพัสดุ (Tracking)</th>
-                    <th className="py-1.5 px-2 border border-slate-300 w-[11%]">ขนส่ง</th>
-                    <th className="py-1.5 px-1 border border-slate-300 text-center w-[9%]">รหัส นร.</th>
-                    <th className="py-1.5 px-2 border border-slate-300 w-[19%]">
+                    <th className="py-2 px-1 border border-slate-300 text-center w-[4%] bg-slate-100 font-bold text-slate-900">ลำดับ</th>
+                    <th className="py-2 px-2 border border-slate-300 w-[18%] bg-slate-100 font-bold text-slate-900">เลขพัสดุ (Tracking)</th>
+                    <th className="py-2 px-2 border border-slate-300 w-[11%] bg-slate-100 font-bold text-slate-900">ขนส่ง</th>
+                    <th className="py-2 px-1 border border-slate-300 text-center w-[9%] bg-slate-100 font-bold text-slate-900">รหัส นร.</th>
+                    <th className="py-2 px-2 border border-slate-300 w-[19%] bg-slate-100 font-bold text-slate-900">
                       ชื่อ-นามสกุลนักเรียน (ชื่อเล่น · ชั้น)
                     </th>
-                    <th className="py-1.5 px-2 border border-slate-300 w-[25%]">ประเภทสิ่งของ</th>
-                    <th className="py-1.5 px-1.5 border border-slate-300 w-[7%] text-center">
+                    <th className="py-2 px-2 border border-slate-300 w-[25%] bg-slate-100 font-bold text-slate-900">ประเภทสิ่งของ</th>
+                    <th className="py-2 px-1.5 border border-slate-300 w-[7%] text-center bg-slate-100 font-bold text-slate-900">
                       ลายมือชื่อผู้รับ
                     </th>
-                    <th className="py-1.5 px-1.5 border border-slate-300 w-[7%] text-center">
+                    <th className="py-2 px-1.5 border border-slate-300 w-[7%] text-center bg-slate-100 font-bold text-slate-900">
                       วันที่รับ
                     </th>
                   </tr>
@@ -530,24 +528,24 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
               </table>
             ) : (
               /* =================== มุมมองแนวตั้ง (A4 Portrait Layout: 100% Width Perfectly Fit) =================== */
-              <table className="w-full table-fixed border-collapse text-left border border-slate-300">
+              <table className="w-full table-fixed border-collapse text-left border border-slate-300 bg-white">
                 <thead className="table-header-group border-y-2 border-slate-900 bg-slate-100 text-slate-900 font-bold text-[10px]">
                   <tr className="border-y-2 border-slate-900 bg-slate-100">
-                    <th className="py-1.5 px-1 border border-slate-300 text-center w-[5%]">ลำดับ</th>
-                    <th className="py-1.5 px-2 border border-slate-300 w-[15%]">เลขพัสดุ / ขนส่ง</th>
-                    <th className="py-1.5 px-1 border border-slate-300 text-center w-[8%]">รหัส นร.</th>
+                    <th className="py-2 px-1 border border-slate-300 text-center w-[5%] bg-slate-100 font-bold text-slate-900">ลำดับ</th>
+                    <th className="py-2 px-2 border border-slate-300 w-[15%] bg-slate-100 font-bold text-slate-900">เลขพัสดุ / ขนส่ง</th>
+                    <th className="py-2 px-1 border border-slate-300 text-center w-[8%] bg-slate-100 font-bold text-slate-900">รหัส นร.</th>
                     {/* ชื่อ-นามสกุลนักเรียน 19% กำหนด truncate เพื่อให้อยู่ใน 1 บรรทัดและไม่ดันตารางล้นขอบกระดาษ */}
-                    <th className="py-1.5 px-2 border border-slate-300 w-[19%]">
+                    <th className="py-2 px-2 border border-slate-300 w-[19%] bg-slate-100 font-bold text-slate-900">
                       ชื่อ-นามสกุลนักเรียน (ชื่อเล่น · ชั้น)
                     </th>
                     {/* ประเภทสิ่งของ auto (33% พื้นที่ที่เหลือ รวมครบ 100%) */}
-                    <th className="py-1.5 px-2 border border-slate-300 w-[33%]">ประเภทสิ่งของ</th>
+                    <th className="py-2 px-2 border border-slate-300 w-[33%] bg-slate-100 font-bold text-slate-900">ประเภทสิ่งของ</th>
                     {/* ลายมือชื่อผู้รับ: 10% */}
-                    <th className="py-1.5 px-1 border border-slate-300 w-[10%] text-center">
+                    <th className="py-2 px-1 border border-slate-300 w-[10%] text-center bg-slate-100 font-bold text-slate-900">
                       ลายมือชื่อผู้รับ
                     </th>
                     {/* วันที่รับ: 10% ฟอนต์แบบเดียวกับคอลัมน์ลายมือชื่อผู้รับ */}
-                    <th className="py-1.5 px-1 border border-slate-300 w-[10%] text-center">
+                    <th className="py-2 px-1 border border-slate-300 w-[10%] text-center bg-slate-100 font-bold text-slate-900">
                       วันที่รับ
                     </th>
                   </tr>
