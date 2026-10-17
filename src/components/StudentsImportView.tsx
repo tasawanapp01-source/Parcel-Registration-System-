@@ -24,6 +24,7 @@ import {
   Student,
   getDormitoryTheme,
   WEEKLY_PARCEL_WARNING_LIMIT,
+  formatStudentCode,
 } from '../types/parcel';
 
 type RawStudentRow = Omit<Student, 'ownerId' | 'createdAt' | 'updatedAt'>;
@@ -84,7 +85,8 @@ function mapRowToStudent(row: Record<string, unknown>, index: number): RawStuden
   };
 
   const seqRaw = getVal(['เลขที่', 'seqNo', 'ลำดับ', 'no'], String(index + 1));
-  const studentCode = getVal(['รหัสนักเรียน', 'studentCode', 'รหัส', 'student_id'], '');
+  const rawStudentCode = getVal(['รหัสนักเรียน', 'studentCode', 'รหัส', 'student_id'], '');
+  const studentCode = formatStudentCode(rawStudentCode);
   const prefix = getVal(['คำนำหน้า', 'prefix', 'title'], '-');
   const firstName = getVal(['ชื่อ', 'firstName', 'first_name'], '-');
   const lastName = getVal(['นามสกุล', 'lastName', 'last_name'], '-');
@@ -140,8 +142,9 @@ function parsePastedStudentText(rawText: string): RawStudentRow[] {
       return;
     }
 
-    const studentCode = (cells[1] || '').trim();
-    if (!studentCode) return;
+    const rawCode = (cells[1] || '').trim();
+    if (!rawCode) return;
+    const studentCode = formatStudentCode(rawCode);
 
     parsedRows.push({
       seqNo: Number(cells[0]) || parsedRows.length + 1 || idx + 1,
@@ -550,11 +553,38 @@ export const StudentsImportView: React.FC = () => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const [isFormattingShortCodes, setIsFormattingShortCodes] = useState<boolean>(false);
+
+  // ตรวจสอบหารายชื่อนักเรียนที่มีรหัสสั้นกว่า 5 หลัก
+  const shortCodeStudents = useMemo(() => {
+    return students.filter((s) => {
+      const code = s.studentCode.trim();
+      return code && code !== '-' && code.length < 5;
+    });
+  }, [students]);
+
+  // ฟังก์ชันปรับปรุงรหัสนักเรียนที่มีน้อยกว่า 5 หลักทั้งหมดให้มี 5 หลัก (เติม 0 นำหน้า)
+  const handleAutoFormatAllShortCodes = async () => {
+    if (shortCodeStudents.length === 0 || isFormattingShortCodes) return;
+    setIsFormattingShortCodes(true);
+    try {
+      const formatted = shortCodeStudents.map((s) => ({
+        ...s,
+        studentCode: formatStudentCode(s.studentCode),
+      }));
+      await bulkImportStudents(formatted);
+      const oldCodes = shortCodeStudents.map((s) => s.studentCode);
+      await bulkDeleteStudents(oldCodes, 'รหัสนักเรียนเดิมที่สั้นกว่า 5 หลัก');
+    } finally {
+      setIsFormattingShortCodes(false);
+    }
+  };
+
   const handleOpenEditStudentModal = (st: Student) => {
     setEditingOriginalCode(st.studentCode);
     setSingleForm({
       seqNo: Number(st.seqNo) || 1,
-      studentCode: st.studentCode,
+      studentCode: formatStudentCode(st.studentCode),
       prefix: st.prefix && st.prefix !== '-' ? st.prefix : 'นาย',
       firstName: st.firstName && st.firstName !== '-' ? st.firstName : '',
       lastName: st.lastName && st.lastName !== '-' ? st.lastName : '',
@@ -597,10 +627,11 @@ export const StudentsImportView: React.FC = () => {
 
   const handleInlineAddStudentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inlineForm.studentCode.trim() || !inlineForm.firstName.trim()) return;
+    const formattedCode = formatStudentCode(inlineForm.studentCode.trim());
+    if (!formattedCode || !inlineForm.firstName.trim()) return;
     await upsertSingleStudent({
       ...inlineForm,
-      studentCode: inlineForm.studentCode.trim(),
+      studentCode: formattedCode,
       prefix: inlineForm.prefix.trim() || 'นาย',
       firstName: inlineForm.firstName.trim(),
       lastName: inlineForm.lastName.trim() || '-',
@@ -625,8 +656,8 @@ export const StudentsImportView: React.FC = () => {
 
   const handleAddSingleStudentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!singleForm.studentCode.trim() || !singleForm.firstName.trim()) return;
-    const newCode = singleForm.studentCode.trim();
+    const newCode = formatStudentCode(singleForm.studentCode.trim());
+    if (!newCode || !singleForm.firstName.trim()) return;
     if (editingOriginalCode && editingOriginalCode !== newCode) {
       await deleteStudent(editingOriginalCode);
     }
@@ -764,16 +795,25 @@ export const StudentsImportView: React.FC = () => {
 
             <div>
               <label className="block font-bold text-slate-700 mb-1">
-                รหัสนักเรียน <span className="text-red-500">*</span>
+                รหัสนักเรียน (ไม่น้อยกว่า 5 หลัก) <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 required
                 value={inlineForm.studentCode}
                 onChange={(e) => setInlineForm({ ...inlineForm, studentCode: e.target.value })}
-                placeholder="เช่น 66101"
+                onBlur={(e) => {
+                  const val = e.target.value.trim();
+                  if (val && val !== '-' && val.length < 5) {
+                    setInlineForm((prev) => ({ ...prev, studentCode: formatStudentCode(val) }));
+                  }
+                }}
+                placeholder="เช่น 00123"
                 className="w-full min-h-[42px] px-3 py-2 bg-slate-50 focus:bg-white border border-slate-300 focus:border-slate-900 rounded-xl font-mono font-bold focus:outline-none"
               />
+              <p className="text-[11px] text-slate-500 mt-1">
+                หากไม่ครบ 5 หลัก ระบบจะเติม 0 นำหน้าให้อัตโนมัติ (เช่น 123 &rarr; 00123)
+              </p>
             </div>
 
             <div>
@@ -1152,6 +1192,33 @@ export const StudentsImportView: React.FC = () => {
           </div>
         </div>
 
+        {/* แถบแจ้งเตือนและปุ่มปรับปรุงรหัสนักเรียนที่มีไม่ถึง 5 หลัก */}
+        {shortCodeStudents.length > 0 && (
+          <div className="p-4 bg-amber-50 border border-amber-300 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5 text-amber-900 font-semibold">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+              <span>
+                ตรวจพบรายชื่อนักเรียนที่มีรหัสน้อยกว่า 5 หลัก จำนวน{' '}
+                <strong className="font-bold underline">{shortCodeStudents.length} คน</strong>{' '}
+                (ระบบกำหนดให้รหัสนักเรียนมีไม่น้อยกว่า 5 หลัก โดยเติม 0 นำหน้า)
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleAutoFormatAllShortCodes}
+              disabled={isFormattingShortCodes}
+              className="min-h-[40px] px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-xs"
+            >
+              <CheckCircle2 className={`w-4 h-4 ${isFormattingShortCodes ? 'animate-spin' : ''}`} />
+              <span>
+                {isFormattingShortCodes
+                  ? 'กำลังปรับปรุงรหัส...'
+                  : `ปรับปรุงรหัสทั้ง ${shortCodeStudents.length} คนให้ครบ 5 หลักทันที`}
+              </span>
+            </button>
+          </div>
+        )}
+
         {/* แถบเลือกห้องเรียน หรือ เลือกหอพัก + ช่องค้นหา + ปุ่มจัดการรายการที่เลือก */}
         {students.length > 0 && (
           <div className="space-y-4">
@@ -1527,7 +1594,7 @@ export const StudentsImportView: React.FC = () => {
                           <th className="py-3 px-3 w-10 text-center">เลือก</th>
                           <th className="py-3 px-3">ระดับชั้น/ห้อง</th>
                           <th className="py-3 px-3">เลขที่</th>
-                          <th className="py-3 px-3">รหัสนักเรียน</th>
+                          <th className="py-3 px-3">รหัสนักเรียน (5 หลัก)</th>
                           <th className="py-3 px-3">คำนำหน้า</th>
                           <th className="py-3 px-3">ชื่อ</th>
                           <th className="py-3 px-3">นามสกุล</th>
@@ -1560,7 +1627,7 @@ export const StudentsImportView: React.FC = () => {
                               <td className="py-2.5 px-3 text-center">
                                 <input
                                   type="checkbox"
-                                  aria-label={`เลือกนักเรียนรหัส ${st.studentCode}`}
+                                  aria-label={`เลือกนักเรียนรหัส ${formatStudentCode(st.studentCode)}`}
                                   checked={isChecked}
                                   onChange={() => handleToggleSelectOne(st.studentCode)}
                                   className="w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
@@ -1573,7 +1640,7 @@ export const StudentsImportView: React.FC = () => {
                                 {st.seqNo}
                               </td>
                               <td className="py-2.5 px-3 font-mono font-bold text-slate-900 tabular-nums">
-                                {st.studentCode}
+                                {formatStudentCode(st.studentCode)}
                               </td>
                               <td className="py-2.5 px-3 text-slate-700">{st.prefix}</td>
                               <td className="py-2.5 px-3 font-semibold text-slate-900">
@@ -1637,8 +1704,8 @@ export const StudentsImportView: React.FC = () => {
                                   {canCurrentMemberEdit && (
                                     <button
                                       type="button"
-                                      title={`แก้ไขข้อมูลนักเรียนรหัส ${st.studentCode}`}
-                                      aria-label={`แก้ไขข้อมูลนักเรียนรหัส ${st.studentCode}`}
+                                      title={`แก้ไขข้อมูลนักเรียนรหัส ${formatStudentCode(st.studentCode)}`}
+                                      aria-label={`แก้ไขข้อมูลนักเรียนรหัส ${formatStudentCode(st.studentCode)}`}
                                       onClick={() => handleOpenEditStudentModal(st)}
                                       className="min-h-[32px] px-2.5 py-1 inline-flex items-center gap-1 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-900 hover:text-white transition-colors cursor-pointer"
                                     >
@@ -1649,8 +1716,8 @@ export const StudentsImportView: React.FC = () => {
                                   {canCurrentMemberDelete && (
                                     <button
                                       type="button"
-                                      title={`ลบนักเรียนรหัส ${st.studentCode}`}
-                                      aria-label={`ลบนักเรียนรหัส ${st.studentCode}`}
+                                      title={`ลบนักเรียนรหัส ${formatStudentCode(st.studentCode)}`}
+                                      aria-label={`ลบนักเรียนรหัส ${formatStudentCode(st.studentCode)}`}
                                       onClick={() => deleteStudent(st.studentCode)}
                                       className="min-h-[32px] min-w-[32px] inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
                                     >
@@ -1884,7 +1951,7 @@ export const StudentsImportView: React.FC = () => {
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 id="add-student-title" className="text-lg font-bold text-slate-900">
                 {editingOriginalCode
-                  ? `แก้ไขข้อมูลนักเรียนรายบุคคล (รหัส ${editingOriginalCode})`
+                  ? `แก้ไขข้อมูลนักเรียนรายบุคคล (รหัส ${formatStudentCode(editingOriginalCode)})`
                   : 'เพิ่มข้อมูลนักเรียนรายบุคคล'}
               </h3>
               <button
@@ -1912,14 +1979,26 @@ export const StudentsImportView: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">รหัสนักเรียน</label>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  รหัสนักเรียน (ไม่น้อยกว่า 5 หลัก) <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
                   value={singleForm.studentCode}
                   onChange={(e) => setSingleForm({ ...singleForm, studentCode: e.target.value })}
+                  onBlur={(e) => {
+                    const val = e.target.value.trim();
+                    if (val && val !== '-' && val.length < 5) {
+                      setSingleForm((prev) => ({ ...prev, studentCode: formatStudentCode(val) }));
+                    }
+                  }}
+                  placeholder="เช่น 00123"
                   className="w-full min-h-[42px] px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
                 />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  หากไม่ครบ 5 หลัก ระบบจะเติม 0 นำหน้าให้อัตโนมัติ (เช่น 123 &rarr; 00123)
+                </p>
               </div>
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">คำนำหน้า</label>

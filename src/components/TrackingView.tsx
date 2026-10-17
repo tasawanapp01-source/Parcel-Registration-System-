@@ -9,6 +9,7 @@ import {
   Database,
   AlertTriangle,
   Camera,
+  HeartHandshake,
 } from 'lucide-react';
 import { useParcelSystem } from '../context/ParcelSystemContext';
 import { BarcodeCameraScanner, decodeBarcodeFromImageFile } from './BarcodeCameraScanner';
@@ -228,11 +229,15 @@ export const TrackingView: React.FC = () => {
                 selectedStatus === st
                   ? st === 'ติดนิติการ'
                     ? 'bg-red-600 text-white'
+                    : st === 'ติดต่องานพยาบาล'
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold shadow-xs'
                     : st === 'พัสดุไม่ทราบเจ้าของ'
                     ? 'bg-slate-600 text-white'
                     : st === 'ลงทะเบียนรับพัสดุ' || st === 'ส่งมอบสำเร็จ'
                     ? 'bg-emerald-600 text-white'
                     : 'bg-slate-900 text-white'
+                  : st === 'ติดต่องานพยาบาล'
+                  ? 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100'
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
               }`}
             >
@@ -301,6 +306,7 @@ export const TrackingView: React.FC = () => {
               const dormTheme = getDormitoryTheme(parcel.dormitory);
               const isDelivered = parcel.status === 'ส่งมอบสำเร็จ';
               const isLegalHold = parcel.status === 'ติดนิติการ';
+              const isInfirmary = parcel.status === 'ติดต่องานพยาบาล';
               const studentStats = !isUnknownOwnerParcel(parcel)
                 ? getStudentParcelCounts(parcel.studentCode, parcel.studentFullName)
                 : null;
@@ -308,8 +314,13 @@ export const TrackingView: React.FC = () => {
               return (
                 <div
                   key={parcel.id}
+                  style={isLegalHold ? { backgroundColor: '#FEF1F0' } : isInfirmary ? { backgroundColor: '#FFFBEB' } : undefined}
                   className={`p-4 md:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 transition-colors ${
-                    studentStats?.isOverWeeklyLimit
+                    isLegalHold
+                      ? 'bg-[#FEF1F0] hover:bg-[#FEF1F0]/90 border-l-4 border-l-red-500'
+                      : isInfirmary
+                      ? 'bg-amber-50/70 hover:bg-amber-100/70 border-l-4 border-l-amber-500'
+                      : studentStats?.isOverWeeklyLimit
                       ? 'bg-red-50/40 hover:bg-red-50/70'
                       : 'hover:bg-slate-50/70'
                   }`}
@@ -332,6 +343,8 @@ export const TrackingView: React.FC = () => {
                             ? 'text-emerald-700'
                             : isLegalHold
                             ? 'text-red-700'
+                            : isInfirmary
+                            ? 'text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded border border-amber-300 font-extrabold'
                             : parcel.status === 'พัสดุไม่ทราบเจ้าของ'
                             ? 'text-slate-600'
                             : 'text-blue-700'
@@ -438,6 +451,38 @@ export const TrackingView: React.FC = () => {
                       >
                         <CheckCircle2 className="w-4 h-4" />
                         <span>ส่งมอบสำเร็จ</span>
+                      </button>
+                    )}
+
+                    {canCurrentMemberEdit && parcel.status !== 'ติดต่องานพยาบาล' && parcel.status !== 'ส่งมอบสำเร็จ' && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateParcelStatus(
+                            parcel.id,
+                            'ติดต่องานพยาบาล'
+                          )
+                        }
+                        className="min-h-[44px] px-3 py-2 bg-amber-50 hover:bg-amber-500 text-amber-900 hover:text-slate-950 border border-amber-300 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+                      >
+                        <HeartHandshake className="w-4 h-4" />
+                        <span>ติดต่องานพยาบาล</span>
+                      </button>
+                    )}
+
+                    {canCurrentMemberEdit && parcel.status === 'ติดต่องานพยาบาล' && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateParcelStatus(
+                            parcel.id,
+                            'ลงทะเบียนรับพัสดุ'
+                          )
+                        }
+                        className="min-h-[44px] px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        <span>สู่รับพัสดุปกติ</span>
                       </button>
                     )}
 

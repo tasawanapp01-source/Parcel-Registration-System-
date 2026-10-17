@@ -31,6 +31,7 @@ import {
   generateUniqueParentTrackingNumber,
   generateUniqueTrackingNumberForCourier,
   isUnknownOwnerParcel,
+  formatStudentCode,
 } from '../types/parcel';
 
 const INBOUND_STATUS_OPTIONS: {
@@ -45,16 +46,25 @@ const INBOUND_STATUS_OPTIONS: {
   {
     value: 'ลงทะเบียนรับพัสดุ',
     label: 'ลงทะเบียนรับพัสดุ',
-    desc: 'พัสดุปกติ ลงทะเบียนรับเข้าและคัดแยกส่งหอพัก',
+    desc: 'พัสดุปกติ คัดแยกส่งหอพัก',
     activeClass: 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-600/30',
     inactiveClass: 'bg-emerald-50/70 text-emerald-900 border-emerald-200 hover:bg-emerald-100/80 hover:border-emerald-300',
     descActiveClass: 'text-emerald-50',
     descInactiveClass: 'text-emerald-700/80',
   },
   {
+    value: 'ติดต่องานพยาบาล',
+    label: 'ติดต่องานพยาบาล',
+    desc: 'ยารักษาโรค/เวชภัณฑ์',
+    activeClass: 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold border-amber-600 ring-2 ring-amber-400/50 shadow-xs',
+    inactiveClass: 'bg-amber-50/80 text-amber-950 border-amber-300 hover:bg-amber-100 hover:border-amber-400',
+    descActiveClass: 'text-slate-950/90 font-medium',
+    descInactiveClass: 'text-amber-800',
+  },
+  {
     value: 'ติดนิติการ',
     label: 'พัสดุติดนิติการ',
-    desc: 'พัสดุต้องสงสัยหรือผิดระเบียบหอพัก รอตรวจสอบ',
+    desc: 'ต้องสงสัย/ผิดระเบียบ',
     activeClass: 'bg-red-600 text-white border-red-700 ring-2 ring-red-600/30',
     inactiveClass: 'bg-red-50/70 text-red-900 border-red-200 hover:bg-red-100/80 hover:border-red-300',
     descActiveClass: 'text-red-50',
@@ -63,8 +73,8 @@ const INBOUND_STATUS_OPTIONS: {
   {
     value: 'พัสดุไม่ทราบเจ้าของ',
     label: 'พัสดุไม่ทราบเจ้าของ',
-    desc: 'หน้ากล่องไม่ระบุชื่อชัดเจน หรือไม่พบข้อมูลนักเรียนผู้รับ',
-    activeClass: 'bg-slate-600 text-white border-slate-700 ring-2 ring-slate-600/30',
+    desc: 'ไม่ระบุชื่อชัดเจน',
+    activeClass: 'bg-slate-700 text-white border-slate-800 ring-2 ring-slate-600/30',
     inactiveClass: 'bg-slate-100 text-slate-800 border-slate-300 hover:bg-slate-200/80 hover:border-slate-400',
     descActiveClass: 'text-slate-100',
     descInactiveClass: 'text-slate-600',
@@ -230,7 +240,13 @@ export const InboundView: React.FC = () => {
   // ปุ่มกด "ดึงข้อมูลนักเรียน" จากรหัสนักเรียน หรือคำค้นหาชื่อ/นามสกุล/ชื่อเล่น/หอพัก
   const handleFetchStudentData = () => {
     setFormError(null);
-    const codeQuery = studentCodeInput.trim();
+    let rawCode = studentCodeInput.trim();
+    if (rawCode && rawCode !== '-' && rawCode.length < 5) {
+      const padded = formatStudentCode(rawCode);
+      setStudentCodeInput(padded);
+      rawCode = padded;
+    }
+    const codeQuery = rawCode;
     const textQuery = studentSearchQuery.trim().toLowerCase();
 
     const matchStudent = (s: Student, q: string) => {
@@ -240,6 +256,7 @@ export const InboundView: React.FC = () => {
       const nameWithoutPrefix = `${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
       return (
         s.studentCode.toLowerCase().includes(qLower) ||
+        formatStudentCode(s.studentCode).toLowerCase().includes(qLower) ||
         s.firstName.toLowerCase().includes(qLower) ||
         s.lastName.toLowerCase().includes(qLower) ||
         s.nickname.toLowerCase().includes(qLower) ||
@@ -393,12 +410,13 @@ export const InboundView: React.FC = () => {
 
   // บันทึกข้อมูลนักเรียนที่กรอกลงทะเบียนนักเรียนโดยตรง
   const handleSaveStudentOnly = async () => {
-    const code = studentCodeInput.trim();
+    const code = formatStudentCode(studentCodeInput.trim());
     const fullName = studentFullName.trim();
     if (!code || !fullName) {
       setFormError('กรุณากรอกรหัสนักเรียนและชื่อ-นามสกุลก่อนบันทึกลงทะเบียนนักเรียน');
       return;
     }
+    setStudentCodeInput(code);
 
     const nameWithoutPrefix = fullName.replace(/^(นาย|นางสาว|ด\.ช\.|ด\.ญ\.|น\.ส\.)\s*/, '').trim();
     const nameParts = nameWithoutPrefix.split(/\s+/);
@@ -458,7 +476,7 @@ export const InboundView: React.FC = () => {
       }
     }
 
-    const finalStudentCode = studentCodeInput.trim();
+    const finalStudentCode = formatStudentCode(studentCodeInput.trim());
     const finalStudentName = studentFullName.trim();
     if (!finalStudentCode && !finalStudentName && status !== 'พัสดุไม่ทราบเจ้าของ') {
       setFormError('กรุณากรอกข้อมูลนักเรียน หรือดึงข้อมูลนักเรียนในขั้นตอนที่ 2 (หรือเลือกสถานะ "พัสดุไม่ทราบเจ้าของ")');
@@ -772,12 +790,17 @@ export const InboundView: React.FC = () => {
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                 <div className="sm:col-span-5">
-                  <label
-                    htmlFor="student-code-input"
-                    className="block text-xs font-semibold text-slate-700 mb-1"
-                  >
-                    รหัสนักเรียน
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label
+                      htmlFor="student-code-input"
+                      className="block text-xs font-semibold text-slate-700"
+                    >
+                      รหัสนักเรียน <span className="text-slate-500 font-normal">(≥ 5 หลัก)</span>
+                    </label>
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      (เติม 0 ให้อัตโนมัติ)
+                    </span>
+                  </div>
                   <input
                     ref={studentCodeInputRef}
                     id="student-code-input"
@@ -787,13 +810,20 @@ export const InboundView: React.FC = () => {
                       setStudentCodeInput(e.target.value);
                       setFormError(null);
                     }}
+                    onBlur={(e) => {
+                      const val = e.target.value.trim();
+                      if (val && val !== '-' && val.length < 5) {
+                        const padded = formatStudentCode(val);
+                        setStudentCodeInput(padded);
+                      }
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         handleFetchStudentData();
                       }
                     }}
-                    placeholder="กรอกรหัสนักเรียน..."
+                    placeholder="เช่น 123 -> 00123"
                     className="w-full min-h-[46px] px-3.5 py-2 text-sm font-mono font-bold text-slate-900 bg-white border-2 border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none"
                   />
                 </div>
@@ -1196,24 +1226,30 @@ export const InboundView: React.FC = () => {
                 4. เลือกสถานะการคัดแยกพัสดุ
               </span>
               <span className="block text-xs text-slate-500 mt-0.5">
-                เลือกสถานะพัสดุ: ลงทะเบียนรับพัสดุ, พัสดุติดนิติการ หรือ พัสดุไม่ทราบเจ้าของ
+                เลือกสถานะพัสดุ: ลงทะเบียนรับพัสดุ, ติดต่องานพยาบาล, พัสดุติดนิติการ หรือ พัสดุไม่ทราบเจ้าของ
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* ลดขนาดปุ่มสถานะ วาง 4 ปุ่มใน 1 แถวบนจอใหญ่ หรือ 1 แถว 2 ปุ่ม จำนวน 2 แถวบนจอมือถือ/แท็บเล็ต */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-2.5">
               {INBOUND_STATUS_OPTIONS.map((opt) => {
                 const active = status === opt.value;
                 return (
                   <button
                     key={opt.value}
                     type="button"
-                    onClick={() => setStatus(opt.value)}
-                    className={`min-h-[64px] p-4 rounded-xl border-2 text-left transition-colors cursor-pointer ${
+                    onClick={() => {
+                      setStatus(opt.value);
+                      if (opt.value === 'ติดต่องานพยาบาล' && !note) {
+                        setNote('ส่งต่องานพยาบาล');
+                      }
+                    }}
+                    className={`min-h-[48px] sm:min-h-[52px] px-2.5 py-2 sm:px-3 sm:py-2.5 rounded-xl border-2 text-left transition-all cursor-pointer flex flex-col justify-center ${
                       active ? opt.activeClass : opt.inactiveClass
                     }`}
                   >
-                    <div className="font-bold text-sm">{opt.label}</div>
-                    <div className={`text-xs mt-1 ${active ? opt.descActiveClass : opt.descInactiveClass}`}>
+                    <div className="font-bold text-xs sm:text-sm leading-tight truncate">{opt.label}</div>
+                    <div className={`text-[10.5px] sm:text-[11px] mt-0.5 leading-tight truncate ${active ? opt.descActiveClass : opt.descInactiveClass}`}>
                       {opt.desc}
                     </div>
                   </button>
@@ -1222,17 +1258,17 @@ export const InboundView: React.FC = () => {
             </div>
 
             {status === 'ติดนิติการ' && (
-              <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl space-y-2">
+              <div className="p-3 bg-red-50/80 border border-red-200 rounded-xl space-y-1.5">
                 <span className="block text-xs font-bold text-red-900">
-                  กดเลือกสาเหตุที่พัสดุติดนิติการด่วน:
+                  เลือกสาเหตุที่พัสดุติดนิติการด่วน:
                 </span>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {LEGAL_HOLD_REASONS.map((reason) => (
                     <button
                       key={reason}
                       type="button"
                       onClick={() => setNote(reason)}
-                      className="min-h-[38px] px-3 py-1.5 text-xs font-medium bg-white border border-red-300 text-red-900 rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
+                      className="min-h-[34px] px-2.5 py-1 text-xs font-medium bg-white border border-red-300 text-red-900 rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
                     >
                       {reason}
                     </button>
@@ -1241,23 +1277,11 @@ export const InboundView: React.FC = () => {
               </div>
             )}
 
-            <div>
-              <label htmlFor="parcel-note-input" className="block text-xs font-medium text-slate-600 mb-1">
-                หมายเหตุเพิ่มเติม (ถ้ามี)
-              </label>
-              <input
-                id="parcel-note-input"
-                type="text"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="ระบุลักษณะกล่อง หรือหมายเหตุการตรวจสอบ..."
-                className="w-full min-h-[46px] px-4 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-slate-900 focus:outline-none"
-              />
-            </div>
+            {/* ซ่อนกล่องข้อความหมายเหตุตามคำสั่งผู้ใช้ */}
 
             <button
               type="submit"
-              className="w-full min-h-[56px] px-6 py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-base rounded-xl transition-colors flex items-center justify-center gap-2.5 cursor-pointer"
+              className="w-full min-h-[52px] sm:min-h-[56px] px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-base rounded-xl transition-colors flex items-center justify-center gap-2.5 cursor-pointer mt-2"
             >
               <PackagePlus className="w-5 h-5" />
               <span>บันทึกลงทะเบียนพัสดุ</span>
@@ -1514,6 +1538,8 @@ export const InboundView: React.FC = () => {
                                 className={
                                   p.status === 'ติดนิติการ'
                                     ? 'font-bold text-red-700'
+                                    : p.status === 'ติดต่องานพยาบาล'
+                                    ? 'font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-300'
                                     : p.status === 'พัสดุไม่ทราบเจ้าของ'
                                     ? 'font-bold text-slate-600'
                                     : 'font-bold text-emerald-700'

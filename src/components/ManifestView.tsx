@@ -17,6 +17,7 @@ import {
   getRelativeDateString,
   formatThaiSlashDate,
 } from '../types/parcel';
+import { ManifestPrintPreviewModal } from './ManifestPrintPreviewModal';
 
 const THAI_MONTHS = [
   'มกราคม',
@@ -36,8 +37,9 @@ const THAI_MONTHS = [
 const THAI_WEEKDAYS = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
 
 const MANIFEST_STATUS_FILTERS = [
-  { value: 'ALL_REGISTERED', label: 'พัสดุที่ลงทะเบียนแล้ว (รวมติดนิติการ)' },
+  { value: 'ALL_REGISTERED', label: 'พัสดุที่ลงทะเบียนแล้ว (รวมติดนิติการ/งานพยาบาล)' },
   { value: 'UNSIGNED', label: 'พัสดุที่ยังไม่เซ็นรับทั้งหมด' },
+  { value: 'INFIRMARY', label: 'เฉพาะติดต่องานพยาบาล' },
   { value: 'LEGAL_HOLD', label: 'เฉพาะพัสดุติดนิติการ' },
   { value: 'SIGNED', label: 'พัสดุที่เซ็นรับแล้ว' },
   { value: 'ALL', label: 'พัสดุทั้งหมดทุกสถานะ' },
@@ -76,6 +78,7 @@ export const ManifestView: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL_REGISTERED');
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedParcelIds, setSelectedParcelIds] = useState<string[]>([]);
+  const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState<boolean>(false);
 
   // วันที่สำหรับบันทึกการส่งมอบ (Default: วันนี้)
   const todayIso = useMemo(() => getRelativeDateString(0), []);
@@ -132,10 +135,11 @@ export const ManifestView: React.FC = () => {
         if (pDate && pDate !== selectedDate) return false;
       }
 
-      // 3. กรองตามสถานะ: ให้นำพัสดุที่ลงทะเบียนแล้วมาแสดงในตารางได้เลย เพื่อรอพิมพ์ใบนำส่งให้แต่ละหอพัก ให้รวมถึงของที่ติดนิติการ
+      // 3. กรองตามสถานะ: ให้นำพัสดุที่ลงทะเบียนแล้วมาแสดงในตารางได้เลย เพื่อรอพิมพ์ใบนำส่งให้แต่ละหอพัก ให้รวมถึงของที่ติดนิติการ และงานพยาบาล
       if (selectedStatus === 'ALL_REGISTERED') {
         return (
           p.status === 'ลงทะเบียนรับพัสดุ' ||
+          p.status === 'ติดต่องานพยาบาล' ||
           p.status === 'ติดนิติการ' ||
           p.status === 'รอการยืนยัน' ||
           p.status !== 'ส่งมอบสำเร็จ'
@@ -146,6 +150,9 @@ export const ManifestView: React.FC = () => {
       }
       if (selectedStatus === 'SIGNED') {
         return p.status === 'ส่งมอบสำเร็จ';
+      }
+      if (selectedStatus === 'INFIRMARY') {
+        return p.status === 'ติดต่องานพยาบาล';
       }
       if (selectedStatus === 'LEGAL_HOLD') {
         return p.status === 'ติดนิติการ';
@@ -256,7 +263,7 @@ export const ManifestView: React.FC = () => {
   };
 
   const handlePrintManifest = () => {
-    window.print();
+    setIsPrintPreviewOpen(true);
   };
 
   // ยืนยันการรับพัสดุ พร้อมบันทึกวันที่รับตามปฏิทินที่เลือกจากกล่องข้อความ
@@ -386,6 +393,17 @@ export const ManifestView: React.FC = () => {
                 (Printable Manifest)
               </span>
             </h1>
+          </div>
+
+          <div className="flex items-center gap-2.5 shrink-0">
+            <button
+              type="button"
+              onClick={handlePrintManifest}
+              className="min-h-[44px] px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md hover:shadow-lg"
+            >
+              <Printer className="w-4 h-4 text-emerald-400" />
+              <span>พิมพ์ใบรายการ (Print A4)</span>
+            </button>
           </div>
         </div>
 
@@ -783,23 +801,19 @@ export const ManifestView: React.FC = () => {
       {/* ตัวอย่างใบรายการส่งมอบพัสดุ (Printable A4 Document Sheet) */}
       <section
         aria-label="เอกสารใบรายการนำส่งพัสดุสำหรับพิมพ์"
-        className="print-container bg-white border border-slate-300 rounded-2xl p-6 md:p-10 space-y-6"
+        className="print-container bg-white border border-slate-300 rounded-2xl p-5 md:p-8 space-y-5"
       >
-        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 border-b-2 border-slate-900 pb-5">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 border-b-2 border-slate-900 pb-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
-              <FileSpreadsheet className="w-4 h-4" />
-              <span>แบบฟอร์ม พสด.-04 · งานสวัสดิการและหอพักนักเรียน</span>
-            </div>
             <h2 className="text-xl md:text-2xl font-extrabold text-slate-900">
               ใบรายการนำส่งและลงนามรับพัสดุนักเรียนประจำหอพัก
             </h2>
             <p className="text-xs text-slate-600 font-mono tabular-nums">
-              วันที่พิมพ์รายการ: {todayThaiDisplay}
+              วันที่พิมพ์รายการ: {todayThaiDisplay} · รวมทั้งหมด {sortedManifestParcels.length} ชิ้น
             </p>
           </div>
 
-          <div className={`border-2 ${activeTheme.borderClass} ${activeTheme.bgClass} rounded-xl px-4 py-3 text-right shrink-0`}>
+          <div className={`border-2 ${activeTheme.borderClass} ${activeTheme.bgClass} rounded-xl px-4 py-2.5 text-right shrink-0`}>
             <div className="text-xs font-semibold text-slate-600">หอพักปลายทาง / รหัสตะกร้าสี</div>
             <div className={`text-lg font-extrabold ${activeTheme.textClass}`}>
               {selectedDormitory === 'ALL' ? 'ทุกหอพักรวม' : activeTheme.name}
@@ -811,38 +825,38 @@ export const ManifestView: React.FC = () => {
         </div>
 
         {/* ส่วนแสดงข้อมูลรายการนำส่งพัสดุประจำหอพัก */}
-        <div className="bg-slate-50 border border-slate-300 rounded-xl p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        <div className="bg-slate-50 border border-slate-300 rounded-xl p-3.5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
           <div>
-            <span className="text-slate-500 block">หอพักปลายทาง:</span>
+            <span className="text-slate-500 block text-[11px]">หอพักปลายทาง:</span>
             <span className="font-bold text-slate-900 text-sm">
               {selectedDormitory === 'ALL' ? 'ทุกหอพักรวม' : activeTheme.name}
             </span>
           </div>
           <div>
-            <span className="text-slate-500 block">รหัสตะกร้าคัดแยก:</span>
+            <span className="text-slate-500 block text-[11px]">รหัสตะกร้าคัดแยก:</span>
             <span className="font-bold text-slate-900 font-mono text-sm">
               {activeTheme.basketCode} ({activeTheme.colorName})
             </span>
           </div>
           <div>
-            <span className="text-slate-500 block">จำนวนรายการนำส่งทั้งหมด:</span>
+            <span className="text-slate-500 block text-[11px]">จำนวนรายการนำส่งทั้งหมด:</span>
             <span className="font-extrabold text-slate-900 text-sm font-mono tabular-nums">
               {sortedManifestParcels.length} ชิ้น
             </span>
           </div>
           <div>
-            <span className="text-slate-500 block">สถานะการลงนามรับมอบ:</span>
+            <span className="text-slate-500 block text-[11px]">สถานะการลงนามรับมอบ:</span>
             <span className="font-bold text-emerald-800 text-xs font-mono tabular-nums">
               เซ็นรับแล้ว {signedParcelsInView.length} / รอเซ็น {unsignedParcelsInView.length} ชิ้น
             </span>
           </div>
         </div>
 
-        <div className="overflow-x-auto print:overflow-visible">
-          <table className="w-full border-collapse text-left text-xs print:text-[11px] print:w-full">
+        <div className="overflow-x-auto print:overflow-visible w-full">
+          <table className="w-full table-fixed border-collapse text-left text-xs print:text-[10px] print:w-full">
             <thead className="table-header-group border-y-2 border-slate-900 bg-slate-100 text-slate-900 font-bold">
               <tr className="border-y-2 border-slate-900 bg-slate-100 text-slate-900 font-bold">
-                <th className="no-print py-2.5 px-2.5 border border-slate-300 text-center w-12">
+                <th className="no-print py-2 px-1.5 border border-slate-300 text-center w-8">
                   <input
                     type="checkbox"
                     aria-label="เลือกพัสดุทั้งหมดในหน้านี้"
@@ -853,16 +867,17 @@ export const ManifestView: React.FC = () => {
                     className="w-4 h-4 rounded border-slate-400 text-emerald-700 focus:ring-emerald-600 cursor-pointer disabled:opacity-40"
                   />
                 </th>
-                <th className="py-2.5 px-2.5 border border-slate-300 text-center w-10">ลำดับ</th>
-                <th className="py-2.5 px-3 border border-slate-300">เลขพัสดุ (Tracking)</th>
-                <th className="py-2.5 px-2.5 border border-slate-300">รหัส นร.</th>
-                <th className="py-2.5 px-3 border border-slate-300">ชื่อ-นามสกุล (ชื่อเล่น)</th>
-                <th className="py-2.5 px-2.5 border border-slate-300 text-center">ห้อง</th>
-                <th className="py-2.5 px-3 border border-slate-300">ประเภท / หมายเหตุ</th>
-                <th className="py-2.5 px-3 border border-slate-300 w-44 text-center">
-                  ลายมือชื่อนักเรียนผู้รับ
+                <th className="py-2 px-1 border border-slate-300 text-center w-[5%]">ลำดับ</th>
+                <th className="py-2 px-2 border border-slate-300 w-[15%]">เลขพัสดุ / ขนส่ง</th>
+                <th className="py-2 px-1 border border-slate-300 text-center w-[8%]">รหัส นร.</th>
+                <th className="py-2 px-2 border border-slate-300 w-[19%]">
+                  ชื่อ-นามสกุลนักเรียน (ชื่อเล่น · ชั้น)
                 </th>
-                <th className="py-2.5 px-2.5 border border-slate-300 w-28 text-center">
+                <th className="py-2 px-2 border border-slate-300 w-[33%]">ประเภทสิ่งของ</th>
+                <th className="py-2 px-1 border border-slate-300 w-[10%] text-center">
+                  ลายมือชื่อผู้รับ
+                </th>
+                <th className="py-2 px-1 border border-slate-300 w-[10%] text-center">
                   วันที่รับ
                 </th>
               </tr>
@@ -870,29 +885,44 @@ export const ManifestView: React.FC = () => {
             <tbody className="table-row-group">
               {sortedManifestParcels.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center text-slate-500 border border-slate-300">
+                  <td colSpan={8} className="py-10 text-center text-slate-500 border border-slate-300">
                     ไม่มีรายการพัสดุที่ตรงกับตัวกรองในขณะนี้
                   </td>
                 </tr>
               ) : (
                 sortedManifestParcels.map((p, idx) => {
                   const isSigned = p.status === 'ส่งมอบสำเร็จ';
+                  const isLegalHold = p.status === 'ติดนิติการ';
+                  const isInfirmary = p.status === 'ติดต่องานพยาบาล';
                   const isChecked = selectedParcelIds.includes(p.id);
                   const isRowInCurrentPage = idx >= startIndex && idx < endIndex;
                   const recordedThaiDate = isSigned
                     ? formatThaiSlashDate(p.deliveredDate || p.receivedDate || p.updatedAt)
-                    : '..../...../.....';
+                    : '';
 
                   return (
                     <tr
                       key={p.id}
                       onClick={() => handleToggleSelectParcel(p.id)}
-                      className={`border-b border-slate-300 transition-colors cursor-pointer hover:bg-slate-50 break-inside-avoid print:break-inside-avoid ${
-                        isChecked ? 'bg-emerald-50/60' : ''
+                      style={
+                        isLegalHold
+                          ? { backgroundColor: '#FEF1F0' }
+                          : isInfirmary
+                          ? { backgroundColor: '#FFFBEB' }
+                          : undefined
+                      }
+                      className={`border-b transition-colors cursor-pointer break-inside-avoid print:break-inside-avoid ${
+                        isLegalHold
+                          ? 'bg-[#FEF1F0] text-rose-950 font-medium border-rose-300 print:bg-[#FEF1F0]'
+                          : isInfirmary
+                          ? 'bg-amber-50/70 text-amber-950 font-medium border-amber-300 print:bg-amber-50/70'
+                          : isChecked
+                          ? 'bg-emerald-50/60 border-slate-300'
+                          : 'hover:bg-slate-50 border-slate-300'
                       } ${isRowInCurrentPage ? '' : 'hidden print:table-row'}`}
                     >
                       <td
-                        className="no-print py-3 px-2.5 border border-slate-300 text-center"
+                        className="no-print py-2 px-1.5 border border-slate-300 text-center"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <input
@@ -903,66 +933,70 @@ export const ManifestView: React.FC = () => {
                           className="w-4 h-4 rounded border-slate-400 text-emerald-700 focus:ring-emerald-600 cursor-pointer"
                         />
                       </td>
-                      <td className="py-3 px-2.5 border border-slate-300 text-center font-mono tabular-nums">
+                      <td className="py-2 px-1 border border-slate-300 text-center font-mono tabular-nums text-slate-700">
                         {idx + 1}
                       </td>
-                      <td className="py-3 px-3 border border-slate-300">
-                        <div className="font-mono font-bold text-slate-900 tabular-nums">
+                      <td className="py-2 px-2 border border-slate-300 leading-tight">
+                        <div className="font-mono font-bold text-slate-900 tabular-nums truncate">
                           {p.trackingNumber}
                         </div>
-                        <div className="text-[11px] text-slate-500">{p.courier}</div>
+                        <div className="text-[9.5px] text-slate-500 truncate">{p.courier}</div>
                       </td>
-                      <td className="py-3 px-2.5 border border-slate-300 font-mono font-semibold text-slate-900 tabular-nums">
+                      <td className="py-2 px-1 border border-slate-300 text-center font-mono font-semibold text-slate-900 tabular-nums">
                         {p.studentCode}
                       </td>
-                      <td className="py-3 px-3 border border-slate-300">
-                        <div className="font-semibold text-slate-900">
-                          {p.studentFullName} ({p.nickname})
-                        </div>
-                        <div className="text-[11px] text-slate-500">
-                          ชั้น {p.gradeRoom} · {p.dormitory}
-                        </div>
+                      <td className="py-2 px-2 border border-slate-300 font-bold text-slate-900 truncate" title={`${p.studentFullName} ${p.nickname ? `(${p.nickname})` : ''} ชั้น ${p.gradeRoom}`}>
+                        <span>{p.studentFullName}</span>
+                        {p.nickname && <span className="text-slate-600 font-normal ml-1">({p.nickname})</span>}
+                        {p.gradeRoom && <span className="text-slate-500 font-normal text-[10px] ml-1">ชั้น {p.gradeRoom}</span>}
                       </td>
-                      <td className="py-3 px-2.5 border border-slate-300 text-center font-mono font-bold text-slate-900 tabular-nums">
-                        {p.dormRoom}
+                      <td className="py-2 px-2 border border-slate-300 leading-tight">
+                        <div className="font-semibold text-slate-800 truncate">{p.category}</div>
+                        {p.status === 'ติดนิติการ' && (
+                          <div className="text-[9.5px] font-bold text-red-700 leading-tight mt-0.5">
+                            [ติดนิติการ]
+                          </div>
+                        )}
+                        {p.status === 'ติดต่องานพยาบาล' && (
+                          <div className="text-[9.5px] font-bold text-amber-800 leading-tight mt-0.5">
+                            [ติดต่องานพยาบาล]
+                          </div>
+                        )}
+                        {p.note && p.status !== 'ติดนิติการ' && p.status !== 'ติดต่องานพยาบาล' && (
+                          <div className="text-[9.5px] text-slate-500 mt-0.5 truncate max-w-[120px]">
+                            {p.note}
+                          </div>
+                        )}
                       </td>
-                      <td className="py-3 px-3 border border-slate-300">
-                        <div className="font-semibold text-slate-800">{p.category}</div>
-                        <div className="text-[11px] text-slate-600 mt-0.5">
-                          {p.status === 'ติดนิติการ' ? (
-                            <span className="inline-block px-1.5 py-0.5 font-bold text-red-700 bg-red-50 border border-red-300 rounded text-[11px]">
-                              พัสดุติดนิติการ
-                            </span>
-                          ) : (
-                            <span>สถานะ: {p.status} {p.note ? `· ${p.note}` : ''}</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-3 border border-slate-300 text-center text-slate-400">
+                      <td className="py-2 px-1 border border-slate-300 text-center">
                         {isSigned ? (
-                          <div className="flex flex-col items-center justify-center gap-1">
-                            <span className="text-emerald-700 font-semibold">เซ็นรับแล้ว</span>
+                          <div className="flex flex-col items-center justify-center gap-0.5">
+                            <span className="text-emerald-700 font-bold text-[10px] leading-tight">เซ็นรับแล้ว</span>
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleCancelSingleDelivered(p.id);
                               }}
-                              className="no-print px-2 py-0.5 text-[11px] font-semibold text-red-700 bg-red-50 hover:bg-red-600 hover:text-white border border-red-200 rounded-md transition-colors flex items-center gap-1 cursor-pointer"
+                              className="no-print px-1 py-0.5 text-[9px] font-semibold text-red-700 bg-red-50 hover:bg-red-600 hover:text-white border border-red-200 rounded transition-colors flex items-center gap-1 cursor-pointer"
                             >
-                              <RotateCcw className="w-3 h-3" />
-                              <span>ยกเลิกการรับ</span>
+                              <RotateCcw className="w-2.5 h-2.5" />
+                              <span>ยกเลิก</span>
                             </button>
                           </div>
                         ) : (
-                          <span className="inline-block w-full border-b border-dotted border-slate-400 pt-4" />
+                          <div className="w-12 mx-auto pt-2 border-b border-dotted border-slate-400 text-[8px] text-slate-400 text-center">
+                            ลงชื่อ
+                          </div>
                         )}
                       </td>
-                      <td className="py-3 px-2.5 border border-slate-300 text-center font-mono tabular-nums">
+                      <td className="py-2 px-1 border border-slate-300 text-center">
                         {isSigned ? (
-                          <span className="text-emerald-700 font-bold">{recordedThaiDate}</span>
+                          <span className="text-emerald-700 font-bold text-[10px] leading-tight">{recordedThaiDate}</span>
                         ) : (
-                          <span className="text-slate-400">..../...../.....</span>
+                          <div className="w-12 mx-auto pt-2 border-b border-dotted border-slate-400 text-[8px] text-slate-400 text-center">
+                            ว/ด/ป
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -1069,7 +1103,7 @@ export const ManifestView: React.FC = () => {
               พิมพ์ใบรายการนำส่งและเซ็นรับพัสดุประจำหอพัก (Print A4)
             </p>
             <p className="text-slate-500 mt-0.5">
-              ระบบจะพิมพ์รายการพัสดุทั้งหมดครบถ้วนทุกชิ้นโดยอัตโนมัติ (ไม่ตัดแบ่งหน้า) และพิมพ์ซ้ำหัวตารางทุกหน้ากระดาษ
+              แสดงหน้าตัวอย่างการพิมพ์แบบ HTML พร้อมเลือกการพิมพ์แบบแนวตั้งหรือแนวนอน ขนาดกระดาษ A4
             </p>
           </div>
           <button
@@ -1082,6 +1116,20 @@ export const ManifestView: React.FC = () => {
           </button>
         </div>
       </section>
+
+      {/* หน้าต่างตัวอย่างการพิมพ์แบบ HTML (HTML Print Preview Modal with A4 Portrait / Landscape) */}
+      <ManifestPrintPreviewModal
+        isOpen={isPrintPreviewOpen}
+        onClose={() => setIsPrintPreviewOpen(false)}
+        parcels={sortedManifestParcels}
+        dormitory={selectedDormitory}
+        activeTheme={activeTheme}
+        printDateDisplay={todayThaiDisplay}
+        selectedStatusLabel={
+          MANIFEST_STATUS_FILTERS.find((s) => s.value === selectedStatus)?.label || selectedStatus
+        }
+        selectedDate={selectedDate}
+      />
     </div>
   );
 };

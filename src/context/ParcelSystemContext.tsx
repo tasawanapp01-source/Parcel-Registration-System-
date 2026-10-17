@@ -21,6 +21,7 @@ import {
   WEEKLY_PARCEL_WARNING_LIMIT,
   getStudentParcelCountStats,
   buildAllStudentParcelStats,
+  formatStudentCode,
 } from '../types/parcel';
 import {
   auth,
@@ -345,11 +346,16 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return () => unsubscribe();
   }, []);
 
-  // In-Memory Hash Map สำหรับค้นหาข้อมูลนักเรียนทันที
+  // In-Memory Hash Map สำหรับค้นหาข้อมูลนักเรียนทันที (รองรับทั้งรหัสเดิมและรหัสเติม 0 ครบ 5 หลัก)
   const studentMap = useMemo(() => {
     const map = new Map<string, Student>();
     for (const s of students) {
-      map.set(s.studentCode.trim().toLowerCase(), s);
+      const code = s.studentCode.trim().toLowerCase();
+      map.set(code, s);
+      const formatted = formatStudentCode(code).toLowerCase();
+      if (formatted !== code) {
+        map.set(formatted, s);
+      }
     }
     return map;
   }, [students]);
@@ -369,7 +375,9 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
     ): StudentParcelCountStats => {
       const cleanCode = (studentCode || '').trim().toLowerCase();
       if (cleanCode && cleanCode !== 'unknown' && cleanCode !== '-') {
-        const cached = studentParcelStatsMap.get(cleanCode);
+        const cached =
+          studentParcelStatsMap.get(cleanCode) ||
+          studentParcelStatsMap.get(formatStudentCode(cleanCode).toLowerCase());
         if (cached) return cached;
       }
       return getStudentParcelCountStats(parcels, studentCode, studentFullName, studentMeta);
@@ -399,7 +407,8 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
     (code: string): Student | undefined => {
       const clean = code.trim().toLowerCase();
       if (!clean) return undefined;
-      return studentMap.get(clean);
+      const formatted = formatStudentCode(clean).toLowerCase();
+      return studentMap.get(clean) || studentMap.get(formatted);
     },
     [studentMap]
   );
@@ -408,9 +417,11 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
     (keyword: string): Student[] => {
       const clean = keyword.trim().toLowerCase();
       if (!clean) return students;
+      const formatted = formatStudentCode(clean).toLowerCase();
       return students.filter(
         (s) =>
           s.studentCode.toLowerCase().includes(clean) ||
+          (formatted !== clean && s.studentCode.toLowerCase().includes(formatted)) ||
           s.firstName.toLowerCase().includes(clean) ||
           s.lastName.toLowerCase().includes(clean) ||
           s.nickname.toLowerCase().includes(clean) ||
@@ -426,6 +437,7 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const searchParcelsLocal = useCallback(
     (keyword: string, statusFilter = 'ALL', dormFilter = 'ALL', dateFilter = 'ALL'): Parcel[] => {
       const clean = keyword.trim().toLowerCase();
+      const formatted = formatStudentCode(clean).toLowerCase();
       return parcels.filter((p) => {
         if (statusFilter !== 'ALL' && p.status !== statusFilter) return false;
         if (dormFilter !== 'ALL' && p.dormitory !== dormFilter) return false;
@@ -434,6 +446,7 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
         return (
           p.trackingNumber.toLowerCase().includes(clean) ||
           p.studentCode.toLowerCase().includes(clean) ||
+          (formatted !== clean && p.studentCode.toLowerCase().includes(formatted)) ||
           p.studentFullName.toLowerCase().includes(clean) ||
           p.nickname.toLowerCase().includes(clean) ||
           p.dormitory.toLowerCase().includes(clean) ||
@@ -465,8 +478,9 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const addInboundParcel = useCallback(
     async (input: NewParcelInput): Promise<Parcel> => {
       const trackingNumber = input.trackingNumber.trim();
-      const studentCode = input.studentCode.trim();
-      const matchedStudent = lookupStudentByCode(studentCode);
+      const rawCode = input.studentCode.trim();
+      const studentCode = formatStudentCode(rawCode);
+      const matchedStudent = lookupStudentByCode(studentCode) || lookupStudentByCode(rawCode);
       const isUnknown = input.status === 'พัสดุไม่ทราบเจ้าของ';
 
       const studentFullName = isUnknown
@@ -666,8 +680,13 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setSyncProgress({ completed: 0, total: rawStudents.length });
 
       try {
+        const formattedStudents = rawStudents.map((s) => ({
+          ...s,
+          studentCode: formatStudentCode(s.studentCode),
+        }));
+
         const written = await batchImportStudentsToFirestore(
-          rawStudents,
+          formattedStudents,
           AUTO_CLOUD_OWNER_ID,
           (completed, total) => setSyncProgress({ completed, total })
         );
@@ -702,13 +721,17 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const upsertSingleStudent = useCallback(
     async (student: Omit<Student, 'ownerId' | 'createdAt' | 'updatedAt'>): Promise<void> => {
       try {
-        await saveStudentDirectly(student, AUTO_CLOUD_OWNER_ID);
+        const formattedStudent = {
+          ...student,
+          studentCode: formatStudentCode(student.studentCode),
+        };
+        await saveStudentDirectly(formattedStudent, AUTO_CLOUD_OWNER_ID);
         setQuotaMetrics((prev) => ({
           ...prev,
           firestoreWritesUsed: prev.firestoreWritesUsed + 1,
           lastSyncedAt: new Date().toISOString(),
         }));
-        showToast(`บันทึกข้อมูลนักเรียนรหัส ${student.studentCode} ลงฐานข้อมูล Firestore สำเร็จ`, 'success');
+        showToast(`บันทึกข้อมูลนักเรียนรหัส ${formattedStudent.studentCode} ลงฐานข้อมูล Firestore สำเร็จ`, 'success');
       } catch (err) {
         showToast(
           `ไม่สามารถบันทึกข้อมูลนักเรียนลงฐานข้อมูลได้: ${err instanceof Error ? err.message : 'Error'}`,

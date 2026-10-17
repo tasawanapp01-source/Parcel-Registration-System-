@@ -17,6 +17,7 @@ export type ParcelCategory =
 export type ParcelStatus =
   | 'ลงทะเบียนรับพัสดุ'
   | 'รับเข้าส่วนกลาง'
+  | 'ติดต่องานพยาบาล'
   | 'ติดนิติการ'
   | 'พัสดุไม่ทราบเจ้าของ'
   | 'รอการยืนยัน'
@@ -220,6 +221,7 @@ export const PARCEL_CATEGORIES: ParcelCategory[] = [
 
 export const PARCEL_STATUSES: ParcelStatus[] = [
   'ลงทะเบียนรับพัสดุ',
+  'ติดต่องานพยาบาล',
   'ติดนิติการ',
   'พัสดุไม่ทราบเจ้าของ',
   'รอการยืนยัน',
@@ -397,7 +399,24 @@ export function detectCourierFromTracking(tracking: string): string {
 }
 
 /**
+ * จัดรูปแบบรหัสนักเรียน: กำหนดให้รหัสนักเรียนมีจำนวนไม่น้อยกว่า 5 หลัก
+ * หากไม่ครบ 5 หลัก ให้เพิ่ม 0 นำหน้าให้ครบ 5 หลัก (เช่น 123 -> 00123)
+ */
+export function formatStudentCode(rawCode: string | number | undefined | null): string {
+  if (rawCode === undefined || rawCode === null) return '';
+  const trimmed = String(rawCode).trim();
+  if (!trimmed || trimmed === '-' || trimmed.toUpperCase() === 'UNKNOWN') return trimmed;
+
+  // หากความยาวน้อยกว่า 5 หลัก ให้เพิ่ม 0 นำหน้าจนครบ 5 หลัก
+  if (trimmed.length < 5) {
+    return trimmed.padStart(5, '0');
+  }
+  return trimmed;
+}
+
+/**
  * สร้างรหัสพัสดุอัตโนมัติสำหรับกรณี "ผู้ปกครองฝากส่ง" โดยตรวจสอบไม่ให้ซ้ำกับข้อมูลที่มีอยู่ในระบบและฐานข้อมูล
+ * มีการเพิ่มข้อความ "-RD" ต่อท้ายเลขบาร์โค้ดที่สุ่ม
  */
 export function generateUniqueParentTrackingNumber(existingParcels: Parcel[]): string {
   const existingIds = new Set<string>();
@@ -427,7 +446,7 @@ export function generateUniqueParentTrackingNumber(existingParcels: Parcel[]): s
     for (let i = 0; i < 3; i++) {
       randomSuffix += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    candidate = `${prefix}${seqStr}-${randomSuffix}`;
+    candidate = `${prefix}${seqStr}-${randomSuffix}-RD`;
     seq += 1;
   } while (existingIds.has(candidate.toUpperCase()));
 
@@ -436,6 +455,7 @@ export function generateUniqueParentTrackingNumber(existingParcels: Parcel[]): s
 
 /**
  * สร้างรหัสพัสดุอัตโนมัติ/สุ่มเลขพัสดุตามบริษัทขนส่งที่เลือก (ไม่ซ้ำในระบบ)
+ * มีการเพิ่มข้อความ "-RD" ต่อท้ายเลขบาร์โค้ดที่สุ่ม
  * สำหรับกรณีไม่สามารถสแกนหรือยิงบาร์โค้ดได้ แต่ยังคงเลือกบริษัทขนส่งได้
  */
 export function generateUniqueTrackingNumberForCourier(
@@ -478,19 +498,19 @@ export function generateUniqueTrackingNumberForCourier(
   let candidate = '';
   do {
     if (courier === 'Flash Express') {
-      candidate = `TH${datePart}${randDigits(5)}${randChars(1)}`;
+      candidate = `TH${datePart}${randDigits(5)}${randChars(1)}-RD`;
     } else if (courier === 'Kerry Express') {
-      candidate = `KER${datePart}${randDigits(6)}`;
+      candidate = `KER${datePart}${randDigits(6)}-RD`;
     } else if (courier === 'ไปรษณีย์ไทย (EMS)') {
-      candidate = `ED${randDigits(9)}TH`;
+      candidate = `ED${randDigits(9)}TH-RD`;
     } else if (courier === 'J&T Express') {
-      candidate = `JT${datePart}${randDigits(6)}`;
+      candidate = `JT${datePart}${randDigits(6)}-RD`;
     } else if (courier === 'Shopee Xpress (SPX)') {
-      candidate = `SPXTH${datePart}${randDigits(6)}`;
+      candidate = `SPXTH${datePart}${randDigits(6)}-RD`;
     } else if (courier === 'Lex Express') {
-      candidate = `LEX${datePart}${randDigits(6)}`;
+      candidate = `LEX${datePart}${randDigits(6)}-RD`;
     } else {
-      candidate = `PKG-${datePart}-${randDigits(5)}`;
+      candidate = `PKG-${datePart}-${randDigits(5)}-RD`;
     }
   } while (existingIds.has(candidate.toUpperCase()));
 
@@ -702,7 +722,10 @@ export function getStudentParcelCountStats(
     const pHasValidCode = Boolean(pCode && pCode !== 'unknown' && pCode !== '-');
 
     if (hasValidCode && pHasValidCode) {
-      return pCode === lowerCode;
+      return (
+        pCode === lowerCode ||
+        formatStudentCode(pCode).toLowerCase() === formatStudentCode(lowerCode).toLowerCase()
+      );
     }
     if (normTargetName) {
       const pNormName = normalizeStudentNameForMatch(p.studentFullName);
@@ -785,7 +808,12 @@ export function buildAllStudentParcelStats(
     const codeKey = st.studentCode.trim().toLowerCase();
     if (codeKey) {
       byStudentCode.set(codeKey, stats);
+      const formattedKey = formatStudentCode(codeKey).toLowerCase();
+      if (formattedKey !== codeKey) {
+        byStudentCode.set(formattedKey, stats);
+      }
       handledKeys.add(`code:${codeKey}`);
+      handledKeys.add(`code:${formattedKey}`);
     }
     const normName = normalizeStudentNameForMatch(stats.studentFullName);
     if (normName) {

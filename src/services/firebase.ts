@@ -39,6 +39,7 @@ import {
   INITIAL_STUDENTS,
   INITIAL_PARCELS,
   getRelativeDateString,
+  formatStudentCode,
 } from '../types/parcel';
 
 // ค่าคงที่สำหรับบัญชีหลักของระบบที่เชื่อมต่ออัตโนมัติ (Tasawan_app01@pcccr.ac.th)
@@ -155,9 +156,14 @@ export function buildValidParcelPayload(p: Parcel, ownerId: string) {
     ? rawStatus
     : 'ลงทะเบียนรับพัสดุ';
 
+  const safeStudentCode = sanitizeId(
+    p.studentCode === 'UNKNOWN' ? 'UNKNOWN' : formatStudentCode(p.studentCode || 'UNKNOWN'),
+    20
+  );
+
   return {
     trackingNumber: sanitizeId(p.trackingNumber || p.id, 64),
-    studentCode: sanitizeId(p.studentCode || 'UNKNOWN', 20),
+    studentCode: safeStudentCode,
     studentFullName: sanitizeString(p.studentFullName, 1, 220, '-'),
     nickname: sanitizeString(p.nickname, 0, 50, ''),
     gradeRoom: sanitizeString(p.gradeRoom, 1, 50, '-'),
@@ -178,7 +184,7 @@ export function buildValidParcelPayload(p: Parcel, ownerId: string) {
 }
 
 export function buildValidStudentPayload(st: Student, ownerId: string) {
-  const safeCode = sanitizeId(st.studentCode, 20);
+  const safeCode = sanitizeId(formatStudentCode(st.studentCode), 20);
   return {
     studentCode: safeCode,
     seqNo: Math.max(1, Math.min(100000, Math.floor(Number(st.seqNo) || 1))),

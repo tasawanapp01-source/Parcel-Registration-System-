@@ -21,6 +21,7 @@ import {
   Trash2,
   AlertTriangle,
   Users,
+  HeartHandshake,
 } from 'lucide-react';
 import { useParcelSystem } from '../context/ParcelSystemContext';
 import {
@@ -73,6 +74,7 @@ export const DashboardView: React.FC = () => {
     let inboundToday = 0;
     let pendingDelivery = 0;
     let legalHold = 0;
+    let infirmary = 0;
     let delivered = 0;
 
     for (const p of parcels) {
@@ -87,6 +89,9 @@ export const DashboardView: React.FC = () => {
       if (p.status === 'ติดนิติการ') {
         legalHold += 1;
       }
+      if (p.status === 'ติดต่องานพยาบาล') {
+        infirmary += 1;
+      }
     }
 
     const deliveryRate =
@@ -96,6 +101,7 @@ export const DashboardView: React.FC = () => {
       inboundToday,
       pendingDelivery,
       legalHold,
+      infirmary,
       delivered,
       deliveryRate,
     };
@@ -252,8 +258,8 @@ export const DashboardView: React.FC = () => {
         )}
       </div>
 
-      {/* ตัวเลขสรุป KPI 4+1 กล่อง (Tabular Numerals) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* ตัวเลขสรุป KPI รวมสถานะพัสดุ (Tabular Numerals) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-2">
           <span className="text-xs font-semibold text-slate-500">พัสดุรับเข้าวันนี้</span>
           <div className="text-3xl font-mono font-extrabold text-slate-900 tabular-nums">
@@ -271,6 +277,19 @@ export const DashboardView: React.FC = () => {
           </div>
           <p className="text-xs text-slate-500">
             รอการส่งมอบและเซ็นรับพัสดุประจำหอพัก
+          </p>
+        </div>
+
+        <div className="bg-white border border-amber-300 rounded-2xl p-5 space-y-2 bg-gradient-to-b from-amber-50/50 to-white">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-amber-900">พัสดุติดต่องานพยาบาล</span>
+            <HeartHandshake className="w-4 h-4 text-amber-600" />
+          </div>
+          <div className="text-3xl font-mono font-extrabold text-amber-600 tabular-nums">
+            {kpiStats.infirmary}
+          </div>
+          <p className="text-xs text-slate-500">
+            พัสดุยารักษาโรค/เวชภัณฑ์ ส่งงานพยาบาล
           </p>
         </div>
 
