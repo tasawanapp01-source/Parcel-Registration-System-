@@ -81,13 +81,6 @@ const INBOUND_STATUS_OPTIONS: {
   },
 ];
 
-const LEGAL_HOLD_REASONS = [
-  'สงสัยเครื่องใช้ไฟฟ้าทำความร้อน (ผิดระเบียบหอพัก)',
-  'สงสัยอาหารสดเน่าเสียง่าย ต้องเปิดตรวจต่อหน้าครูหอพัก',
-  'กล่องพัสดุชำรุด/มีกลิ่นผิดปกติ',
-  'ไม่ระบุชื่อผู้รับชัดเจน รอตรวจสอบหลักฐานการสั่งซื้อ',
-];
-
 function playScanBeep(): void {
   try {
     const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -1246,9 +1239,6 @@ export const InboundView: React.FC = () => {
                     type="button"
                     onClick={() => {
                       setStatus(opt.value);
-                      if (opt.value === 'ติดต่องานพยาบาล' && !note) {
-                        setNote('ส่งต่องานพยาบาล');
-                      }
                     }}
                     className={`min-h-[48px] sm:min-h-[52px] px-2.5 py-2 sm:px-3 sm:py-2.5 rounded-xl border-2 text-left transition-all cursor-pointer flex flex-col justify-center ${
                       active ? opt.activeClass : opt.inactiveClass
@@ -1262,26 +1252,6 @@ export const InboundView: React.FC = () => {
                 );
               })}
             </div>
-
-            {status === 'ติดนิติการ' && (
-              <div className="p-3 bg-red-50/80 border border-red-200 rounded-xl space-y-1.5">
-                <span className="block text-xs font-bold text-red-900">
-                  เลือกสาเหตุที่พัสดุติดนิติการด่วน:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {LEGAL_HOLD_REASONS.map((reason) => (
-                    <button
-                      key={reason}
-                      type="button"
-                      onClick={() => setNote(reason)}
-                      className="min-h-[34px] px-2.5 py-1 text-xs font-medium bg-white border border-red-300 text-red-900 rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
-                    >
-                      {reason}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* ซ่อนกล่องข้อความหมายเหตุตามคำสั่งผู้ใช้ */}
 
@@ -1577,16 +1547,14 @@ export const InboundView: React.FC = () => {
                                 </span>
                               )}
                             </div>
-                            {p.note && (isLegalHold || isMedicalHold) && (
-                              <div
-                                className={`text-xs font-medium px-2.5 py-1 rounded-lg mt-1 border ${
-                                  isLegalHold
-                                    ? 'bg-red-100/90 text-red-900 border-red-200'
-                                    : 'bg-amber-100/90 text-amber-950 border-amber-200'
-                                }`}
-                              >
-                                {isLegalHold ? 'สาเหตุติดนิติการ: ' : 'หมายเหตุงานพยาบาล: '}
-                                {p.note}
+                            {p.note && p.note !== 'ส่งตรวจห้องนิติการ/ครูหอพักตามระเบียบ' && isLegalHold && (
+                              <div className="text-xs font-medium px-2.5 py-1 rounded-lg mt-1 border bg-red-100/90 text-red-900 border-red-200">
+                                สาเหตุติดนิติการ: {p.note}
+                              </div>
+                            )}
+                            {p.note && p.note !== 'ส่งตรวจห้องนิติการ/ครูหอพักตามระเบียบ' && p.note !== 'ส่งต่องานพยาบาล' && isMedicalHold && (
+                              <div className="text-xs font-medium px-2.5 py-1 rounded-lg mt-1 border bg-amber-100/90 text-amber-950 border-amber-200">
+                                หมายเหตุ: {p.note}
                               </div>
                             )}
                             {pStats && (
