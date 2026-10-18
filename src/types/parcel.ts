@@ -363,8 +363,51 @@ export function getDormitoryTheme(dormName: string): DormitoryTheme {
   };
 }
 
+function extractDormNumber(str: string): number {
+  const thaiDigits = ['๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙'];
+  let s = str;
+  thaiDigits.forEach((td, i) => {
+    s = s.replaceAll(td, String(i));
+  });
+  const m = s.match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : 999999;
+}
+
+/**
+ * ฟังก์ชันเปรียบเทียบและเรียงลำดับชื่อหอพัก:
+ * ให้เรียงหอพักล้านนาขึ้นก่อนจากน้อยไปหามาก (เช่น หอพักล้านนา 1, หอพักล้านนา 2, หอพักล้านนา 3... หอพักล้านนา 10)
+ * และตามด้วยหอพักอื่นๆ เรียงลำดับจากน้อยไปหามากเช่นเดียวกัน
+ */
+export function compareDormitoryNatural(a: string, b: string): number {
+  const normA = (a || '').trim();
+  const normB = (b || '').trim();
+  const aIsLanna = normA.includes('ล้านนา');
+  const bIsLanna = normB.includes('ล้านนา');
+
+  if (aIsLanna && !bIsLanna) return -1;
+  if (!aIsLanna && bIsLanna) return 1;
+
+  if (aIsLanna && bIsLanna) {
+    const numA = extractDormNumber(normA);
+    const numB = extractDormNumber(normB);
+    if (numA !== numB) {
+      return numA - numB;
+    }
+  } else {
+    const numA = extractDormNumber(normA);
+    const numB = extractDormNumber(normB);
+    if (numA !== 999999 && numB !== 999999 && numA !== numB) {
+      return numA - numB;
+    }
+  }
+
+  // เรียงแบบ natural numeric ภาษาไทย เช่น ล้านนา 1 < ล้านนา 2 < ล้านนา 10
+  return normA.localeCompare(normB, 'th', { numeric: true });
+}
+
 /**
  * ดึงรายชื่อหอพักทั้งหมดที่มีอยู่จริงในระบบจากข้อมูลนักเรียนและพัสดุเท่านั้น (ไม่สร้างข้อมูลตัวอย่าง)
+ * เรียงลำดับจากหอพักล้านนา จากน้อยไปหามาก
  */
 export function getAvailableDormitories(students: Student[], parcels: Parcel[]): string[] {
   const set = new Set<string>();
@@ -378,7 +421,7 @@ export function getAvailableDormitories(students: Student[], parcels: Parcel[]):
       set.add(p.dormitory.trim());
     }
   }
-  return Array.from(set);
+  return Array.from(set).sort(compareDormitoryNatural);
 }
 
 /**

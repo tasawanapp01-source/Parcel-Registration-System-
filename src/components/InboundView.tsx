@@ -47,37 +47,37 @@ const INBOUND_STATUS_OPTIONS: {
     value: 'ลงทะเบียนรับพัสดุ',
     label: 'ลงทะเบียนรับพัสดุ',
     desc: 'พัสดุปกติ คัดแยกส่งหอพัก',
-    activeClass: 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-600/30',
-    inactiveClass: 'bg-emerald-50/70 text-emerald-900 border-emerald-200 hover:bg-emerald-100/80 hover:border-emerald-300',
-    descActiveClass: 'text-emerald-50',
-    descInactiveClass: 'text-emerald-700/80',
+    activeClass: 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-500/40 shadow-sm font-bold',
+    inactiveClass: 'bg-slate-100/90 text-slate-400 border-slate-200/90 hover:bg-slate-200/60 hover:text-slate-600 hover:border-slate-300',
+    descActiveClass: 'text-emerald-50 font-normal',
+    descInactiveClass: 'text-slate-400',
   },
   {
     value: 'ติดต่องานพยาบาล',
     label: 'ติดต่องานพยาบาล',
     desc: 'ยารักษาโรค/เวชภัณฑ์',
-    activeClass: 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold border-amber-600 ring-2 ring-amber-400/50 shadow-xs',
-    inactiveClass: 'bg-amber-50/80 text-amber-950 border-amber-300 hover:bg-amber-100 hover:border-amber-400',
+    activeClass: 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold border-amber-600 ring-2 ring-amber-400/50 shadow-sm',
+    inactiveClass: 'bg-slate-100/90 text-slate-400 border-slate-200/90 hover:bg-slate-200/60 hover:text-slate-600 hover:border-slate-300',
     descActiveClass: 'text-slate-950/90 font-medium',
-    descInactiveClass: 'text-amber-800',
+    descInactiveClass: 'text-slate-400',
   },
   {
     value: 'ติดนิติการ',
     label: 'พัสดุติดนิติการ',
     desc: 'ต้องสงสัย/ผิดระเบียบ',
-    activeClass: 'bg-red-600 text-white border-red-700 ring-2 ring-red-600/30',
-    inactiveClass: 'bg-red-50/70 text-red-900 border-red-200 hover:bg-red-100/80 hover:border-red-300',
-    descActiveClass: 'text-red-50',
-    descInactiveClass: 'text-red-700/80',
+    activeClass: 'bg-red-600 text-white border-red-700 ring-2 ring-red-600/40 shadow-sm font-bold',
+    inactiveClass: 'bg-slate-100/90 text-slate-400 border-slate-200/90 hover:bg-slate-200/60 hover:text-slate-600 hover:border-slate-300',
+    descActiveClass: 'text-red-50 font-normal',
+    descInactiveClass: 'text-slate-400',
   },
   {
     value: 'พัสดุไม่ทราบเจ้าของ',
     label: 'พัสดุไม่ทราบเจ้าของ',
     desc: 'ไม่ระบุชื่อชัดเจน',
-    activeClass: 'bg-slate-700 text-white border-slate-800 ring-2 ring-slate-600/30',
-    inactiveClass: 'bg-slate-100 text-slate-800 border-slate-300 hover:bg-slate-200/80 hover:border-slate-400',
-    descActiveClass: 'text-slate-100',
-    descInactiveClass: 'text-slate-600',
+    activeClass: 'bg-slate-800 text-white border-slate-900 ring-2 ring-slate-700/40 shadow-sm font-bold',
+    inactiveClass: 'bg-slate-100/90 text-slate-400 border-slate-200/90 hover:bg-slate-200/60 hover:text-slate-600 hover:border-slate-300',
+    descActiveClass: 'text-slate-100 font-normal',
+    descInactiveClass: 'text-slate-400',
   },
 ];
 
@@ -148,8 +148,8 @@ export const InboundView: React.FC = () => {
   const [category, setCategory] = useState<ParcelCategory>('ของใช้ส่วนตัว');
   const [customCategoryDetail, setCustomCategoryDetail] = useState<string>('');
 
-  // 4. สถานะการคัดแยกพัสดุ (2 รายการ: ลงทะเบียนรับพัสดุ, ติดนิติการ(ผิดระเบียบ))
-  const [status, setStatus] = useState<ParcelStatus>('ลงทะเบียนรับพัสดุ');
+  // 4. สถานะการคัดแยกพัสดุ (ตั้งค่าเริ่มต้นเป็น null สีเทาสไตล์ disable เมื่อผู้ใช้คลิกเลือกจึงแสดงสีสรรของปุ่ม)
+  const [status, setStatus] = useState<ParcelStatus | null>(null);
   const [note, setNote] = useState<string>('');
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -496,6 +496,11 @@ export const InboundView: React.FC = () => {
       ? `${category} (${trimmedDetail})`
       : category;
 
+    if (!status) {
+      setFormError('กรุณาเลือกสถานะการคัดแยกพัสดุในขั้นตอนที่ 4 (เช่น ลงทะเบียนรับพัสดุ, ติดต่องานพยาบาล, พัสดุติดนิติการ หรือพัสดุไม่ทราบเจ้าของ)');
+      return;
+    }
+
     const savedParcel = await addInboundParcel({
       trackingNumber: finalTracking,
       studentCode: finalStudentCode || 'UNKNOWN',
@@ -534,6 +539,7 @@ export const InboundView: React.FC = () => {
     setLastScannedCode(null);
     setCustomCategoryDetail('');
     setNote('');
+    setStatus(null); // รีเซ็ตสถานะกลับเป็นค่าเริ่มต้นสีเทาสไตล์ disable
 
     // เมื่อบันทึกให้ เคลียร์กล่องรับข้อมูล รหัสนักเรียน ,ค้นหาด้วยชื่อ / นามสกุล / ชื่อเล่น / หอพัก และข้อมูลผู้รับ
     setStudentCodeInput('');
@@ -1510,8 +1516,20 @@ export const InboundView: React.FC = () => {
                     const pStats = !isUnknownOwnerParcel(p)
                       ? getStudentParcelCounts(p.studentCode, p.studentFullName)
                       : null;
+                    const isLegalHold = p.status === 'ติดนิติการ';
+                    const isMedicalHold = p.status === 'ติดต่องานพยาบาล';
+
                     return (
-                      <div key={p.id} className="py-3.5 first:pt-0 last:pb-0 flex flex-col gap-2">
+                      <div
+                        key={p.id}
+                        className={`rounded-xl transition-all flex flex-col gap-2 ${
+                          isLegalHold
+                            ? 'bg-red-50/90 border-2 border-red-300 p-3.5 my-2 shadow-xs'
+                            : isMedicalHold
+                            ? 'bg-amber-50/90 border-2 border-amber-300 p-3.5 my-2 shadow-xs'
+                            : 'py-3.5 px-2 first:pt-1 last:pb-1 hover:bg-slate-50/80'
+                        }`}
+                      >
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <div className="flex flex-wrap items-center gap-2">
@@ -1534,27 +1552,43 @@ export const InboundView: React.FC = () => {
                                 {pTheme.basketCode} ({p.dormitory} ห้อง {p.dormRoom})
                               </span>
                             </div>
-                            <div className="text-xs text-slate-600 mt-1">
+                            <div className="text-xs text-slate-600 mt-1 flex flex-wrap items-center gap-1.5">
                               <span className="font-semibold text-slate-800">{p.studentFullName}</span>
-                              <span className="mx-1.5 text-slate-300">·</span>
+                              <span className="text-slate-300">·</span>
                               <span className="font-mono">รหัส {formatStudentCode(p.studentCode)}</span>
-                              <span className="mx-1.5 text-slate-300">·</span>
+                              <span className="text-slate-300">·</span>
                               <span className="font-medium text-slate-800">{p.category}</span>
-                              <span className="mx-1.5 text-slate-300">·</span>
-                              <span
-                                className={
-                                  p.status === 'ติดนิติการ'
-                                    ? 'font-bold text-red-700'
-                                    : p.status === 'ติดต่องานพยาบาล'
-                                    ? 'font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-300'
-                                    : p.status === 'พัสดุไม่ทราบเจ้าของ'
-                                    ? 'font-bold text-slate-600'
-                                    : 'font-bold text-emerald-700'
-                                }
-                              >
-                                สถานะ: {p.status === 'ติดนิติการ' ? 'พัสดุติดนิติการ' : p.status}
-                              </span>
+                              <span className="text-slate-300">·</span>
+                              {isLegalHold ? (
+                                <span className="font-bold text-xs text-white bg-red-600 px-2 py-0.5 rounded shadow-xs inline-flex items-center gap-1">
+                                  <span>พัสดุติดนิติการ</span>
+                                </span>
+                              ) : isMedicalHold ? (
+                                <span className="font-bold text-xs text-slate-950 bg-amber-400 px-2 py-0.5 rounded shadow-xs inline-flex items-center gap-1">
+                                  <span>ติดต่องานพยาบาล</span>
+                                </span>
+                              ) : p.status === 'พัสดุไม่ทราบเจ้าของ' ? (
+                                <span className="font-bold text-slate-600">
+                                  สถานะ: {p.status}
+                                </span>
+                              ) : (
+                                <span className="font-bold text-emerald-700">
+                                  สถานะ: {p.status}
+                                </span>
+                              )}
                             </div>
+                            {p.note && (isLegalHold || isMedicalHold) && (
+                              <div
+                                className={`text-xs font-medium px-2.5 py-1 rounded-lg mt-1 border ${
+                                  isLegalHold
+                                    ? 'bg-red-100/90 text-red-900 border-red-200'
+                                    : 'bg-amber-100/90 text-amber-950 border-amber-200'
+                                }`}
+                              >
+                                {isLegalHold ? 'สาเหตุติดนิติการ: ' : 'หมายเหตุงานพยาบาล: '}
+                                {p.note}
+                              </div>
+                            )}
                             {pStats && (
                               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 mt-1 font-mono tabular-nums">
                                 <span>

@@ -25,6 +25,7 @@ import {
   getDormitoryTheme,
   WEEKLY_PARCEL_WARNING_LIMIT,
   formatStudentCode,
+  compareDormitoryNatural,
 } from '../types/parcel';
 
 type RawStudentRow = Omit<Student, 'ownerId' | 'createdAt' | 'updatedAt'>;
@@ -256,7 +257,7 @@ export const StudentsImportView: React.FC = () => {
     }
     return Array.from(map.entries())
       .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => a.name.localeCompare(b.name, 'th', { numeric: true }));
+      .sort((a, b) => compareDormitoryNatural(a.name, b.name));
   }, [students]);
 
   // รีเซ็ตตัวกรองหากห้องเรียนหรือหอพักที่เลือกถูกลบออกไปแล้ว
