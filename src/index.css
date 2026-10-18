@@ -26,15 +26,13 @@
     margin: 6mm 6mm 6mm 6mm;
   }
 
-  /* 1. หน้าการพิมพ์จริง: พื้นหลังทั้งหมดเป็นสีขาวล้วน ไม่ใส่สีพื้นหลัง */
+  /* 1. พื้นหลังหน้ากระดาษและเอกสารภายนอกเป็นสีขาว */
   html, body {
     background-color: #FFFFFF !important;
     background: #FFFFFF !important;
     color: #000000 !important;
     margin: 0 !important;
     padding: 0 !important;
-    -webkit-print-color-adjust: economy !important;
-    print-color-adjust: economy !important;
   }
 
   .no-print,
@@ -70,7 +68,7 @@
     background: #FFFFFF !important;
   }
 
-  /* 2. หน้าการพิมพ์จริง: ไม่ต้องใส่สีตารางและพื้นหลัง (ทุกส่วนของตารางเป็นสีขาว ไม่ใส่สี) */
+  /* 2. ตารางรายการพัสดุ */
   table {
     width: 100% !important;
     max-width: 100% !important;
@@ -82,7 +80,7 @@
     border: 1px solid #000000 !important;
   }
 
-  /* หัวตารางพิมพ์จริง: ไม่ใส่สีพื้นหลัง เป็นสีขาว เส้นขอบคมชัด */
+  /* 3. ใส่สีหัวตาราง */
   thead {
     display: table-header-group !important;
   }
@@ -91,20 +89,22 @@
     page-break-inside: avoid !important;
     border-top: 2px solid #000000 !important;
     border-bottom: 2px solid #000000 !important;
-    background-color: #FFFFFF !important;
-    background: #FFFFFF !important;
+    background-color: #F1F5F9 !important;
+    background: #F1F5F9 !important;
   }
   thead th {
-    background-color: #FFFFFF !important;
-    background: #FFFFFF !important;
+    background-color: #F1F5F9 !important;
+    background: #F1F5F9 !important;
     color: #000000 !important;
     border: 1px solid #334155 !important;
     border-top: 2px solid #000000 !important;
     border-bottom: 2px solid #000000 !important;
     font-weight: 700 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
-  /* เนื้อหาตารางพิมพ์จริง: ไม่ใส่สีพื้นหลัง เป็นสีขาว */
+  /* 4. เนื้อหาตาราง และสีไฮไลท์สถานะแถว */
   tbody {
     display: table-row-group !important;
     background-color: #FFFFFF !important;
@@ -114,24 +114,40 @@
     display: table-row !important;
     break-inside: avoid !important;
     page-break-inside: avoid !important;
-    background-color: #FFFFFF !important;
-    background: #FFFFFF !important;
   }
-  tbody tr td,
-  tbody tr.print-highlight-legal,
-  tbody tr.print-highlight-legal td,
-  tbody tr.print-highlight-infirmary,
-  tbody tr.print-highlight-infirmary td {
+  /* แถวปกติพื้นหลังสีขาว */
+  tbody tr:not(.print-highlight-legal):not(.print-highlight-infirmary),
+  tbody tr:not(.print-highlight-legal):not(.print-highlight-infirmary) td {
     background-color: #FFFFFF !important;
     background: #FFFFFF !important;
     color: #000000 !important;
     border: 1px solid #64748B !important;
   }
+  /* สีไฮไลท์สถานะแถว: ติดนิติการ */
+  tbody tr.print-highlight-legal,
+  tbody tr.print-highlight-legal td {
+    background-color: #FEF1F0 !important;
+    background: #FEF1F0 !important;
+    color: #000000 !important;
+    border: 1px solid #64748B !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  /* สีไฮไลท์สถานะแถว: ติดต่องานพยาบาล */
+  tbody tr.print-highlight-infirmary,
+  tbody tr.print-highlight-infirmary td {
+    background-color: #FFFBEB !important;
+    background: #FFFBEB !important;
+    color: #000000 !important;
+    border: 1px solid #64748B !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
 
-  /* ป้ายตะกร้าหอพัก: ไม่ใส่สีพื้นหลัง เป็นสีขาว */
+  /* 5. ใส่สีตะกร้าหอพัก */
   .dorm-basket-badge,
   .dorm-basket-badge * {
-    background-color: #FFFFFF !important;
-    background: #FFFFFF !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }

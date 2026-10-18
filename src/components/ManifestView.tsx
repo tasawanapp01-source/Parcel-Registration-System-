@@ -826,7 +826,7 @@ export const ManifestView: React.FC = () => {
           </div>
 
           <div
-            className={`border-2 ${activeTheme.borderClass} bg-white rounded-xl px-4 py-2.5 text-right shrink-0 shadow-2xs`}
+            className={`border-2 ${activeTheme.borderClass} ${activeTheme.bgClass} rounded-xl px-4 py-2.5 text-right shrink-0 shadow-2xs`}
             style={{ borderColor: activeTheme.hexColor || undefined }}
           >
             <div className="text-xs font-semibold text-slate-600">หอพักปลายทาง / รหัสตะกร้าสี</div>
@@ -875,9 +875,9 @@ export const ManifestView: React.FC = () => {
 
         <div className="overflow-x-auto print:overflow-visible w-full">
           <table className="w-full table-fixed border-collapse text-left text-xs bg-white border border-slate-400">
-            <thead className="table-header-group border-y-2 border-slate-900 bg-white text-slate-900 font-bold">
-              <tr className="border-y-2 border-slate-900 bg-white text-slate-900 font-bold">
-                <th className="no-print py-2.5 px-1.5 border border-slate-400 text-center align-middle w-8 bg-white">
+            <thead className="table-header-group border-y-2 border-slate-900 bg-slate-100 text-slate-900 font-bold">
+              <tr className="border-y-2 border-slate-900 bg-slate-100 text-slate-900 font-bold">
+                <th className="no-print py-2.5 px-1.5 border border-slate-400 text-center align-middle w-8 bg-slate-100">
                   <input
                     type="checkbox"
                     aria-label="เลือกพัสดุทั้งหมดในหน้านี้"
@@ -888,17 +888,17 @@ export const ManifestView: React.FC = () => {
                     className="w-4 h-4 rounded border-slate-400 text-emerald-700 focus:ring-emerald-600 cursor-pointer disabled:opacity-40"
                   />
                 </th>
-                <th className="py-2.5 px-1 border border-slate-400 text-center align-middle w-[5%] bg-white font-bold text-slate-900">ลำดับ</th>
-                <th className="py-2.5 px-2 border border-slate-400 text-left align-middle w-[15%] bg-white font-bold text-slate-900">เลขพัสดุ / ขนส่ง</th>
-                <th className="py-2.5 px-1 border border-slate-400 text-center align-middle w-[8%] bg-white font-bold text-slate-900">รหัส นร.</th>
-                <th className="py-2.5 px-2 border border-slate-400 text-left align-middle w-[19%] bg-white font-bold text-slate-900">
+                <th className="py-2.5 px-1 border border-slate-400 text-center align-middle w-[5%] bg-slate-100 font-bold text-slate-900">ลำดับ</th>
+                <th className="py-2.5 px-2 border border-slate-400 text-left align-middle w-[15%] bg-slate-100 font-bold text-slate-900">เลขพัสดุ / ขนส่ง</th>
+                <th className="py-2.5 px-1 border border-slate-400 text-center align-middle w-[8%] bg-slate-100 font-bold text-slate-900">รหัส นร.</th>
+                <th className="py-2.5 px-2 border border-slate-400 text-left align-middle w-[19%] bg-slate-100 font-bold text-slate-900">
                   ชื่อ-นามสกุลนักเรียน (ชื่อเล่น · ชั้น)
                 </th>
-                <th className="py-2.5 px-2 border border-slate-400 text-left align-middle w-[33%] bg-white font-bold text-slate-900">ประเภทสิ่งของ</th>
-                <th className="py-2.5 px-1 border border-slate-400 text-center align-middle w-[10%] bg-white font-bold text-slate-900">
+                <th className="py-2.5 px-2 border border-slate-400 text-left align-middle w-[33%] bg-slate-100 font-bold text-slate-900">ประเภทสิ่งของ</th>
+                <th className="py-2.5 px-1 border border-slate-400 text-center align-middle w-[10%] bg-slate-100 font-bold text-slate-900">
                   ลายมือชื่อผู้รับ
                 </th>
-                <th className="py-2.5 px-1 border border-slate-400 text-center align-middle w-[10%] bg-white font-bold text-slate-900">
+                <th className="py-2.5 px-1 border border-slate-400 text-center align-middle w-[10%] bg-slate-100 font-bold text-slate-900">
                   วันที่รับ
                 </th>
               </tr>
