@@ -29,6 +29,7 @@ import {
   getAvailableDormitories,
   getRelativeDateString,
   WEEKLY_PARCEL_WARNING_LIMIT,
+  formatStudentCode,
 } from '../types/parcel';
 
 ChartJS.register(
@@ -483,7 +484,7 @@ export const DashboardView: React.FC = () => {
                       }`}
                     >
                       <td className="py-2.5 px-4 font-mono font-bold text-slate-900 tabular-nums">
-                        {st.studentCode}
+                        {formatStudentCode(st.studentCode)}
                       </td>
                       <td className="py-2.5 px-4 font-semibold text-slate-900">
                         {st.studentFullName}{' '}

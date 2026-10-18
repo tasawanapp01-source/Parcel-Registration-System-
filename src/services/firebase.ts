@@ -598,7 +598,7 @@ function formatFirestoreTimestamp(val: unknown): string {
 
 function mapDocToStudent(docId: string, d: Record<string, unknown>, fallbackOwnerId: string): Student {
   return {
-    studentCode: String(d.studentCode || docId),
+    studentCode: formatStudentCode(String(d.studentCode || docId)),
     seqNo: Number(d.seqNo || 1),
     prefix: String(d.prefix || ''),
     firstName: String(d.firstName || ''),
@@ -616,10 +616,11 @@ function mapDocToStudent(docId: string, d: Record<string, unknown>, fallbackOwne
 }
 
 function mapDocToParcel(docId: string, d: Record<string, unknown>, fallbackOwnerId: string): Parcel {
+  const rawCode = String(d.studentCode || '');
   return {
     id: docId,
     trackingNumber: String(d.trackingNumber || docId),
-    studentCode: String(d.studentCode || ''),
+    studentCode: rawCode === 'UNKNOWN' ? 'UNKNOWN' : formatStudentCode(rawCode),
     studentFullName: String(d.studentFullName || ''),
     nickname: String(d.nickname || ''),
     gradeRoom: String(d.gradeRoom || ''),

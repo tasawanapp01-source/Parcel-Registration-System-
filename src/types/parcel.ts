@@ -404,10 +404,15 @@ export function detectCourierFromTracking(tracking: string): string {
  */
 export function formatStudentCode(rawCode: string | number | undefined | null): string {
   if (rawCode === undefined || rawCode === null) return '';
-  const trimmed = String(rawCode).trim();
+  let trimmed = String(rawCode).trim();
   if (!trimmed || trimmed === '-' || trimmed.toUpperCase() === 'UNKNOWN') return trimmed;
 
-  // หากความยาวน้อยกว่า 5 หลัก ให้เพิ่ม 0 นำหน้าจนครบ 5 หลัก
+  // หากเป็นตัวเลขทศนิยมที่อ่านมาจากไฟล์ Excel เช่น "12345.0"
+  if (/^\d+\.0+$/.test(trimmed)) {
+    trimmed = trimmed.split('.')[0];
+  }
+
+  // หากความยาวน้อยกว่า 5 หลัก ให้เพิ่ม 0 นำหน้าจนครบ 5 หลัก (เช่น 123 -> 00123)
   if (trimmed.length < 5) {
     return trimmed.padStart(5, '0');
   }

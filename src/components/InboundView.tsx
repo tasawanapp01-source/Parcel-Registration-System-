@@ -892,7 +892,7 @@ export const InboundView: React.FC = () => {
                               : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
                           }`}
                         >
-                          <span className="font-mono font-bold">{st.studentCode}</span>
+                          <span className="font-mono font-bold">{formatStudentCode(st.studentCode)}</span>
                           <span>·</span>
                           <span>
                             {st.firstName} {st.lastName && st.lastName !== '-' ? st.lastName : ''} {st.nickname && st.nickname !== '-' ? `(${st.nickname})` : ''}
@@ -973,7 +973,7 @@ export const InboundView: React.FC = () => {
                       </span>
                       {(studentCodeInput.trim() || matchedStudent?.studentCode) && (
                         <span className="font-mono text-xs font-semibold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
-                          รหัส: {studentCodeInput.trim() || matchedStudent?.studentCode}
+                          รหัส: {formatStudentCode(studentCodeInput.trim() || matchedStudent?.studentCode)}
                         </span>
                       )}
                     </div>
@@ -1325,7 +1325,7 @@ export const InboundView: React.FC = () => {
                     )}
                   </div>
                   <div className="text-xs text-slate-600 mt-1 font-mono tabular-nums">
-                    รหัสนักเรียน: {studentCodeInput.trim() || matchedStudent?.studentCode || '-'} · ชั้น{' '}
+                    รหัสนักเรียน: {formatStudentCode(studentCodeInput.trim() || matchedStudent?.studentCode) || '-'} · ชั้น{' '}
                     {studentGradeRoom.trim() ||
                       (matchedStudent ? `${matchedStudent.grade}/${matchedStudent.room}` : '-')}
                   </div>
@@ -1519,7 +1519,14 @@ export const InboundView: React.FC = () => {
                                 className="w-3 h-3 rounded-sm shrink-0"
                                 style={{ backgroundColor: pTheme.hexColor }}
                               />
-                              <span className="font-mono font-bold text-sm text-slate-900 tabular-nums">
+                              <span
+                                style={p.trackingNumber?.toUpperCase().endsWith('-RD') ? { color: '#DC2626' } : undefined}
+                                className={`font-mono font-bold text-sm tabular-nums ${
+                                  p.trackingNumber?.toUpperCase().endsWith('-RD')
+                                    ? 'text-red-600 font-extrabold'
+                                    : 'text-slate-900'
+                                }`}
+                              >
                                 {p.trackingNumber}
                               </span>
                               <span className="text-slate-300">·</span>
@@ -1530,7 +1537,7 @@ export const InboundView: React.FC = () => {
                             <div className="text-xs text-slate-600 mt-1">
                               <span className="font-semibold text-slate-800">{p.studentFullName}</span>
                               <span className="mx-1.5 text-slate-300">·</span>
-                              <span className="font-mono">รหัส {p.studentCode}</span>
+                              <span className="font-mono">รหัส {formatStudentCode(p.studentCode)}</span>
                               <span className="mx-1.5 text-slate-300">·</span>
                               <span className="font-medium text-slate-800">{p.category}</span>
                               <span className="mx-1.5 text-slate-300">·</span>

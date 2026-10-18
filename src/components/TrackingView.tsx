@@ -20,6 +20,7 @@ import {
   formatThaiSlashDate,
   isUnknownOwnerParcel,
   WEEKLY_PARCEL_WARNING_LIMIT,
+  formatStudentCode,
 } from '../types/parcel';
 
 export const TrackingView: React.FC = () => {
@@ -331,7 +332,14 @@ export const TrackingView: React.FC = () => {
                         className="w-3.5 h-3.5 rounded-sm shrink-0"
                         style={{ backgroundColor: dormTheme.hexColor }}
                       />
-                      <span className="font-mono font-bold text-base text-slate-900 tabular-nums">
+                      <span
+                        style={parcel.trackingNumber?.toUpperCase().endsWith('-RD') ? { color: '#DC2626' } : undefined}
+                        className={`font-mono font-bold text-base tabular-nums ${
+                          parcel.trackingNumber?.toUpperCase().endsWith('-RD')
+                            ? 'text-red-600 font-extrabold'
+                            : 'text-slate-900'
+                        }`}
+                      >
                         {parcel.trackingNumber}
                       </span>
                       <span className="text-slate-300">·</span>
@@ -359,7 +367,7 @@ export const TrackingView: React.FC = () => {
                       <span className="font-normal text-slate-600">({parcel.nickname})</span>
                       <span className="mx-2 text-slate-300 font-normal">·</span>
                       <span className="font-mono text-xs font-semibold text-slate-700 tabular-nums">
-                        รหัส {parcel.studentCode}
+                        รหัส {formatStudentCode(parcel.studentCode)}
                       </span>
                       <span className="mx-2 text-slate-300 font-normal">·</span>
                       <span className="text-xs font-normal text-slate-600">ชั้น {parcel.gradeRoom}</span>

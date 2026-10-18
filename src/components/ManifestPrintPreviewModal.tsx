@@ -6,7 +6,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { Parcel, DormitoryTheme, formatThaiSlashDate } from '../types/parcel';
+import { Parcel, DormitoryTheme, formatThaiSlashDate, formatStudentCode } from '../types/parcel';
 
 export type PrintOrientation = 'portrait' | 'landscape';
 export type RowDensity = 'normal' | 'compact';
@@ -76,7 +76,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="หน้าตัวอย่างการพิมพ์แบบ HTML ขนาด A4"
+      aria-label="ตัวอย่างการพิมพ์ใบนำส่งหอพัก"
       className="fixed inset-0 z-50 flex flex-col bg-white modal-print-wrapper overflow-hidden"
     >
       {/* Dynamic @page CSS rule and repeating table header rule for multi-page printouts */}
@@ -163,6 +163,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             border-top: 2px solid #000000 !important;
             border-bottom: 2px solid #000000 !important;
             font-weight: 700 !important;
+            text-align: center !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
@@ -212,6 +213,13 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
+
+          /* 6. สีแดงสำหรับเลขพัสดุ (Tracking) ที่ลงท้ายด้วย -RD */
+          .print-rd-tracking {
+            color: #DC2626 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
         }
       `}</style>
 
@@ -227,7 +235,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight truncate">
-                    ตัวอย่างการพิมพ์ใบนำส่งหอพัก (HTML Print Preview A4)
+                    ตัวอย่างการพิมพ์ใบนำส่งหอพัก
                   </h2>
                   <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
                     A4 {isLandscape ? 'แนวนอน' : 'แนวตั้ง'}
@@ -436,14 +444,14 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                 <thead className="table-header-group border-y-2 border-slate-900 bg-slate-100 text-slate-900 font-bold text-[10.5px]">
                   <tr className="border-y-2 border-slate-900 bg-slate-100">
                     <th className="py-2 px-1 border border-slate-400 text-center align-middle w-[4%] bg-slate-100 font-bold text-slate-900">ลำดับ</th>
-                    <th className="py-2 px-2 border border-slate-400 text-left align-middle w-[18%] bg-slate-100 font-bold text-slate-900">เลขพัสดุ (Tracking)</th>
-                    <th className="py-2 px-2 border border-slate-400 text-left align-middle w-[11%] bg-slate-100 font-bold text-slate-900">ขนส่ง</th>
+                    <th className="py-2 px-2 border border-slate-400 text-center align-middle w-[18%] bg-slate-100 font-bold text-slate-900">เลขพัสดุ (Tracking)</th>
+                    <th className="py-2 px-2 border border-slate-400 text-center align-middle w-[11%] bg-slate-100 font-bold text-slate-900">ขนส่ง</th>
                     <th className="py-2 px-1 border border-slate-400 text-center align-middle w-[9%] bg-slate-100 font-bold text-slate-900">รหัส นร.</th>
-                    <th className="py-2 px-2 border border-slate-400 text-left align-middle w-[20%] bg-slate-100 font-bold text-slate-900">
-                      ชื่อ-นามสกุลนักเรียน (ชื่อเล่น · ชั้น)
+                    <th className="py-2 px-2 border border-slate-400 text-center align-middle w-[20%] bg-slate-100 font-bold text-slate-900">
+                      ชื่อ-นามสกุลนักเรียน
                     </th>
-                    <th className="py-2 px-2 border border-slate-400 text-left align-middle w-[24%] bg-slate-100 font-bold text-slate-900">ประเภทสิ่งของ</th>
-                    <th className="py-2 px-1.5 border border-slate-400 text-center align-middle w-[7%] bg-slate-100 font-bold text-slate-900">
+                    <th className="py-2 px-2 border border-slate-400 text-center align-middle w-[19%] bg-slate-100 font-bold text-slate-900">ประเภทสิ่งของ</th>
+                    <th className="py-2 px-1.5 border border-slate-400 text-center align-middle w-[12%] bg-slate-100 font-bold text-slate-900">
                       ลายมือชื่อผู้รับ
                     </th>
                     <th className="py-2 px-1.5 border border-slate-400 text-center align-middle w-[7%] bg-slate-100 font-bold text-slate-900">
@@ -463,6 +471,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                       const isSigned = p.status === 'ส่งมอบสำเร็จ';
                       const isLegalHold = p.status === 'ติดนิติการ';
                       const isInfirmary = p.status === 'ติดต่องานพยาบาล';
+                      const isRdCode = p.trackingNumber?.toUpperCase().endsWith('-RD');
                       const cellPy = density === 'compact' ? 'py-1' : 'py-1.5';
                       const recordedDate = isSigned
                         ? formatThaiSlashDate(p.deliveredDate || p.receivedDate || p.updatedAt)
@@ -489,14 +498,19 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                           <td className={`${cellPy} px-1 border border-slate-300 text-center font-mono font-semibold tabular-nums text-slate-700`}>
                             {idx + 1}
                           </td>
-                          <td className={`${cellPy} px-2 border border-slate-300 font-mono font-bold text-slate-900 tabular-nums truncate`}>
+                          <td
+                            style={isRdCode ? { color: '#DC2626' } : undefined}
+                            className={`${cellPy} px-2 border border-slate-300 font-mono font-bold tabular-nums truncate ${
+                              isRdCode ? 'text-red-600 print-rd-tracking font-extrabold' : 'text-slate-900'
+                            }`}
+                          >
                             {p.trackingNumber}
                           </td>
                           <td className={`${cellPy} px-2 border border-slate-300 text-slate-700 truncate`}>
                             {p.courier}
                           </td>
                           <td className={`${cellPy} px-1 border border-slate-300 text-center font-mono font-semibold text-slate-900 tabular-nums`}>
-                            {p.studentCode}
+                            {formatStudentCode(p.studentCode)}
                           </td>
                           {/* ชื่อ-นามสกุลนักเรียนใน 1 บรรทัด ไม่ล้นขอบ */}
                           <td className={`${cellPy} px-2 border border-slate-300 font-bold text-slate-900 truncate`}>
@@ -518,14 +532,14 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                               </div>
                             )}
                           </td>
-                          {/* ลายมือชื่อผู้รับ */}
+                          {/* ลายมือชื่อผู้รับ: ขยายเป็น 12% */}
                           <td className={`${cellPy} px-1 border border-slate-300 text-center`}>
                             {isSigned ? (
                               <div className="text-emerald-700 font-bold text-[9.5px] text-center leading-tight">
                                 เซ็นรับแล้ว
                               </div>
                             ) : (
-                              <div className="w-12 mx-auto pt-2.5 border-b border-dotted border-slate-400 text-[8px] text-slate-400 text-center">
+                              <div className="w-16 mx-auto pt-2.5 border-b border-dotted border-slate-400 text-[8px] text-slate-400 text-center">
                                 ลงชื่อ
                               </div>
                             )}
@@ -554,13 +568,13 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                 <thead className="table-header-group border-y-2 border-slate-900 bg-slate-100 text-slate-900 font-bold text-[10px]">
                   <tr className="border-y-2 border-slate-900 bg-slate-100">
                     <th className="py-2 px-1 border border-slate-400 text-center align-middle w-[5%] bg-slate-100 font-bold text-slate-900">ลำดับ</th>
-                    <th className="py-2 px-2 border border-slate-400 text-left align-middle w-[16%] bg-slate-100 font-bold text-slate-900">เลขพัสดุ / ขนส่ง</th>
+                    <th className="py-2 px-2 border border-slate-400 text-center align-middle w-[16%] bg-slate-100 font-bold text-slate-900">เลขพัสดุ / ขนส่ง</th>
                     <th className="py-2 px-1 border border-slate-400 text-center align-middle w-[9%] bg-slate-100 font-bold text-slate-900">รหัส นร.</th>
-                    <th className="py-2 px-2 border border-slate-400 text-left align-middle w-[21%] bg-slate-100 font-bold text-slate-900">
-                      ชื่อ-นามสกุลนักเรียน (ชื่อเล่น · ชั้น)
+                    <th className="py-2 px-2 border border-slate-400 text-center align-middle w-[21%] bg-slate-100 font-bold text-slate-900">
+                      ชื่อ-นามสกุลนักเรียน
                     </th>
-                    <th className="py-2 px-2 border border-slate-400 text-left align-middle w-[29%] bg-slate-100 font-bold text-slate-900">ประเภทสิ่งของ</th>
-                    <th className="py-2 px-1 border border-slate-400 text-center align-middle w-[10%] bg-slate-100 font-bold text-slate-900">
+                    <th className="py-2 px-2 border border-slate-400 text-center align-middle w-[27%] bg-slate-100 font-bold text-slate-900">ประเภทสิ่งของ</th>
+                    <th className="py-2 px-1 border border-slate-400 text-center align-middle w-[12%] bg-slate-100 font-bold text-slate-900">
                       ลายมือชื่อผู้รับ
                     </th>
                     <th className="py-2 px-1 border border-slate-400 text-center align-middle w-[10%] bg-slate-100 font-bold text-slate-900">
@@ -580,6 +594,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                       const isSigned = p.status === 'ส่งมอบสำเร็จ';
                       const isLegalHold = p.status === 'ติดนิติการ';
                       const isInfirmary = p.status === 'ติดต่องานพยาบาล';
+                      const isRdCode = p.trackingNumber?.toUpperCase().endsWith('-RD');
                       const cellPy = density === 'compact' ? 'py-1' : 'py-1.5';
                       const recordedDate = isSigned
                         ? formatThaiSlashDate(p.deliveredDate || p.receivedDate || p.updatedAt)
@@ -607,13 +622,18 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                             {idx + 1}
                           </td>
                           <td className={`${cellPy} px-2 border border-slate-300 leading-tight`}>
-                            <div className="font-mono font-bold text-slate-900 tabular-nums truncate">
+                            <div
+                              style={isRdCode ? { color: '#DC2626' } : undefined}
+                              className={`font-mono font-bold tabular-nums truncate ${
+                                isRdCode ? 'text-red-600 print-rd-tracking font-extrabold' : 'text-slate-900'
+                              }`}
+                            >
                               {p.trackingNumber}
                             </div>
                             <div className="text-[9px] text-slate-500 truncate">{p.courier}</div>
                           </td>
                           <td className={`${cellPy} px-1 border border-slate-300 text-center font-mono font-semibold text-slate-900 tabular-nums`}>
-                            {p.studentCode}
+                            {formatStudentCode(p.studentCode)}
                           </td>
                           {/* ชื่อ-นามสกุลนักเรียนใน 1 บรรทัด กำหนด truncate เพื่อไม่ให้ดันตารางล้นขอบกระดาษ A4 */}
                           <td className={`${cellPy} px-2 border border-slate-300 font-bold text-slate-900 truncate`} title={`${p.studentFullName} ${p.nickname ? `(${p.nickname})` : ''} ชั้น ${p.gradeRoom}`}>
@@ -621,7 +641,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                             {p.nickname && <span className="text-slate-600 font-normal ml-1">({p.nickname})</span>}
                             {p.gradeRoom && <span className="text-slate-500 font-normal text-[9.5px] ml-1">ชั้น {p.gradeRoom}</span>}
                           </td>
-                          {/* ประเภทสิ่งของ (auto / 32%) พร้อมสถานะติดนิติการ/งานพยาบาลต่อท้ายโดยขึ้นบรรทัดใหม่ */}
+                          {/* ประเภทสิ่งของ พร้อมสถานะติดนิติการ/งานพยาบาลต่อท้ายโดยขึ้นบรรทัดใหม่ */}
                           <td className={`${cellPy} px-2 border border-slate-300 leading-tight`}>
                             <div className="font-semibold text-slate-800 truncate">{p.category}</div>
                             {isLegalHold && (
@@ -635,14 +655,14 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                               </div>
                             )}
                           </td>
-                          {/* ลายมือชื่อผู้รับ: 10% */}
+                          {/* ลายมือชื่อผู้รับ: 12% */}
                           <td className={`${cellPy} px-1 border border-slate-300 text-center`}>
                             {isSigned ? (
                               <div className="text-emerald-700 font-bold text-[9.5px] text-center leading-tight">
                                 เซ็นรับแล้ว
                               </div>
                             ) : (
-                              <div className="w-14 mx-auto pt-2 border-b border-dotted border-slate-400 text-[8px] text-slate-400 text-center">
+                              <div className="w-16 mx-auto pt-2 border-b border-dotted border-slate-400 text-[8px] text-slate-400 text-center">
                                 ลงชื่อ
                               </div>
                             )}

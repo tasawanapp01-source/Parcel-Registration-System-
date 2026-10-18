@@ -17,6 +17,8 @@ import {
   GraduationCap,
   Settings,
   ChevronDown,
+  Boxes,
+  PackageCheck,
 } from 'lucide-react';
 import { ParcelSystemProvider, useParcelSystem } from './context/ParcelSystemContext';
 import { Member, AppMenuKey, APP_MENU_DEFINITIONS } from './types/parcel';
@@ -132,12 +134,15 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
               e.preventDefault();
               if (isMenuAllowed('inbound')) setActiveTab('inbound');
             }}
-            className="text-base md:text-lg font-extrabold tracking-tight text-slate-900 whitespace-nowrap shrink-0 flex items-center gap-2"
+            className="text-base md:text-lg font-extrabold tracking-tight text-slate-900 whitespace-nowrap shrink-0 flex items-center gap-2.5 group"
           >
-            <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
-              SP
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-500 text-white flex items-center justify-center shadow-xs transition-transform group-hover:scale-105">
+              <PackageCheck className="w-4.5 h-4.5" />
             </div>
-            <span>Parcel Registration System</span>
+            <div className="flex items-center gap-1.5">
+              <Boxes className="w-4.5 h-4.5 text-indigo-600 hidden sm:inline-block" />
+              <span>ระบบลงทะเบียนพัสดุ</span>
+            </div>
           </a>
 
           {/* Desktop Nav Links - กรองเฉพาะเมนูที่ผู้ใช้ปัจจุบันได้รับอนุญาต */}

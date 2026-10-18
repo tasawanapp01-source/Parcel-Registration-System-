@@ -16,6 +16,7 @@ import {
   getAvailableDormitories,
   getRelativeDateString,
   formatThaiSlashDate,
+  formatStudentCode,
 } from '../types/parcel';
 import { ManifestPrintPreviewModal } from './ManifestPrintPreviewModal';
 
@@ -889,13 +890,13 @@ export const ManifestView: React.FC = () => {
                   />
                 </th>
                 <th className="py-2.5 px-1 border border-slate-400 text-center align-middle w-[5%] bg-slate-100 font-bold text-slate-900">ลำดับ</th>
-                <th className="py-2.5 px-2 border border-slate-400 text-left align-middle w-[15%] bg-slate-100 font-bold text-slate-900">เลขพัสดุ / ขนส่ง</th>
+                <th className="py-2.5 px-2 border border-slate-400 text-center align-middle w-[15%] bg-slate-100 font-bold text-slate-900">เลขพัสดุ / ขนส่ง</th>
                 <th className="py-2.5 px-1 border border-slate-400 text-center align-middle w-[8%] bg-slate-100 font-bold text-slate-900">รหัส นร.</th>
-                <th className="py-2.5 px-2 border border-slate-400 text-left align-middle w-[19%] bg-slate-100 font-bold text-slate-900">
-                  ชื่อ-นามสกุลนักเรียน (ชื่อเล่น · ชั้น)
+                <th className="py-2.5 px-2 border border-slate-400 text-center align-middle w-[19%] bg-slate-100 font-bold text-slate-900">
+                  ชื่อ-นามสกุลนักเรียน
                 </th>
-                <th className="py-2.5 px-2 border border-slate-400 text-left align-middle w-[33%] bg-slate-100 font-bold text-slate-900">ประเภทสิ่งของ</th>
-                <th className="py-2.5 px-1 border border-slate-400 text-center align-middle w-[10%] bg-slate-100 font-bold text-slate-900">
+                <th className="py-2.5 px-2 border border-slate-400 text-center align-middle w-[31%] bg-slate-100 font-bold text-slate-900">ประเภทสิ่งของ</th>
+                <th className="py-2.5 px-1 border border-slate-400 text-center align-middle w-[12%] bg-slate-100 font-bold text-slate-900">
                   ลายมือชื่อผู้รับ
                 </th>
                 <th className="py-2.5 px-1 border border-slate-400 text-center align-middle w-[10%] bg-slate-100 font-bold text-slate-900">
@@ -958,13 +959,18 @@ export const ManifestView: React.FC = () => {
                         {idx + 1}
                       </td>
                       <td className="py-2 px-2 border border-slate-300 leading-tight">
-                        <div className="font-mono font-bold text-slate-900 tabular-nums truncate">
+                        <div
+                          style={p.trackingNumber?.toUpperCase().endsWith('-RD') ? { color: '#DC2626' } : undefined}
+                          className={`font-mono font-bold tabular-nums truncate ${
+                            p.trackingNumber?.toUpperCase().endsWith('-RD') ? 'text-red-600 font-extrabold' : 'text-slate-900'
+                          }`}
+                        >
                           {p.trackingNumber}
                         </div>
                         <div className="text-[9.5px] text-slate-500 truncate">{p.courier}</div>
                       </td>
                       <td className="py-2 px-1 border border-slate-300 text-center font-mono font-semibold text-slate-900 tabular-nums">
-                        {p.studentCode}
+                        {formatStudentCode(p.studentCode)}
                       </td>
                       <td className="py-2 px-2 border border-slate-300 font-bold text-slate-900 truncate" title={`${p.studentFullName} ${p.nickname ? `(${p.nickname})` : ''} ชั้น ${p.gradeRoom}`}>
                         <span>{p.studentFullName}</span>

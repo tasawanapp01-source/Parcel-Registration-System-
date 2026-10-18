@@ -513,7 +513,7 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const newParcel: Parcel = {
         id: trackingNumber,
         trackingNumber,
-        studentCode: isUnknown ? 'UNKNOWN' : studentCode || 'UNKNOWN',
+        studentCode: isUnknown ? 'UNKNOWN' : formatStudentCode(studentCode) || 'UNKNOWN',
         studentFullName,
         nickname,
         gradeRoom,
