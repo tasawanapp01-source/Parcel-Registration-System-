@@ -151,12 +151,22 @@ export const InboundView: React.FC = () => {
   const [status, setStatus] = useState<ParcelStatus | null>(null);
   const [note, setNote] = useState<string>('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
 
   // 5. ตัวกรองเลือกแสดงตามวันที่รับเข้า หอพัก และตัวแบ่งหน้าสำหรับรายการพัสดุที่รับเข้าล่าสุด
   const [recentDateFilter, setRecentDateFilter] = useState<string>(() => getRelativeDateString(0));
   const [recentDormFilter, setRecentDormFilter] = useState<string>('ALL');
   const [recentPage, setRecentPage] = useState<number>(1);
   const [recentPageSize, setRecentPageSize] = useState<string>('10');
+
+  // ล้างข้อความแจ้งเตือนบันทึกสำเร็จอัตโนมัติ
+  useEffect(() => {
+    if (!saveSuccessMessage) return;
+    const timer = setTimeout(() => {
+      setSaveSuccessMessage(null);
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [saveSuccessMessage]);
 
   // สถานะกล้องสแกนบาร์โค้ด
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
@@ -466,6 +476,43 @@ export const InboundView: React.FC = () => {
     });
   };
 
+  // ตรวจสอบความถูกต้องและครบถ้วนของข้อมูลในฟอร์มลงทะเบียนพัสดุทุกขั้นตอน
+  const isTrackingValid = trackingNumber.trim().length > 0;
+
+  const isDuplicateTracking = useMemo(() => {
+    if (!trackingNumber.trim() || courier === 'ผู้ปกครองฝากส่ง') return false;
+    const tn = trackingNumber.trim().toUpperCase();
+    return parcels.some((p) => p.id.toUpperCase() === tn || p.trackingNumber.toUpperCase() === tn);
+  }, [trackingNumber, courier, parcels]);
+
+  const isStudentValid = useMemo(() => {
+    // กรณีเลือกสถานะ 'พัสดุไม่ทราบเจ้าของ' ไม่จำเป็นต้องระบุข้อมูลนักเรียน
+    if (status === 'พัสดุไม่ทราบเจ้าของ') return true;
+    const hasName = Boolean(
+      studentFullName.trim() ||
+      (matchedStudent && `${matchedStudent.prefix || ''}${matchedStudent.firstName}`.trim())
+    );
+    const hasCode = Boolean(studentCodeInput.trim() || matchedStudent?.studentCode);
+    const hasDorm = Boolean(
+      studentDormitory.trim() ||
+      (matchedStudent?.dormitory && matchedStudent.dormitory !== '-')
+    );
+    return hasName && hasCode && hasDorm;
+  }, [status, studentFullName, studentCodeInput, studentDormitory, matchedStudent]);
+
+  const isCategoryValid = useMemo(() => {
+    if (!category) return false;
+    if (category === 'อื่นๆ') {
+      return customCategoryDetail.trim().length > 0;
+    }
+    return true;
+  }, [category, customCategoryDetail]);
+
+  const isStatusValid = status !== null;
+
+  const isFormComplete =
+    isTrackingValid && !isDuplicateTracking && isStudentValid && isCategoryValid && isStatusValid;
+
   const handleSubmitInbound = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -549,18 +596,20 @@ export const InboundView: React.FC = () => {
       },
     });
 
-    if (courier === 'ผู้ปกครองฝากส่ง') {
-      const nextParentTracking = generateUniqueParentTrackingNumber([savedParcel, ...parcels]);
-      setTrackingNumber(nextParentTracking);
-    } else {
-      setTrackingNumber('');
-    }
+    setSaveSuccessMessage(
+      `บันทึกลงทะเบียนพัสดุสำเร็จ: ${savedParcel.trackingNumber} (${savedParcel.studentFullName || 'ไม่ทราบเจ้าของ'}) หอพัก: ${savedParcel.dormitory || '-'}`
+    );
+
+    // เมื่อบันทึกแล้วให้ล้างฟอร์มทั้งหมด และ disable ปุ่มบันทึกลงทะเบียนพัสดุทันที
+    setTrackingNumber('');
     setLastScannedCode(null);
+    setCourier('Flash Express');
+    setCategory('ของใช้ส่วนตัว');
     setCustomCategoryDetail('');
     setNote('');
-    setStatus(null); // รีเซ็ตสถานะกลับเป็นค่าเริ่มต้นสีเทาสไตล์ disable
+    setStatus(null); // รีเซ็ตสถานะกลับเป็น null เพื่อให้ปุ่มบันทึก disable ทันที
 
-    // เมื่อบันทึกให้ เคลียร์กล่องรับข้อมูล รหัสนักเรียน ,ค้นหาด้วยชื่อ / นามสกุล / ชื่อเล่น / หอพัก และข้อมูลผู้รับ
+    // เคลียร์กล่องรับข้อมูล รหัสนักเรียน ค้นหาด้วยชื่อ/นามสกุล/ชื่อเล่น/หอพัก และข้อมูลผู้รับทั้งหมด
     setStudentCodeInput('');
     setStudentSearchQuery('');
     setStudentFullName('');
@@ -570,6 +619,8 @@ export const InboundView: React.FC = () => {
     setStudentDormRoom('');
     setIsManualEditStudentOpen(false);
     lastAutoPopulatedCodeRef.current = '';
+    setStudentFetchFeedback(null);
+    setFormError(null);
 
     if (trackingInputRef.current) {
       trackingInputRef.current.focus();
@@ -645,6 +696,22 @@ export const InboundView: React.FC = () => {
           </h1>
         </div>
       </div>
+
+      {saveSuccessMessage && (
+        <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-xl text-xs font-semibold text-emerald-900 flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span>{saveSuccessMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSaveSuccessMessage(null)}
+            className="text-emerald-700 hover:text-emerald-950 p-1"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {formError && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-xs font-semibold text-red-800 flex items-center justify-between gap-3">
@@ -1290,13 +1357,105 @@ export const InboundView: React.FC = () => {
 
             {/* ซ่อนกล่องข้อความหมายเหตุตามคำสั่งผู้ใช้ */}
 
-            <button
-              type="submit"
-              className="w-full min-h-[52px] sm:min-h-[56px] px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-base rounded-xl transition-colors flex items-center justify-center gap-2.5 cursor-pointer mt-2"
-            >
-              <PackagePlus className="w-5 h-5" />
-              <span>บันทึกลงทะเบียนพัสดุ</span>
-            </button>
+            {/* ปุ่มบันทึกลงทะเบียนพัสดุ: ปิดใช้งาน (disable) ก่อน จนกว่าจะกรอกและเลือกข้อมูลครบทุกช่องจึงแสดงปุ่มที่เปิดใช้งาน */}
+            {isFormComplete ? (
+              <div className="space-y-2 mt-3">
+                <button
+                  type="submit"
+                  className="w-full min-h-[54px] sm:min-h-[58px] px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-base rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2.5 cursor-pointer ring-2 ring-emerald-500/40"
+                >
+                  <PackagePlus className="w-5 h-5" />
+                  <span>บันทึกลงทะเบียนพัสดุ</span>
+                </button>
+                <div className="flex items-center justify-center gap-2 text-xs font-semibold text-emerald-700">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>กรอกและเลือกข้อมูลครบทุกช่องแล้ว พร้อมบันทึกข้อมูลเข้าสู่ระบบ</span>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2.5 mt-3">
+                <button
+                  type="button"
+                  disabled
+                  title="กรุณากรอกและเลือกข้อมูลให้ครบทุกช่องก่อนบันทึก"
+                  className="w-full min-h-[54px] sm:min-h-[58px] px-6 py-3.5 bg-slate-100 text-slate-400 border-2 border-dashed border-slate-300 font-bold text-base rounded-xl cursor-not-allowed flex items-center justify-center gap-2.5 select-none transition-all"
+                >
+                  <PackagePlus className="w-5 h-5 text-slate-400" />
+                  <span>บันทึกลงทะเบียนพัสดุ (ปิดใช้งานชั่วคราว)</span>
+                </button>
+
+                {/* แถบสรุปรายการที่ต้องกรอก/เลือกเพื่อให้ปุ่มเปิดใช้งาน */}
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 space-y-1.5">
+                  <div className="font-semibold text-slate-700 flex items-center justify-between">
+                    <span>กรุณากรอกและเลือกข้อมูลให้ครบทุกช่องเพื่อเปิดปุ่มบันทึก:</span>
+                    <span className="text-[11px] font-mono text-slate-400">
+                      {[isTrackingValid && !isDuplicateTracking, isStudentValid, isCategoryValid, isStatusValid].filter(Boolean).length}/4
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    <span
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                        isTrackingValid && !isDuplicateTracking
+                          ? 'bg-emerald-100 text-emerald-800 font-semibold'
+                          : 'bg-slate-200/80 text-slate-500'
+                      }`}
+                    >
+                      <span>1. เลขพัสดุ</span>
+                      {isTrackingValid && !isDuplicateTracking ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      ) : (
+                        <span className="text-[10px] text-slate-400">(ยังไม่ได้ระบุ)</span>
+                      )}
+                    </span>
+
+                    <span
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                        isStudentValid
+                          ? 'bg-emerald-100 text-emerald-800 font-semibold'
+                          : 'bg-slate-200/80 text-slate-500'
+                      }`}
+                    >
+                      <span>2. ข้อมูลผู้รับ</span>
+                      {isStudentValid ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      ) : (
+                        <span className="text-[10px] text-slate-400">(ยังไม่ได้ระบุ)</span>
+                      )}
+                    </span>
+
+                    <span
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                        isCategoryValid
+                          ? 'bg-emerald-100 text-emerald-800 font-semibold'
+                          : 'bg-slate-200/80 text-slate-500'
+                      }`}
+                    >
+                      <span>3. ประเภทสิ่งของ</span>
+                      {isCategoryValid ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      ) : (
+                        <span className="text-[10px] text-slate-400">(ระบุรายละเอียด)</span>
+                      )}
+                    </span>
+
+                    <span
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                        isStatusValid
+                          ? 'bg-emerald-100 text-emerald-800 font-semibold'
+                          : 'bg-slate-200/80 text-slate-500'
+                      }`}
+                    >
+                      <span>4. สถานะพัสดุ</span>
+                      {isStatusValid ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      ) : (
+                        <span className="text-[10px] text-slate-400">(ยังไม่ได้เลือก)</span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
         </form>
 
