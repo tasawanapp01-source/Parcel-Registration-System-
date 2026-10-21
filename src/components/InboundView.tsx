@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Dices,
+  Calendar,
 } from 'lucide-react';
 import { useParcelSystem } from '../context/ParcelSystemContext';
 import { BarcodeCameraScanner, decodeBarcodeFromImageFile } from './BarcodeCameraScanner';
@@ -34,6 +35,9 @@ import {
   generateUniqueTrackingNumberForCourier,
   isUnknownOwnerParcel,
   formatStudentCode,
+  getRelativeDateString,
+  formatThaiSlashDate,
+  extractParcelLocalYMD,
 } from '../types/parcel';
 
 const INBOUND_STATUS_OPTIONS: {
@@ -148,7 +152,8 @@ export const InboundView: React.FC = () => {
   const [note, setNote] = useState<string>('');
   const [formError, setFormError] = useState<string | null>(null);
 
-  // 5. ตัวกรองเลือกแสดงตามหอพักและตัวแบ่งหน้าสำหรับรายการพัสดุที่รับเข้าล่าสุด
+  // 5. ตัวกรองเลือกแสดงตามวันที่รับเข้า หอพัก และตัวแบ่งหน้าสำหรับรายการพัสดุที่รับเข้าล่าสุด
+  const [recentDateFilter, setRecentDateFilter] = useState<string>(() => getRelativeDateString(0));
   const [recentDormFilter, setRecentDormFilter] = useState<string>('ALL');
   const [recentPage, setRecentPage] = useState<number>(1);
   const [recentPageSize, setRecentPageSize] = useState<string>('10');
@@ -571,27 +576,36 @@ export const InboundView: React.FC = () => {
     }
   };
 
-  // นับจำนวนพัสดุแยกตามหอพักสำหรับตัวกรอง "รายการพัสดุที่รับเข้าล่าสุด"
+  const todayIsoStr = useMemo(() => getRelativeDateString(0), []);
+  const yesterdayIsoStr = useMemo(() => getRelativeDateString(1), []);
+
+  // กรองพัสดุตามวันที่รับเข้าที่เลือก (ถ้าไม่ระบุหรือเว้นว่าง = แสดงทุกวัน)
+  const parcelsForDate = useMemo(() => {
+    if (!recentDateFilter) return parcels;
+    return parcels.filter((p) => extractParcelLocalYMD(p) === recentDateFilter);
+  }, [parcels, recentDateFilter]);
+
+  // นับจำนวนพัสดุแยกตามหอพักสำหรับตัวกรอง "รายการพัสดุที่รับเข้าล่าสุด" (คำนวณตามวันที่เลือก)
   const dormParcelCounts = useMemo(() => {
-    const counts: Record<string, number> = { ALL: parcels.length };
+    const counts: Record<string, number> = { ALL: parcelsForDate.length };
     for (const d of availableDormitories) {
       counts[d] = 0;
     }
-    for (const p of parcels) {
+    for (const p of parcelsForDate) {
       const dName = (p.dormitory || '').trim();
       if (dName) {
         counts[dName] = (counts[dName] || 0) + 1;
       }
     }
     return counts;
-  }, [parcels, availableDormitories]);
+  }, [parcelsForDate, availableDormitories]);
 
   // กรองรายการพัสดุที่รับเข้าล่าสุดตามหอพักที่เลือก พร้อมแบ่งหน้า
   const allFilteredRecentParcels = useMemo(() => {
     return recentDormFilter === 'ALL'
-      ? parcels
-      : parcels.filter((p) => p.dormitory.trim() === recentDormFilter);
-  }, [parcels, recentDormFilter]);
+      ? parcelsForDate
+      : parcelsForDate.filter((p) => (p.dormitory || '').trim() === recentDormFilter);
+  }, [parcelsForDate, recentDormFilter]);
 
   const effectivePageSize = useMemo(() => {
     if (recentPageSize === 'ALL') {
@@ -1404,6 +1418,85 @@ export const InboundView: React.FC = () => {
               </span>
             </div>
 
+            {/* กล่องรับวันที่สำหรับรายการพัสดุที่รับเข้าล่าสุด โดยตั้งค่าเป็นวันที่ปัจจุบัน และสามารถเลือกวันที่ได้ */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                  <Calendar className="w-4 h-4 text-slate-700 shrink-0" />
+                  <label htmlFor="recent-date-input">
+                    วันที่รับเข้า:
+                  </label>
+                </div>
+                <div className="relative flex items-center">
+                  <input
+                    id="recent-date-input"
+                    type="date"
+                    value={recentDateFilter}
+                    onChange={(e) => {
+                      setRecentDateFilter(e.target.value);
+                      setRecentPage(1);
+                    }}
+                    className="min-h-[38px] px-3 py-1.5 text-xs font-semibold text-slate-900 bg-white border border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none transition-colors cursor-pointer shadow-xs"
+                  />
+                  {recentDateFilter && (
+                    <button
+                      type="button"
+                      aria-label="ล้างวันที่ (แสดงทุกวัน)"
+                      title="ล้างวันที่ (แสดงทุกวัน)"
+                      onClick={() => {
+                        setRecentDateFilter('');
+                        setRecentPage(1);
+                      }}
+                      className="ml-1 p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                {recentDateFilter && (
+                  <span className="text-xs font-medium text-slate-600 bg-white px-2 py-1 rounded-lg border border-slate-200">
+                    {formatThaiSlashDate(recentDateFilter)}
+                    {recentDateFilter === todayIsoStr && (
+                      <span className="ml-1 text-emerald-700 font-bold">(วันนี้)</span>
+                    )}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRecentDateFilter(todayIsoStr);
+                    setRecentPage(1);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                    recentDateFilter === todayIsoStr
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
+                  }`}
+                  title="ตั้งค่าเป็นวันที่ปัจจุบัน"
+                >
+                  วันนี้
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRecentDateFilter('');
+                    setRecentPage(1);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                    !recentDateFilter
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
+                  }`}
+                  title="แสดงพัสดุทุกวันที่รับเข้า"
+                >
+                  ทุกวัน ({parcels.length})
+                </button>
+              </div>
+            </div>
+
             {/* ตัวเลือกแสดงตามหอพัก (Dropdown + ปุ่มกดเลือกหอพัก) */}
             <div className="space-y-2.5">
               <div className="flex items-center justify-between gap-2">
@@ -1424,7 +1517,7 @@ export const InboundView: React.FC = () => {
                   }}
                   className="min-h-[38px] px-3 py-1.5 text-xs font-semibold text-slate-900 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-slate-900 focus:outline-none"
                 >
-                  <option value="ALL">ทุกหอพักรวม ({parcels.length} ชิ้น)</option>
+                  <option value="ALL">ทุกหอพักรวม ({parcelsForDate.length} ชิ้น)</option>
                   {availableDormitories.map((dName) => (
                     <option key={dName} value={dName}>
                       {dName} ({getDormitoryTheme(dName).basketCode}) · {dormParcelCounts[dName] || 0} ชิ้น
@@ -1443,11 +1536,11 @@ export const InboundView: React.FC = () => {
                   }}
                   className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                     recentDormFilter === 'ALL'
-                      ? 'bg-slate-900 text-white'
+                      ? 'bg-slate-900 text-white shadow-xs'
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
                 >
-                  ทุกหอพัก ({parcels.length})
+                  ทุกหอพัก ({parcelsForDate.length})
                 </button>
                 {availableDormitories.map((dName) => {
                   const active = recentDormFilter === dName;
@@ -1463,7 +1556,7 @@ export const InboundView: React.FC = () => {
                       }}
                       className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
                         active
-                          ? 'bg-slate-900 text-white'
+                          ? 'bg-slate-900 text-white shadow-xs'
                           : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                       }`}
                     >
@@ -1480,24 +1573,42 @@ export const InboundView: React.FC = () => {
             </div>
 
             {filteredRecentParcels.length === 0 ? (
-              <div className="py-8 text-center space-y-1 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+              <div className="py-8 text-center space-y-2 bg-slate-50 rounded-xl border border-dashed border-slate-200 p-4">
                 <p className="text-xs font-semibold text-slate-700">
-                  {recentDormFilter === 'ALL'
+                  {recentDateFilter
+                    ? `ยังไม่มีรายการพัสดุที่รับเข้าในวันที่ ${formatThaiSlashDate(recentDateFilter)}${
+                        recentDormFilter !== 'ALL' ? ` สำหรับ "${recentDormFilter}"` : ''
+                      }`
+                    : recentDormFilter === 'ALL'
                     ? 'ยังไม่มีรายการพัสดุที่รับเข้า'
                     : `ยังไม่มีรายการพัสดุที่รับเข้าสำหรับ "${recentDormFilter}"`}
                 </p>
-                {recentDormFilter !== 'ALL' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRecentDormFilter('ALL');
-                      setRecentPage(1);
-                    }}
-                    className="text-xs font-bold text-slate-900 underline cursor-pointer"
-                  >
-                    กลับไปดูทุกหอพัก
-                  </button>
-                )}
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                  {recentDateFilter && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRecentDateFilter('');
+                        setRecentPage(1);
+                      }}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-800 underline cursor-pointer px-2 py-0.5"
+                    >
+                      ดูพัสดุทุกวันที่รับเข้า ({parcels.length} ชิ้น)
+                    </button>
+                  )}
+                  {recentDormFilter !== 'ALL' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRecentDormFilter('ALL');
+                        setRecentPage(1);
+                      }}
+                      className="text-xs font-bold text-slate-700 hover:text-slate-900 underline cursor-pointer px-2 py-0.5"
+                    >
+                      กลับไปดูทุกหอพัก
+                    </button>
+                  )}
+                </div>
               </div>
             ) : (
               <>
@@ -1542,6 +1653,19 @@ export const InboundView: React.FC = () => {
                               <span className="text-xs font-semibold text-slate-700">
                                 {pTheme.basketCode} ({p.dormitory} ห้อง {p.dormRoom})
                               </span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs">
+                              <span className="inline-flex items-center gap-1 font-semibold text-slate-800 bg-slate-100 px-2 py-0.5 rounded text-[11px]">
+                                <Calendar className="w-3 h-3 text-slate-500 shrink-0" />
+                                <span>รับเข้า: {formatThaiSlashDate(p.receivedDate || extractParcelLocalYMD(p))}</span>
+                                {p.createdAt && (
+                                  <span className="text-slate-500 font-mono text-[10.5px]">
+                                    ({new Date(p.createdAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.)
+                                  </span>
+                                )}
+                              </span>
+                              <span className="text-slate-300">·</span>
+                              <span className="text-xs text-slate-600 font-medium">ขนส่ง: {p.courier || '-'}</span>
                             </div>
                             <div className="text-xs text-slate-600 mt-1 flex flex-wrap items-center gap-1.5">
                               <span className="font-semibold text-slate-800">{p.studentFullName}</span>
