@@ -19,7 +19,9 @@ import {
 } from 'lucide-react';
 import { useParcelSystem } from '../context/ParcelSystemContext';
 import { BarcodeCameraScanner, decodeBarcodeFromImageFile } from './BarcodeCameraScanner';
+import { DeliveryDateModal } from './DeliveryDateModal';
 import {
+  Parcel,
   ParcelCategory,
   ParcelStatus,
   PARCEL_CATEGORIES,
@@ -154,6 +156,25 @@ export const InboundView: React.FC = () => {
   // สถานะกล้องสแกนบาร์โค้ด
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
   const [isScanningFile, setIsScanningFile] = useState<boolean>(false);
+
+  // สถานะ Modal สำหรับเลือกวันที่รับพัสดุ (กรณีเซ็นรับสำเร็จจากรายการล่าสุด)
+  const [deliveryModalParcel, setDeliveryModalParcel] = useState<Parcel | null>(null);
+  const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState<boolean>(false);
+
+  const handleOpenDeliveryModal = (p: Parcel) => {
+    setDeliveryModalParcel(p);
+    setIsDeliveryModalOpen(true);
+  };
+
+  const handleConfirmDelivery = async (deliveredDate: string, deliveryNote?: string) => {
+    if (!deliveryModalParcel) return;
+    await updateParcelStatus(
+      deliveryModalParcel.id,
+      'ส่งมอบสำเร็จ',
+      deliveryNote !== undefined ? deliveryNote : deliveryModalParcel.note,
+      deliveredDate
+    );
+  };
 
   const trackingInputRef = useRef<HTMLInputElement | null>(null);
   const studentCodeInputRef = useRef<HTMLInputElement | null>(null);
@@ -1586,7 +1607,7 @@ export const InboundView: React.FC = () => {
                           {p.status !== 'ส่งมอบสำเร็จ' && (
                             <button
                               type="button"
-                              onClick={() => updateParcelStatus(p.id, 'ส่งมอบสำเร็จ')}
+                              onClick={() => handleOpenDeliveryModal(p)}
                               className="min-h-[38px] px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-900 hover:text-white text-slate-800 rounded-lg transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
                             >
                               <span>เซ็นรับสำเร็จ</span>
@@ -1649,6 +1670,17 @@ export const InboundView: React.FC = () => {
           </section>
         </div>
       </div>
+
+      {/* Modal เลือกวันที่รับพัสดุ */}
+      <DeliveryDateModal
+        isOpen={isDeliveryModalOpen}
+        onClose={() => {
+          setIsDeliveryModalOpen(false);
+          setDeliveryModalParcel(null);
+        }}
+        parcel={deliveryModalParcel}
+        onConfirm={handleConfirmDelivery}
+      />
     </div>
   );
 };

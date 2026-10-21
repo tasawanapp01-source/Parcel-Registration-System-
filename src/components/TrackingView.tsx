@@ -10,10 +10,15 @@ import {
   AlertTriangle,
   Camera,
   HeartHandshake,
+  Calendar,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import { useParcelSystem } from '../context/ParcelSystemContext';
 import { BarcodeCameraScanner, decodeBarcodeFromImageFile } from './BarcodeCameraScanner';
+import { DeliveryDateModal } from './DeliveryDateModal';
 import {
+  Parcel,
   PARCEL_STATUSES,
   getDormitoryTheme,
   getAvailableDormitories,
@@ -30,6 +35,7 @@ export const TrackingView: React.FC = () => {
     searchParcelsLocal,
     recordLocalSearchSaving,
     updateParcelStatus,
+    bulkUpdateParcelStatus,
     deleteParcel,
     getStudentParcelCounts,
     openWeeklyWarningPopup,
@@ -46,6 +52,14 @@ export const TrackingView: React.FC = () => {
   // สถานะกล้องสแกนค้นหาพัสดุด้วยกล้องหลังมือถือ
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
   const [isScanningFile, setIsScanningFile] = useState<boolean>(false);
+
+  // สถานะ Modal สำหรับเลือกวันที่รับพัสดุเมื่อกดส่งมอบสำเร็จ
+  const [deliveryModalParcel, setDeliveryModalParcel] = useState<Parcel | null>(null);
+  const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState<boolean>(false);
+
+  // สถานะการเลือกพัสดุหลายรายการ (Multi-Select) เพื่อส่งมอบพร้อมกัน
+  const [selectedParcelIds, setSelectedParcelIds] = useState<string[]>([]);
+  const [isBatchDeliveryModalOpen, setIsBatchDeliveryModalOpen] = useState<boolean>(false);
 
   const availableDormitories = useMemo(
     () => getAvailableDormitories(students, parcels),
@@ -111,6 +125,53 @@ export const TrackingView: React.FC = () => {
     }
     return counts;
   }, [parcels]);
+
+  // การจัดการเปิด Modal ส่งมอบสำเร็จ
+  const handleOpenDeliveryModal = (parcel: Parcel) => {
+    setDeliveryModalParcel(parcel);
+    setIsDeliveryModalOpen(true);
+  };
+
+  const handleConfirmDelivery = async (deliveredDate: string, note?: string) => {
+    if (!deliveryModalParcel) return;
+    await updateParcelStatus(
+      deliveryModalParcel.id,
+      'ส่งมอบสำเร็จ',
+      note !== undefined ? note : deliveryModalParcel.note,
+      deliveredDate
+    );
+  };
+
+  // การเลือกพัสดุหลายรายการ (Multi-Selection)
+  const handleToggleSelectParcel = (id: string) => {
+    setSelectedParcelIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedParcelIds.length === filteredParcels.length && filteredParcels.length > 0) {
+      setSelectedParcelIds([]);
+    } else {
+      setSelectedParcelIds(filteredParcels.map((p) => p.id));
+    }
+  };
+
+  const selectedParcelsList = useMemo(() => {
+    const set = new Set(selectedParcelIds);
+    return parcels.filter((p) => set.has(p.id));
+  }, [parcels, selectedParcelIds]);
+
+  const handleOpenBatchDeliveryModal = () => {
+    if (selectedParcelIds.length === 0) return;
+    setIsBatchDeliveryModalOpen(true);
+  };
+
+  const handleConfirmBatchDelivery = async (deliveredDate: string) => {
+    if (selectedParcelIds.length === 0) return;
+    await bulkUpdateParcelStatus(selectedParcelIds, 'ส่งมอบสำเร็จ', deliveredDate);
+    setSelectedParcelIds([]);
+  };
 
   return (
     <div className="space-y-6">
@@ -264,14 +325,72 @@ export const TrackingView: React.FC = () => {
         </div>
       </div>
 
+      {/* แถบการเลือกหลายรายการพร้อมกัน (Batch Action Bar) */}
+      {canCurrentMemberEdit && selectedParcelIds.length > 0 && (
+        <div className="bg-emerald-50 border-2 border-emerald-400 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm animate-in fade-in duration-150">
+          <div className="flex items-center gap-3">
+            <span className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm">
+              {selectedParcelIds.length}
+            </span>
+            <div>
+              <p className="text-sm font-bold text-emerald-950">
+                เลือกพัสดุแล้ว {selectedParcelIds.length} รายการ
+              </p>
+              <p className="text-xs text-emerald-700">
+                สามารถกดส่งมอบสำเร็จและเลือกวันที่รับพร้อมกันได้ทันที
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleOpenBatchDeliveryModal}
+              className="min-h-[42px] px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-2 cursor-pointer shadow-xs"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>ส่งมอบสำเร็จตามที่เลือก ({selectedParcelIds.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedParcelIds([])}
+              className="min-h-[42px] px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+            >
+              ล้างการเลือก
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* รายการผลลัพธ์การค้นหา */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between text-xs text-slate-500 px-1">
-          <span>
-            พบรายการพัสดุตรงตามเงื่อนไข{' '}
-            <strong className="font-mono text-slate-900 tabular-nums">{filteredParcels.length}</strong> รายการ
-          </span>
-          <span>กดปุ่มด้านขวาของแต่ละรายการเพื่อเปลี่ยนสถานะทันที</span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500 px-1">
+          <div className="flex items-center gap-3">
+            {canCurrentMemberEdit && filteredParcels.length > 0 && (
+              <button
+                type="button"
+                onClick={handleToggleSelectAll}
+                className="flex items-center gap-1.5 font-semibold text-slate-700 hover:text-slate-900 cursor-pointer"
+              >
+                {selectedParcelIds.length === filteredParcels.length && filteredParcels.length > 0 ? (
+                  <CheckSquare className="w-4 h-4 text-emerald-600" />
+                ) : (
+                  <Square className="w-4 h-4 text-slate-400" />
+                )}
+                <span>
+                  {selectedParcelIds.length === filteredParcels.length && filteredParcels.length > 0
+                    ? 'ยกเลิกเลือกทั้งหมด'
+                    : 'เลือกทั้งหมดในหน้านี้'}
+                </span>
+              </button>
+            )}
+            <span>
+              พบพัสดุตรงตามเงื่อนไข{' '}
+              <strong className="font-mono text-slate-900 tabular-nums">{filteredParcels.length}</strong> รายการ
+            </span>
+          </div>
+          <span>กดปุ่ม "ส่งมอบสำเร็จ" เพื่อเลือกวันที่รับพัสดุ (วันนี้, เมื่อวาน, หรือระบุวันที่)</span>
         </div>
 
         {filteredParcels.length === 0 ? (
@@ -311,13 +430,16 @@ export const TrackingView: React.FC = () => {
               const studentStats = !isUnknownOwnerParcel(parcel)
                 ? getStudentParcelCounts(parcel.studentCode, parcel.studentFullName)
                 : null;
+              const isSelected = selectedParcelIds.includes(parcel.id);
 
               return (
                 <div
                   key={parcel.id}
                   style={isLegalHold ? { backgroundColor: '#FEF1F0' } : isInfirmary ? { backgroundColor: '#FFFBEB' } : undefined}
                   className={`p-4 md:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 transition-colors ${
-                    isLegalHold
+                    isSelected
+                      ? 'bg-emerald-50/60 ring-2 ring-emerald-400 inset-0'
+                      : isLegalHold
                       ? 'bg-[#FEF1F0] hover:bg-[#FEF1F0]/90 border-l-4 border-l-red-500'
                       : isInfirmary
                       ? 'bg-amber-50/70 hover:bg-amber-100/70 border-l-4 border-l-amber-500'
@@ -326,111 +448,129 @@ export const TrackingView: React.FC = () => {
                       : 'hover:bg-slate-50/70'
                   }`}
                 >
-                  <div className="space-y-1.5 flex-1">
-                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                      <span
-                        className="w-3.5 h-3.5 rounded-sm shrink-0"
-                        style={{ backgroundColor: dormTheme.hexColor }}
-                      />
-                      <span
-                        style={parcel.trackingNumber?.toUpperCase().endsWith('-RD') ? { color: '#DC2626' } : undefined}
-                        className={`font-mono font-bold text-base tabular-nums ${
-                          parcel.trackingNumber?.toUpperCase().endsWith('-RD')
-                            ? 'text-red-600 font-extrabold'
-                            : 'text-slate-900'
-                        }`}
+                  <div className="flex items-start gap-3 flex-1">
+                    {/* กล่องกาเลือกหลายรายการ */}
+                    {canCurrentMemberEdit && (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSelectParcel(parcel.id)}
+                        aria-label={`เลือกพัสดุ ${parcel.trackingNumber}`}
+                        className="mt-0.5 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer shrink-0"
                       >
-                        {parcel.trackingNumber}
-                      </span>
-                      <span className="text-slate-300">·</span>
-                      <span className="text-xs font-semibold text-slate-700">{parcel.courier}</span>
-                      <span className="text-slate-300">·</span>
-                      <span
-                        className={`text-xs font-bold ${
-                          isDelivered || parcel.status === 'ลงทะเบียนรับพัสดุ'
-                            ? 'text-emerald-700'
-                            : isLegalHold
-                            ? 'text-red-700'
-                            : isInfirmary
-                            ? 'text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded border border-amber-300 font-extrabold'
-                            : parcel.status === 'พัสดุไม่ทราบเจ้าของ'
-                            ? 'text-slate-600'
-                            : 'text-blue-700'
-                        }`}
-                      >
-                        สถานะ: {parcel.status === 'ติดนิติการ' ? 'พัสดุติดนิติการ' : parcel.status}
-                      </span>
-                    </div>
+                        {isSelected ? (
+                          <CheckSquare className="w-5 h-5 text-emerald-600" />
+                        ) : (
+                          <Square className="w-5 h-5 text-slate-300" />
+                        )}
+                      </button>
+                    )}
 
-                    <div className="text-sm font-bold text-slate-900">
-                      {parcel.studentFullName}{' '}
-                      <span className="font-normal text-slate-600">({parcel.nickname})</span>
-                      <span className="mx-2 text-slate-300 font-normal">·</span>
-                      <span className="font-mono text-xs font-semibold text-slate-700 tabular-nums">
-                        รหัส {formatStudentCode(parcel.studentCode)}
-                      </span>
-                      <span className="mx-2 text-slate-300 font-normal">·</span>
-                      <span className="text-xs font-normal text-slate-600">ชั้น {parcel.gradeRoom}</span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
-                      <span className="font-semibold text-slate-800">
-                        {dormTheme.basketCode} ({parcel.dormitory})
-                      </span>
-                      <span>·</span>
-                      <span className="font-mono tabular-nums">
-                        ห้อง {parcel.dormRoom}
-                      </span>
-                      <span>·</span>
-                      <span>ประเภท: {parcel.category}</span>
-                      <span>·</span>
-                      <span className="font-mono tabular-nums">
-                        รับเข้า {parcel.receivedDate} เวลา {String(parcel.receivedHour).padStart(2, '0')}:00 น.
-                      </span>
-                      {parcel.status === 'ส่งมอบสำเร็จ' && (
-                        <>
-                          <span>·</span>
-                          <span className="font-mono font-bold text-emerald-700 tabular-nums">
-                            วันที่รับ: {formatThaiSlashDate(parcel.deliveredDate || parcel.receivedDate || parcel.updatedAt)}
-                          </span>
-                        </>
-                      )}
-                    </div>
-
-                    {studentStats && (
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700 pt-0.5 font-mono tabular-nums">
-                        <span className="font-sans font-semibold text-slate-600">
-                          จำนวนพัสดุของนักเรียน:
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                        <span
+                          className="w-3.5 h-3.5 rounded-sm shrink-0"
+                          style={{ backgroundColor: dormTheme.hexColor }}
+                        />
+                        <span
+                          style={parcel.trackingNumber?.toUpperCase().endsWith('-RD') ? { color: '#DC2626' } : undefined}
+                          className={`font-mono font-bold text-base tabular-nums ${
+                            parcel.trackingNumber?.toUpperCase().endsWith('-RD')
+                              ? 'text-red-600 font-extrabold'
+                              : 'text-slate-900'
+                          }`}
+                        >
+                          {parcel.trackingNumber}
                         </span>
-                        <span>
-                          วัน <strong>{studentStats.dayCount}</strong> · สัปดาห์{' '}
-                          <strong
-                            className={
-                              studentStats.isOverWeeklyLimit
-                                ? 'text-red-600 font-extrabold'
-                                : 'text-slate-900'
-                            }
-                          >
-                            {studentStats.weekCount}
-                          </strong>{' '}
-                          · เดือน <strong>{studentStats.monthCount}</strong> ชิ้น
+                        <span className="text-slate-300">·</span>
+                        <span className="text-xs font-semibold text-slate-700">{parcel.courier}</span>
+                        <span className="text-slate-300">·</span>
+                        <span
+                          className={`text-xs font-bold ${
+                            isDelivered || parcel.status === 'ลงทะเบียนรับพัสดุ'
+                              ? 'text-emerald-700'
+                              : isLegalHold
+                              ? 'text-red-700'
+                              : isInfirmary
+                              ? 'text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded border border-amber-300 font-extrabold'
+                              : parcel.status === 'พัสดุไม่ทราบเจ้าของ'
+                              ? 'text-slate-600'
+                              : 'text-blue-700'
+                          }`}
+                        >
+                          สถานะ: {parcel.status === 'ติดนิติการ' ? 'พัสดุติดนิติการ' : parcel.status}
                         </span>
-                        {studentStats.isOverWeeklyLimit && (
-                          <button
-                            type="button"
-                            onClick={() => openWeeklyWarningPopup(studentStats, 'manual')}
-                            className="font-sans px-2.5 py-0.5 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold rounded-md flex items-center gap-1 cursor-pointer"
-                          >
-                            <AlertTriangle className="w-3 h-3" />
-                            <span>เกิน {WEEKLY_PARCEL_WARNING_LIMIT} ชิ้น/สัปดาห์ (ดูแจ้งเตือน)</span>
-                          </button>
+                      </div>
+
+                      <div className="text-sm font-bold text-slate-900 truncate">
+                        {parcel.studentFullName}{' '}
+                        <span className="font-normal text-slate-600">({parcel.nickname})</span>
+                        <span className="mx-2 text-slate-300 font-normal">·</span>
+                        <span className="font-mono text-xs font-semibold text-slate-700 tabular-nums">
+                          รหัส {formatStudentCode(parcel.studentCode)}
+                        </span>
+                        <span className="mx-2 text-slate-300 font-normal">·</span>
+                        <span className="text-xs font-normal text-slate-600">ชั้น {parcel.gradeRoom}</span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
+                        <span className="font-semibold text-slate-800">
+                          {dormTheme.basketCode} ({parcel.dormitory})
+                        </span>
+                        <span>·</span>
+                        <span className="font-mono tabular-nums">
+                          ห้อง {parcel.dormRoom}
+                        </span>
+                        <span>·</span>
+                        <span>ประเภท: {parcel.category}</span>
+                        <span>·</span>
+                        <span className="font-mono tabular-nums">
+                          รับเข้า {parcel.receivedDate} เวลา {String(parcel.receivedHour).padStart(2, '0')}:00 น.
+                        </span>
+                        {parcel.status === 'ส่งมอบสำเร็จ' && (
+                          <>
+                            <span>·</span>
+                            <span className="font-mono font-bold text-emerald-700 tabular-nums bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                              วันที่รับพัสดุ: {formatThaiSlashDate(parcel.deliveredDate || parcel.receivedDate || parcel.updatedAt)}
+                            </span>
+                          </>
                         )}
                       </div>
-                    )}
 
-                    {parcel.note && parcel.note !== 'ส่งตรวจห้องนิติการ/ครูหอพักตามระเบียบ' && (
-                      <p className="text-xs text-slate-500 pt-0.5">หมายเหตุ: {parcel.note}</p>
-                    )}
+                      {studentStats && (
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700 pt-0.5 font-mono tabular-nums">
+                          <span className="font-sans font-semibold text-slate-600">
+                            จำนวนพัสดุของนักเรียน:
+                          </span>
+                          <span>
+                            วัน <strong>{studentStats.dayCount}</strong> · สัปดาห์{' '}
+                            <strong
+                              className={
+                                studentStats.isOverWeeklyLimit
+                                  ? 'text-red-600 font-extrabold'
+                                  : 'text-slate-900'
+                              }
+                            >
+                              {studentStats.weekCount}
+                            </strong>{' '}
+                            · เดือน <strong>{studentStats.monthCount}</strong> ชิ้น
+                          </span>
+                          {studentStats.isOverWeeklyLimit && (
+                            <button
+                              type="button"
+                              onClick={() => openWeeklyWarningPopup(studentStats, 'manual')}
+                              className="font-sans px-2.5 py-0.5 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold rounded-md flex items-center gap-1 cursor-pointer"
+                            >
+                              <AlertTriangle className="w-3 h-3" />
+                              <span>เกิน {WEEKLY_PARCEL_WARNING_LIMIT} ชิ้น/สัปดาห์ (ดูแจ้งเตือน)</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {parcel.note && parcel.note !== 'ส่งตรวจห้องนิติการ/ครูหอพักตามระเบียบ' && (
+                        <p className="text-xs text-slate-500 pt-0.5">หมายเหตุ: {parcel.note}</p>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -440,22 +580,36 @@ export const TrackingView: React.FC = () => {
                       </span>
                     )}
 
+                    {/* ปุ่มแก้ไขวันที่รับ สำหรับพัสดุที่ส่งมอบสำเร็จแล้ว */}
                     {canCurrentMemberEdit && parcel.status === 'ส่งมอบสำเร็จ' && (
-                      <button
-                        type="button"
-                        onClick={() => updateParcelStatus(parcel.id, 'ลงทะเบียนรับพัสดุ', undefined, '')}
-                        className="min-h-[44px] px-3.5 py-2 bg-red-50 hover:bg-red-600 text-red-700 hover:text-white border border-red-200 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                        <span>ยกเลิกการรับพัสดุ</span>
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDeliveryModal(parcel)}
+                          className="min-h-[44px] px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer shadow-2xs"
+                          title="แก้ไขวันที่รับพัสดุ"
+                        >
+                          <Calendar className="w-4 h-4 text-emerald-700" />
+                          <span>แก้ไขวันที่รับ</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => updateParcelStatus(parcel.id, 'ลงทะเบียนรับพัสดุ', undefined, '')}
+                          className="min-h-[44px] px-3.5 py-2 bg-red-50 hover:bg-red-600 text-red-700 hover:text-white border border-red-200 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                          <span>ยกเลิกการรับพัสดุ</span>
+                        </button>
+                      </>
                     )}
 
+                    {/* ปุ่มส่งมอบสำเร็จ: เปิด Modal เพื่อให้เลือกวันที่รับพัสดุ พร้อมปุ่มด่วน (วันนี้, เมื่อวาน, วันที่) */}
                     {canCurrentMemberEdit && parcel.status !== 'ส่งมอบสำเร็จ' && (
                       <button
                         type="button"
-                        onClick={() => updateParcelStatus(parcel.id, 'ส่งมอบสำเร็จ')}
-                        className="min-h-[44px] px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+                        onClick={() => handleOpenDeliveryModal(parcel)}
+                        className="min-h-[44px] px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer shadow-xs"
                       >
                         <CheckCircle2 className="w-4 h-4" />
                         <span>ส่งมอบสำเร็จ</span>
@@ -528,6 +682,27 @@ export const TrackingView: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Modal เลือกวันที่รับพัสดุ (กรณีรายชิ้น) */}
+      <DeliveryDateModal
+        isOpen={isDeliveryModalOpen}
+        onClose={() => {
+          setIsDeliveryModalOpen(false);
+          setDeliveryModalParcel(null);
+        }}
+        parcel={deliveryModalParcel}
+        onConfirm={handleConfirmDelivery}
+      />
+
+      {/* Modal เลือกวันที่รับพัสดุ (กรณีเลือกส่งมอบหลายรายการพร้อมกัน) */}
+      <DeliveryDateModal
+        isOpen={isBatchDeliveryModalOpen}
+        onClose={() => setIsBatchDeliveryModalOpen(false)}
+        parcel={null}
+        parcelsList={selectedParcelsList}
+        isBatch={true}
+        onConfirm={handleConfirmBatchDelivery}
+      />
     </div>
   );
 };
