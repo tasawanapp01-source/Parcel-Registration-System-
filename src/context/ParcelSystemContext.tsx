@@ -33,6 +33,8 @@ import {
   updateParcelDirectly,
   deleteParcelDirectly,
   bulkUpdateParcelsDirectly,
+  bulkDeleteParcelsDirectly,
+  batchImportParcelsToFirestore,
   saveStudentDirectly,
   deleteStudentDirectly,
   bulkDeleteStudentsDirectly,
@@ -164,6 +166,14 @@ interface ParcelSystemContextValue {
   updateParcelStatus: (parcelId: string, newStatus: ParcelStatus, note?: string, deliveredDate?: string) => Promise<void>;
   bulkUpdateParcelStatus: (parcelIds: string[], newStatus: ParcelStatus, deliveredDate?: string) => Promise<void>;
   deleteParcel: (parcelId: string) => Promise<void>;
+  bulkDeleteParcels: (parcelIds: string[], reasonLabel?: string) => Promise<number>;
+  bulkDeleteParcelsByDorm: (dormitory: string, statusFilter?: string) => Promise<number>;
+  clearAllParcels: () => Promise<number>;
+  bulkImportParcels: (parcels: (Parcel | Omit<Parcel, 'createdAt' | 'updatedAt'>)[]) => Promise<number>;
+  fullRestoreSystemBackup: (
+    backupData: { students?: Student[]; parcels?: Parcel[] },
+    replaceAll?: boolean
+  ) => Promise<{ studentsCount: number; parcelsCount: number }>;
   bulkImportStudents: (newStudents: Omit<Student, 'ownerId' | 'createdAt' | 'updatedAt'>[], commitImmediately?: boolean) => Promise<number>;
   upsertSingleStudent: (student: Omit<Student, 'ownerId' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   deleteStudent: (studentCode: string) => Promise<void>;
@@ -669,6 +679,187 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
   );
 
   /**
+   * ลบพัสดุหลายรายการออกจากฐานข้อมูล Firestore โดยตรง
+   */
+  const bulkDeleteParcels = useCallback(
+    async (parcelIds: string[], reasonLabel?: string): Promise<number> => {
+      if (parcelIds.length === 0) return 0;
+      setIsSyncing(true);
+      setSyncProgress({ completed: 0, total: parcelIds.length });
+
+      try {
+        const deletedCount = await bulkDeleteParcelsDirectly(parcelIds, (completed, total) => {
+          setSyncProgress({ completed, total });
+        });
+
+        setQuotaMetrics((prev) => ({
+          ...prev,
+          firestoreWritesUsed: prev.firestoreWritesUsed + deletedCount,
+          lastSyncedAt: new Date().toISOString(),
+        }));
+        showToast(
+          `ลบข้อมูลพัสดุ${reasonLabel ? ` (${reasonLabel})` : ''} จำนวน ${deletedCount} ชิ้น ออกจากฐานข้อมูล Firestore แล้ว`,
+          'info'
+        );
+        return deletedCount;
+      } catch (err) {
+        showToast(
+          `เกิดข้อผิดพลาดในการลบพัสดุ: ${err instanceof Error ? err.message : 'Error'}`,
+          'error'
+        );
+        throw err;
+      } finally {
+        setIsSyncing(false);
+        setSyncProgress(null);
+      }
+    },
+    [showToast]
+  );
+
+  /**
+   * ลบพัสดุตามหอพักออกจากฐานข้อมูล Firestore โดยตรง (และรองรับการกรองตามสถานะ)
+   */
+  const bulkDeleteParcelsByDorm = useCallback(
+    async (dormitory: string, statusFilter = 'ALL'): Promise<number> => {
+      const normDorm = dormitory.trim();
+      const targets = parcels.filter((p) => {
+        const dormMatch = p.dormitory.trim() === normDorm;
+        if (!dormMatch) return false;
+        if (statusFilter !== 'ALL' && p.status !== statusFilter) return false;
+        return true;
+      });
+
+      if (targets.length === 0) {
+        showToast(`ไม่พบรายการพัสดุของหอพัก "${normDorm}"${statusFilter !== 'ALL' ? ` ที่มีสถานะ "${statusFilter}"` : ''}`, 'info');
+        return 0;
+      }
+
+      const ids = targets.map((p) => p.id || p.trackingNumber);
+      const label = `หอพัก ${normDorm}${statusFilter !== 'ALL' ? ` [${statusFilter}]` : ''}`;
+      return await bulkDeleteParcels(ids, label);
+    },
+    [parcels, bulkDeleteParcels, showToast]
+  );
+
+  /**
+   * ล้างข้อมูลพัสดุทั้งหมดในฐานข้อมูล Firestore
+   */
+  const clearAllParcels = useCallback(async (): Promise<number> => {
+    const allIds = parcels.map((p) => p.id || p.trackingNumber);
+    if (allIds.length === 0) {
+      showToast('ไม่มีรายการพัสดุในระบบ', 'info');
+      return 0;
+    }
+    return await bulkDeleteParcels(allIds, 'ทั้งหมดในฐานข้อมูล Firestore');
+  }, [parcels, bulkDeleteParcels, showToast]);
+
+  /**
+   * นำเข้าหรือกู้คืนข้อมูลพัสดุจำนวนมาก (Bulk/Restore Parcels) ลง Firestore โดยตรง
+   */
+  const bulkImportParcels = useCallback(
+    async (
+      rawParcels: (Parcel | Omit<Parcel, 'createdAt' | 'updatedAt'>)[]
+    ): Promise<number> => {
+      if (rawParcels.length === 0) return 0;
+      setIsSyncing(true);
+      setSyncProgress({ completed: 0, total: rawParcels.length });
+
+      try {
+        const written = await batchImportParcelsToFirestore(
+          rawParcels,
+          AUTO_CLOUD_OWNER_ID,
+          (completed, total) => setSyncProgress({ completed, total })
+        );
+
+        setQuotaMetrics((prev) => ({
+          ...prev,
+          firestoreWritesUsed: prev.firestoreWritesUsed + written,
+          lastSyncedAt: new Date().toISOString(),
+        }));
+        showToast(
+          `กู้คืน/นำเข้าข้อมูลพัสดุ ${written} รายการ ลงฐานข้อมูล Firestore สำเร็จ`,
+          'success'
+        );
+        return written;
+      } catch (err) {
+        showToast(
+          `เกิดข้อผิดพลาดในการนำเข้าพัสดุ: ${err instanceof Error ? err.message : 'Error'}`,
+          'error'
+        );
+        throw err;
+      } finally {
+        setIsSyncing(false);
+        setSyncProgress(null);
+      }
+    },
+    [showToast]
+  );
+
+  /**
+   * กู้คืนข้อมูลสำรองทั้งระบบ (Full System Restore)
+   */
+  const fullRestoreSystemBackup = useCallback(
+    async (
+      backupData: { students?: Student[]; parcels?: Parcel[] },
+      replaceAll = false
+    ): Promise<{ studentsCount: number; parcelsCount: number }> => {
+      setIsSyncing(true);
+      try {
+        if (replaceAll) {
+          if (parcels.length > 0) {
+            const pIds = parcels.map((p) => p.id || p.trackingNumber);
+            await bulkDeleteParcelsDirectly(pIds);
+          }
+          if (students.length > 0) {
+            const sCodes = students.map((s) => s.studentCode);
+            await bulkDeleteStudentsDirectly(sCodes);
+          }
+        }
+
+        let studentsCount = 0;
+        let parcelsCount = 0;
+
+        if (backupData.students && backupData.students.length > 0) {
+          studentsCount = await batchImportStudentsToFirestore(
+            backupData.students,
+            AUTO_CLOUD_OWNER_ID
+          );
+        }
+
+        if (backupData.parcels && backupData.parcels.length > 0) {
+          parcelsCount = await batchImportParcelsToFirestore(
+            backupData.parcels,
+            AUTO_CLOUD_OWNER_ID
+          );
+        }
+
+        setQuotaMetrics((prev) => ({
+          ...prev,
+          firestoreWritesUsed: prev.firestoreWritesUsed + studentsCount + parcelsCount,
+          lastSyncedAt: new Date().toISOString(),
+        }));
+
+        showToast(
+          `กู้คืนข้อมูลสำรองสำเร็จ: นักเรียน ${studentsCount} คน, พัสดุ ${parcelsCount} รายการ`,
+          'success'
+        );
+
+        return { studentsCount, parcelsCount };
+      } catch (err) {
+        showToast(
+          `เกิดข้อผิดพลาดในการกู้คืนข้อมูลระบบ: ${err instanceof Error ? err.message : 'Error'}`,
+          'error'
+        );
+        throw err;
+      } finally {
+        setIsSyncing(false);
+        setSyncProgress(null);
+      }
+    },
+    [students, parcels, showToast]
+  );
+
+  /**
    * นำเข้าข้อมูลนักเรียนจำนวนมาก (Bulk Import) ลงฐานข้อมูล Firestore โดยตรง
    */
   const bulkImportStudents = useCallback(
@@ -984,22 +1175,20 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // คำนวณสิทธิ์เมนูที่สมาชิกแต่ละคนมีสิทธิ์เข้าถึง
   const getEffectiveMemberMenus = useCallback(
     (member: Member): AppMenuKey[] => {
+      // ผู้ดูแลระบบหลัก (Admin) ต้องมีสิทธิ์เข้าถึงทุกเมนูของระบบเสมอ รวมถึงลบพัสดุจำนวนมากและการตั้งค่าทั้งหมด
+      if (member.role === 'ผู้ดูแลระบบ') {
+        return [...ALL_MENU_KEYS];
+      }
       if (member.useCustomMenus) {
         return member.allowedMenus.length > 0 ? member.allowedMenus : ['inbound'];
       }
-      const roleKey =
-        member.role === 'ผู้ดูแลระบบ'
-          ? 'admin'
-          : member.role === 'ครู'
-          ? 'teacher'
-          : 'staff';
+      const roleKey = member.role === 'ครู' ? 'teacher' : 'staff';
       const foundRole = rolePermissions.find(
         (rp) => rp.roleId === roleKey || rp.roleName === member.role
       );
       if (foundRole && foundRole.allowedMenus.length > 0) {
         return foundRole.allowedMenus;
       }
-      if (member.role === 'ผู้ดูแลระบบ') return [...ALL_MENU_KEYS];
       if (member.role === 'ครู') return [...DEFAULT_TEACHER_MENU_KEYS];
       return [...DEFAULT_STAFF_MENU_KEYS];
     },
@@ -1015,6 +1204,7 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const allowedMenusForCurrentMember = useMemo<AppMenuKey[]>(() => {
     if (!currentMember) return [];
+    if (currentMember.role === 'ผู้ดูแลระบบ') return [...ALL_MENU_KEYS];
     return getEffectiveMemberMenus(currentMember);
   }, [currentMember, getEffectiveMemberMenus]);
 
@@ -1194,6 +1384,11 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
       updateParcelStatus,
       bulkUpdateParcelStatus,
       deleteParcel,
+      bulkDeleteParcels,
+      bulkDeleteParcelsByDorm,
+      clearAllParcels,
+      bulkImportParcels,
+      fullRestoreSystemBackup,
       bulkImportStudents,
       upsertSingleStudent,
       deleteStudent,
@@ -1248,6 +1443,11 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
       updateParcelStatus,
       bulkUpdateParcelStatus,
       deleteParcel,
+      bulkDeleteParcels,
+      bulkDeleteParcelsByDorm,
+      clearAllParcels,
+      bulkImportParcels,
+      fullRestoreSystemBackup,
       bulkImportStudents,
       upsertSingleStudent,
       deleteStudent,

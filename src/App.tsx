@@ -19,6 +19,8 @@ import {
   ChevronDown,
   Boxes,
   PackageCheck,
+  Trash2,
+  Database,
 } from 'lucide-react';
 import { ParcelSystemProvider, useParcelSystem } from './context/ParcelSystemContext';
 import { Member, AppMenuKey, APP_MENU_DEFINITIONS } from './types/parcel';
@@ -29,6 +31,8 @@ import { StudentsImportView } from './components/StudentsImportView';
 import { DashboardView } from './components/DashboardView';
 import { DeliverablesView } from './components/DeliverablesView';
 import { MembersAccessView } from './components/MembersAccessView';
+import { BulkDeleteParcelsView } from './components/BulkDeleteParcelsView';
+import { BackupRestoreView } from './components/BackupRestoreView';
 import { LoginView } from './components/LoginView';
 
 interface MainWorkspaceProps {
@@ -100,12 +104,25 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
     weeklyWarningPopup.focusedStudent ||
     (overWeeklyLimitStudents.length > 0 ? overWeeklyLimitStudents[0] : null);
 
-  const isMenuAllowed = (key: AppMenuKey) => allowedMenusForCurrentMember.includes(key);
+  const isMenuAllowed = (key: AppMenuKey) => {
+    // ผู้ดูแลระบบหลัก (Admin) มีสิทธิ์เข้าถึงทุกเมนู รวมถึงลบพัสดุจำนวนมากและการตั้งค่าทั้งหมดเสมอ
+    if (currentMember.role === 'ผู้ดูแลระบบ') return true;
+    return allowedMenusForCurrentMember.includes(key);
+  };
 
-  const isSettingsActive = ['students', 'members', 'deliverables'].includes(activeTab);
+  const isSettingsActive = [
+    'students',
+    'members',
+    'bulk-delete',
+    'backup-restore',
+    'deliverables',
+  ].includes(activeTab);
   const hasAnySettingsMenu =
+    currentMember.role === 'ผู้ดูแลระบบ' ||
     isMenuAllowed('students') ||
     isMenuAllowed('members') ||
+    isMenuAllowed('bulk-delete') ||
+    isMenuAllowed('backup-restore') ||
     isMenuAllowed('deliverables');
 
   const getMemberDisplayName = (member: Member) => {
@@ -226,8 +243,12 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
                     <span className="text-[11px] px-2 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-md font-semibold no-underline">
                       {activeTab === 'students'
                         ? 'ข้อมูลนักเรียน'
+                        : activeTab === 'bulk-delete'
+                        ? 'ลบพัสดุจำนวนมาก (Bulk Deletion)'
                         : activeTab === 'members'
                         ? 'จัดการสมาชิก & สิทธิ์'
+                        : activeTab === 'backup-restore'
+                        ? 'สำรอง & กู้คืน'
                         : 'ติดตั้งระบบ'}
                     </span>
                   )}
@@ -240,80 +261,152 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
 
                 {/* Dropdown Menu รายการตั้งค่า */}
                 {isSettingsOpen && (
-                  <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 animate-in fade-in slide-in-from-top-1">
-                    <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 flex items-center justify-between">
-                      <span>เมนูตั้งค่าระบบ</span>
+                  <div className="absolute right-0 mt-2 w-84 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-1">
+                    <div className="px-3.5 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 flex items-center justify-between">
+                      <span>เมนูตั้งค่า & ดูแลระบบ</span>
                       <span className="text-[9px] font-normal text-emerald-600 font-mono">Live Firestore DB</span>
                     </div>
 
-                    {isMenuAllowed('students') && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveTab('students');
-                          setIsSettingsOpen(false);
-                        }}
-                        className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2.5 transition-colors cursor-pointer ${
-                          activeTab === 'students'
-                            ? 'bg-indigo-50 text-indigo-700 font-bold'
-                            : 'text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
-                          <Users className="w-3.5 h-3.5" />
+                    {/* หมวดหมู่: การดูแลของผู้ดูแลระบบ */}
+                    {(isMenuAllowed('students') ||
+                      isMenuAllowed('bulk-delete') ||
+                      isMenuAllowed('backup-restore') ||
+                      isMenuAllowed('members')) && (
+                      <div className="py-1">
+                        <div className="px-3.5 py-1 text-[10px] font-extrabold text-indigo-600 uppercase tracking-wider flex items-center gap-1.5">
+                          <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
+                          <span>การดูแลของผู้ดูแลระบบ (Admin)</span>
                         </div>
-                        <div>
-                          <div className="font-semibold leading-tight">ข้อมูลนักเรียน</div>
-                          <div className="text-[10px] text-slate-400">นำเข้าและจัดการทะเบียนนักเรียน</div>
-                        </div>
-                      </button>
+
+                        {/* 1. ข้อมูลนักเรียน */}
+                        {isMenuAllowed('students') && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTab('students');
+                              setIsSettingsOpen(false);
+                            }}
+                            className={`w-full px-3.5 py-2 text-left text-xs flex items-center gap-2.5 transition-colors cursor-pointer ${
+                              activeTab === 'students'
+                                ? 'bg-indigo-50 text-indigo-700 font-bold'
+                                : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                              <Users className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <div className="font-semibold leading-tight">ข้อมูลนักเรียน</div>
+                              <div className="text-[10px] text-slate-400">นำเข้าและจัดการทะเบียนนักเรียน</div>
+                            </div>
+                          </button>
+                        )}
+
+                        {/* 2. ลบพัสดุจำนวนมากออกจากระบบ (Bulk Parcel Deletion) */}
+                        {isMenuAllowed('bulk-delete') && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTab('bulk-delete');
+                              setIsSettingsOpen(false);
+                            }}
+                            className={`w-full px-3.5 py-2 text-left text-xs flex items-center gap-2.5 transition-colors cursor-pointer ${
+                              activeTab === 'bulk-delete'
+                                ? 'bg-red-50 text-red-700 font-bold'
+                                : 'text-slate-700 hover:bg-red-50/50'
+                            }`}
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-red-100 text-red-700 flex items-center justify-center shrink-0">
+                              <Trash2 className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <div className="font-semibold leading-tight text-red-950 flex items-center gap-1.5">
+                                <span>ลบพัสดุจำนวนมากออกจากระบบ</span>
+                                <span className="text-[9px] px-1.5 py-0.2 bg-red-100 text-red-800 rounded font-mono font-bold">Bulk Deletion</span>
+                              </div>
+                              <div className="text-[10px] text-slate-400">ลบทีละหอพัก หรือลบพัสดุทั้งหมด</div>
+                            </div>
+                          </button>
+                        )}
+
+                        {/* 3. สำรอง ส่งออก & กู้คืนข้อมูล */}
+                        {isMenuAllowed('backup-restore') && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTab('backup-restore');
+                              setIsSettingsOpen(false);
+                            }}
+                            className={`w-full px-3.5 py-2 text-left text-xs flex items-center gap-2.5 transition-colors cursor-pointer ${
+                              activeTab === 'backup-restore'
+                                ? 'bg-indigo-50 text-indigo-700 font-bold'
+                                : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                              <Database className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <div className="font-semibold leading-tight text-slate-900 flex items-center gap-1.5">
+                                <span>สำรอง ส่งออก & กู้คืนข้อมูล</span>
+                                <span className="text-[9px] px-1.5 py-0.2 bg-indigo-100 text-indigo-800 rounded font-mono font-bold">Admin</span>
+                              </div>
+                              <div className="text-[10px] text-slate-400">แบบทั้งหมด และแยกตามนักเรียน/สถานะ</div>
+                            </div>
+                          </button>
+                        )}
+
+                        {/* 4. จัดการสมาชิก & สิทธิ์ */}
+                        {isMenuAllowed('members') && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTab('members');
+                              setIsSettingsOpen(false);
+                            }}
+                            className={`w-full px-3.5 py-2 text-left text-xs flex items-center gap-2.5 transition-colors cursor-pointer ${
+                              activeTab === 'members'
+                                ? 'bg-indigo-50 text-indigo-700 font-bold'
+                                : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                              <UserCog className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <div className="font-semibold leading-tight">จัดการสมาชิก & สิทธิ์</div>
+                              <div className="text-[10px] text-slate-400">กำหนดสิทธิ์และบัญชีผู้ใช้งาน</div>
+                            </div>
+                          </button>
+                        )}
+                      </div>
                     )}
 
-                    {isMenuAllowed('members') && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveTab('members');
-                          setIsSettingsOpen(false);
-                        }}
-                        className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2.5 transition-colors cursor-pointer ${
-                          activeTab === 'members'
-                            ? 'bg-indigo-50 text-indigo-700 font-bold'
-                            : 'text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                          <UserCog className="w-3.5 h-3.5" />
-                        </div>
-                        <div>
-                          <div className="font-semibold leading-tight">จัดการสมาชิก & สิทธิ์</div>
-                          <div className="text-[10px] text-slate-400">กำหนดสิทธิ์และบัญชีผู้ใช้งาน</div>
-                        </div>
-                      </button>
-                    )}
-
-                    {isMenuAllowed('deliverables') && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveTab('deliverables');
-                          setIsSettingsOpen(false);
-                        }}
-                        className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2.5 transition-colors cursor-pointer ${
-                          activeTab === 'deliverables'
-                            ? 'bg-indigo-50 text-indigo-700 font-bold'
-                            : 'text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className="w-6 h-6 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                          <BookOpen className="w-3.5 h-3.5" />
-                        </div>
-                        <div>
-                          <div className="font-semibold leading-tight">ติดตั้งระบบ</div>
-                          <div className="text-[10px] text-slate-400">คู่มือและไฟล์ติดตั้ง GitHub Pages</div>
-                        </div>
-                      </button>
-                    )}
+                    {/* หมวดหมู่: ติดตั้งและเชื่อมต่อ */}
+                    <div className="mt-1 pt-1.5 border-t border-slate-100">
+                      {isMenuAllowed('deliverables') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveTab('deliverables');
+                            setIsSettingsOpen(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2.5 transition-colors cursor-pointer ${
+                            activeTab === 'deliverables'
+                              ? 'bg-amber-50 text-amber-800 font-bold'
+                              : 'text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                            <BookOpen className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="font-semibold leading-tight">ติดตั้งระบบ</div>
+                            <div className="text-[10px] text-slate-400">คู่มือและไฟล์ติดตั้ง GitHub Pages</div>
+                          </div>
+                        </button>
+                      )}
+                    </div>
 
                     {/* ปุ่มรีเฟรช Cloud ย้ายมาไว้ในเมนูตั้งค่า */}
                     <div className="mt-1 pt-1.5 border-t border-slate-100 px-1">
@@ -449,11 +542,121 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
 
       {/* พื้นที่แสดงเนื้อหาหลัก (Main Viewport) */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 md:px-8 py-6 md:py-8">
+        {/* แถบนำทางด่วนสำหรับเมนูตั้งค่าระบบ (Settings Navigation Bar) เมื่ออยู่ในหน้าใดๆ ในหมวดตั้งค่า */}
+        {isSettingsActive && (
+          <div className="no-print mb-6 bg-white border border-slate-200/90 rounded-2xl p-3 sm:p-4 shadow-xs animate-in fade-in">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 mb-2.5 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Settings className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-extrabold text-slate-900 leading-tight flex items-center gap-2">
+                    <span>เมนูตั้งค่า & ดูแลระบบ</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-md font-medium text-indigo-700 bg-indigo-50 border border-indigo-200">
+                      Settings
+                    </span>
+                  </h2>
+                  <p className="text-[11px] text-slate-500">
+                    จัดการข้อมูลนักเรียน ลบพัสดุจำนวนมาก สำรองกู้คืน สิทธิ์สมาชิก และการติดตั้งระบบ
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-mono text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md font-semibold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Direct Cloud Firestore
+                </span>
+              </div>
+            </div>
+
+            {/* แถบปุ่มลัดเลือกเมนูตั้งค่า (Sub-tabs) */}
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+              {isMenuAllowed('students') && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('students')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTab === 'students'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-slate-100/80 text-slate-700 hover:bg-slate-200/80'
+                  }`}
+                >
+                  <Users className="w-4 h-4" />
+                  <span>ข้อมูลนักเรียน</span>
+                </button>
+              )}
+
+              {isMenuAllowed('bulk-delete') && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('bulk-delete')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTab === 'bulk-delete'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'bg-red-50 text-red-700 hover:bg-red-100/90 border border-red-200'
+                  }`}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>ลบพัสดุจำนวนมากออกจากระบบ (Bulk Parcel Deletion)</span>
+                </button>
+              )}
+
+              {isMenuAllowed('backup-restore') && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('backup-restore')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTab === 'backup-restore'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-slate-100/80 text-slate-700 hover:bg-slate-200/80'
+                  }`}
+                >
+                  <Database className="w-4 h-4" />
+                  <span>สำรอง & กู้คืนข้อมูล</span>
+                </button>
+              )}
+
+              {isMenuAllowed('members') && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('members')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTab === 'members'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-slate-100/80 text-slate-700 hover:bg-slate-200/80'
+                  }`}
+                >
+                  <UserCog className="w-4 h-4" />
+                  <span>จัดการสมาชิก & สิทธิ์</span>
+                </button>
+              )}
+
+              {isMenuAllowed('deliverables') && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('deliverables')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTab === 'deliverables'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'bg-slate-100/80 text-slate-700 hover:bg-slate-200/80'
+                  }`}
+                >
+                  <BookOpen className="w-4 h-4" />
+                  <span>ติดตั้งระบบ</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {activeTab === 'inbound' && isMenuAllowed('inbound') && <InboundView />}
         {activeTab === 'tracking' && isMenuAllowed('tracking') && <TrackingView />}
         {activeTab === 'manifest' && isMenuAllowed('manifest') && <ManifestView />}
         {activeTab === 'students' && isMenuAllowed('students') && <StudentsImportView />}
         {activeTab === 'dashboard' && isMenuAllowed('dashboard') && <DashboardView />}
+        {activeTab === 'bulk-delete' && isMenuAllowed('bulk-delete') && <BulkDeleteParcelsView />}
+        {activeTab === 'backup-restore' && isMenuAllowed('backup-restore') && <BackupRestoreView />}
         {activeTab === 'members' && isMenuAllowed('members') && <MembersAccessView />}
         {activeTab === 'deliverables' && isMenuAllowed('deliverables') && <DeliverablesView />}
       </main>
@@ -655,6 +858,34 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
                 </button>
               )}
 
+              {/* 2. ลบพัสดุจำนวนมากออกจากระบบ (Bulk Parcel Deletion) */}
+              {isMenuAllowed('bulk-delete') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('bulk-delete');
+                    setIsMobileSettingsOpen(false);
+                  }}
+                  className={`w-full p-3 text-left rounded-xl flex items-center gap-3 transition-colors ${
+                    activeTab === 'bulk-delete'
+                      ? 'bg-red-50 border border-red-200 text-red-900 font-bold'
+                      : 'bg-slate-50 hover:bg-red-50/50 text-slate-700'
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-lg bg-red-100 text-red-700 flex items-center justify-center shrink-0">
+                    <Trash2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-red-950 flex items-center gap-1.5">
+                      <span>ลบพัสดุจำนวนมากออกจากระบบ</span>
+                      <span className="text-[9px] px-1.5 py-0.2 bg-red-100 text-red-800 rounded font-mono font-bold">Bulk Deletion</span>
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-normal">ลบทีละหอพัก หรือล้างพัสดุทั้งหมดออกจากระบบ</div>
+                  </div>
+                </button>
+              )}
+
+              {/* 3. จัดการสมาชิก & สิทธิ์ */}
               {isMenuAllowed('members') && (
                 <button
                   type="button"
@@ -674,6 +905,32 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
                   <div>
                     <div className="text-xs font-bold">จัดการสมาชิก & สิทธิ์</div>
                     <div className="text-[10px] text-slate-500 font-normal">จัดการผู้ใช้และสิทธิ์เข้าถึงเมนู</div>
+                  </div>
+                </button>
+              )}
+
+              {isMenuAllowed('backup-restore') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('backup-restore');
+                    setIsMobileSettingsOpen(false);
+                  }}
+                  className={`w-full p-3 text-left rounded-xl flex items-center gap-3 transition-colors ${
+                    activeTab === 'backup-restore'
+                      ? 'bg-indigo-50 border border-indigo-200 text-indigo-900 font-bold'
+                      : 'bg-slate-50 hover:bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                    <Database className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                      <span>สำรอง ส่งออก & กู้คืน</span>
+                      <span className="text-[9px] px-1.5 py-0.2 bg-indigo-100 text-indigo-800 rounded font-mono font-bold">Admin</span>
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-normal">แบบทั้งหมด และแยกตามนักเรียน/สถานะ</div>
                   </div>
                 </button>
               )}

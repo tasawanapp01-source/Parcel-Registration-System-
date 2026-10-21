@@ -209,7 +209,7 @@ export function sanitizeMenuList(menus: unknown): AppMenuKey[] {
   const filtered = menus
     .map((m) => String(m || '').trim())
     .filter((m): m is AppMenuKey => validSet.has(m));
-  return Array.from(new Set(filtered)).slice(0, 10);
+  return Array.from(new Set(filtered));
 }
 
 export function buildValidMemberPayload(m: Member, ownerId: string) {
@@ -406,6 +406,79 @@ export async function bulkUpdateParcelsDirectly(
   }
 
   return updatedCount;
+}
+
+/**
+ * ลบพัสดุหลายรายการออกจาก Firestore โดยตรงด้วย Batch
+ */
+export async function bulkDeleteParcelsDirectly(
+  parcelIds: string[],
+  onProgress?: (completed: number, total: number) => void
+): Promise<number> {
+  if (parcelIds.length === 0) return 0;
+  const CHUNK_SIZE = 400;
+  let deletedCount = 0;
+
+  for (let i = 0; i < parcelIds.length; i += CHUNK_SIZE) {
+    const chunk = parcelIds.slice(i, i + CHUNK_SIZE);
+    const batch = writeBatch(db);
+
+    for (const pid of chunk) {
+      const safeId = sanitizeId(pid, 64);
+      const docRef = doc(db, 'parcels', safeId);
+      batch.delete(docRef);
+    }
+
+    try {
+      await batch.commit();
+      deletedCount += chunk.length;
+      if (onProgress) {
+        onProgress(deletedCount, parcelIds.length);
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'parcels/bulk_delete');
+    }
+  }
+
+  return deletedCount;
+}
+
+/**
+ * นำเข้าหรือกู้คืนพัสดุจำนวนมาก (Bulk/Restore Import) ลง Firestore โดยตรง
+ */
+export async function batchImportParcelsToFirestore(
+  parcelsList: (Parcel | Omit<Parcel, 'createdAt' | 'updatedAt'>)[],
+  uid: string = AUTO_CLOUD_OWNER_ID,
+  onProgress?: (completed: number, total: number) => void
+): Promise<number> {
+  if (parcelsList.length === 0) return 0;
+  const CHUNK_SIZE = 400;
+  let totalWritten = 0;
+  const effectiveOwnerId = uid || AUTO_CLOUD_OWNER_ID;
+
+  for (let i = 0; i < parcelsList.length; i += CHUNK_SIZE) {
+    const chunk = parcelsList.slice(i, i + CHUNK_SIZE);
+    const batch = writeBatch(db);
+
+    for (const p of chunk) {
+      const payload = buildValidParcelPayload(p as Parcel, effectiveOwnerId);
+      const safeId = payload.trackingNumber;
+      const docRef = doc(db, 'parcels', safeId);
+      batch.set(docRef, payload);
+    }
+
+    try {
+      await batch.commit();
+      totalWritten += chunk.length;
+      if (onProgress) {
+        onProgress(totalWritten, parcelsList.length);
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'parcels/bulk_import');
+    }
+  }
+
+  return totalWritten;
 }
 
 /**
@@ -652,13 +725,19 @@ function mapDocToMember(docId: string, d: Record<string, unknown>, fallbackOwner
       ? 'ครู'
       : 'เจ้าหน้าที่';
 
+  let allowedMenus = sanitizeMenuList(d.allowedMenus);
+  if (role === 'ผู้ดูแลระบบ') {
+    const set = new Set([...allowedMenus, ...ALL_MENU_KEYS]);
+    allowedMenus = Array.from(set);
+  }
+
   return {
     memberId: String(d.memberId || docId),
     username: String(d.username || ''),
     password: String(d.password || ''),
     fullName: String(d.fullName || ''),
     role,
-    allowedMenus: sanitizeMenuList(d.allowedMenus),
+    allowedMenus,
     useCustomMenus: Boolean(d.useCustomMenus),
     canEdit: d.canEdit !== undefined ? Boolean(d.canEdit) : role !== 'ครู',
     canDelete: d.canDelete !== undefined ? Boolean(d.canDelete) : role === 'ผู้ดูแลระบบ',
@@ -688,10 +767,16 @@ function mapDocToRolePermission(
       ? 'ครู'
       : 'เจ้าหน้าที่';
 
+  let allowedMenus = sanitizeMenuList(d.allowedMenus);
+  if (roleId === 'admin') {
+    const set = new Set([...allowedMenus, ...ALL_MENU_KEYS]);
+    allowedMenus = Array.from(set);
+  }
+
   return {
     roleId,
     roleName,
-    allowedMenus: sanitizeMenuList(d.allowedMenus),
+    allowedMenus,
     canEdit: d.canEdit !== undefined ? Boolean(d.canEdit) : roleId !== 'teacher',
     canDelete: d.canDelete !== undefined ? Boolean(d.canDelete) : roleId === 'admin',
     ownerId: String(d.ownerId || fallbackOwnerId),

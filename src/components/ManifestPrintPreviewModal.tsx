@@ -29,6 +29,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
   dormitory,
   activeTheme,
   printDateDisplay,
+  selectedStatusLabel,
   selectedDate,
 }) => {
   const [orientation, setOrientation] = useState<PrintOrientation>('portrait');
@@ -402,6 +403,9 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                 <span>วันที่พิมพ์: <strong className="text-slate-900">{printDateDisplay}</strong></span>
                 {selectedDate && (
                   <span>· รับเข้า: <strong className="text-slate-900">{formatThaiSlashDate(selectedDate)}</strong></span>
+                )}
+                {selectedStatusLabel && (
+                  <span>· ตัวกรอง: <strong className="text-slate-900">{selectedStatusLabel}</strong></span>
                 )}
                 <span>· รวมทั้งหมด <strong className="text-slate-900">{parcels.length}</strong> รายการ</span>
                 <span>(เซ็นแล้ว {signedCount} / รอเซ็น {unsignedCount}{infirmaryCount > 0 ? `, งานพยาบาล ${infirmaryCount}` : ''}{legalHoldCount > 0 ? `, ติดนิติการ ${legalHoldCount}` : ''})</span>

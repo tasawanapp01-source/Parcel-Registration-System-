@@ -39,6 +39,7 @@ const THAI_WEEKDAYS = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', '�
 
 const MANIFEST_STATUS_FILTERS = [
   { value: 'ALL_REGISTERED', label: 'พัสดุที่ลงทะเบียนแล้ว (รวมติดนิติการ/งานพยาบาล)' },
+  { value: 'REGISTERED_EXCEPT_LEGAL', label: 'พัสดุที่ลงทะเบียนแล้ว (ไม่รวมติดนิติการ)' },
   { value: 'UNSIGNED', label: 'พัสดุที่ยังไม่เซ็นรับทั้งหมด' },
   { value: 'INFIRMARY', label: 'เฉพาะติดต่องานพยาบาล' },
   { value: 'LEGAL_HOLD', label: 'เฉพาะพัสดุติดนิติการ' },
@@ -142,13 +143,39 @@ export const ManifestView: React.FC = () => {
         if (dorm !== selectedDormitory.trim()) return false;
       }
 
-      // 2. กรองตามวันที่รับเข้าถ้ามีการเลือกจากปฏิทิน
-      if (selectedDate) {
-        const pDate = (p.receivedDate || '').trim();
-        if (pDate && pDate !== selectedDate) return false;
+      // ดึงวันที่ลงทะเบียนพัสดุ (YYYY-MM-DD)
+      const pRegDate = (p.receivedDate || (p.createdAt ? p.createdAt.slice(0, 10) : '')).trim();
+
+      // เงื่อนไขสำหรับตัวกรอง: "พัสดุที่ลงทะเบียนแล้ว (ไม่รวมติดนิติการ)"
+      // แสดงพัสดุที่ลงทะเบียนแล้ว (ไม่รวมติดนิติการ) แต่ให้แสดงรายการของติดนิติการ ตามเงื่อนไข:
+      // เมื่อวันที่ลงทะเบียนพัสดุตรงกับวันที่ปัจจุบัน หรือตรงกับ 3.วันที่รับเข้า
+      if (selectedStatus === 'REGISTERED_EXCEPT_LEGAL') {
+        if (p.status === 'ส่งมอบสำเร็จ') return false;
+
+        if (p.status === 'ติดนิติการ') {
+          const isToday = pRegDate === todayIso;
+          const isSelectedReceivedDate = Boolean(selectedDate && pRegDate === selectedDate);
+          return isToday || isSelectedReceivedDate;
+        }
+
+        // รายการสถานะอื่นๆ ที่ไม่ใช่ติดนิติการ: หากระบุ 3. วันที่รับเข้า ต้องตรงกับวันที่รับเข้า
+        if (selectedDate && pRegDate && pRegDate !== selectedDate) {
+          return false;
+        }
+
+        return (
+          p.status === 'ลงทะเบียนรับพัสดุ' ||
+          p.status === 'ติดต่องานพยาบาล' ||
+          p.status === 'รอการยืนยัน'
+        );
       }
 
-      // 3. กรองตามสถานะ: ให้นำพัสดุที่ลงทะเบียนแล้วมาแสดงในตารางได้เลย เพื่อรอพิมพ์ใบนำส่งให้แต่ละหอพัก ให้รวมถึงของที่ติดนิติการ และงานพยาบาล
+      // 2. กรองตามวันที่รับเข้าถ้ามีการเลือกจากปฏิทิน (สำหรับสถานะอื่นๆ)
+      if (selectedDate) {
+        if (pRegDate && pRegDate !== selectedDate) return false;
+      }
+
+      // 3. กรองตามสถานะอื่นๆ:
       if (selectedStatus === 'ALL_REGISTERED') {
         return (
           p.status === 'ลงทะเบียนรับพัสดุ' ||
@@ -175,7 +202,7 @@ export const ManifestView: React.FC = () => {
       }
       return p.status === selectedStatus;
     });
-  }, [parcels, selectedDormitory, selectedDate, selectedStatus]);
+  }, [parcels, selectedDormitory, selectedDate, selectedStatus, todayIso]);
 
   // จัดเรียงรายการพัสดุตาม หอพัก, ห้องพักหอ, และชื่อ เพื่อให้อ่านและพิมพ์นำส่งเป็นระเบียบ
   const sortedManifestParcels = useMemo(() => {
@@ -457,6 +484,11 @@ export const ManifestView: React.FC = () => {
                 </option>
               ))}
             </select>
+            {selectedStatus === 'REGISTERED_EXCEPT_LEGAL' && (
+              <p className="mt-1 text-[11px] text-emerald-700 font-medium leading-tight">
+                * แสดงเฉพาะรายการติดนิติการที่ลงทะเบียนวันนี้ หรือตรงกับวันที่รับเข้าในข้อ 3
+              </p>
+            )}
           </div>
 
           <div ref={calendarContainerRef} className="relative">
@@ -1119,7 +1151,9 @@ export const ManifestView: React.FC = () => {
             สรุปข้อมูลรายการนำส่ง: ทั้งสิ้น {sortedManifestParcels.length} รายการ (ส่งมอบสำเร็จแล้ว {signedParcelsInView.length} รายการ, รอส่งมอบ {unsignedParcelsInView.length} รายการ)
           </p>
           <p className="text-slate-500 font-mono text-[11px]">
-            * รายการพัสดุลงทะเบียนสำหรับพิมพ์ใบนำส่งประจำหอพัก (รวมรายการติดนิติการ)
+            {selectedStatus === 'REGISTERED_EXCEPT_LEGAL'
+              ? '* รายการพัสดุลงทะเบียน (ไม่รวมติดนิติการ ยกเว้นลงทะเบียนตรงกับวันนี้หรือตรงกับวันที่รับเข้า)'
+              : '* รายการพัสดุลงทะเบียนสำหรับพิมพ์ใบนำส่งประจำหอพัก (รวมรายการติดนิติการ)'}
           </p>
         </div>
 

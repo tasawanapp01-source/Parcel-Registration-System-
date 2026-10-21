@@ -50,7 +50,7 @@ service cloud.firestore {
 
     function isValidMenuList(menus) {
       return menus is list &&
-        menus.size() <= 10 &&
+        menus.size() <= 15 &&
         menus.hasOnly([
           'inbound',
           'tracking',
@@ -58,7 +58,9 @@ service cloud.firestore {
           'students',
           'dashboard',
           'deliverables',
-          'members'
+          'members',
+          'bulk-delete',
+          'backup-restore'
         ]) &&
         (menus.size() == 0 || (menus[0] is string && menus[0].size() >= 1 && menus[0].size() <= 30));
     }

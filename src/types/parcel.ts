@@ -81,7 +81,9 @@ export type AppMenuKey =
   | 'students'
   | 'dashboard'
   | 'deliverables'
-  | 'members';
+  | 'members'
+  | 'bulk-delete'
+  | 'backup-restore';
 
 export type MemberRole = 'ผู้ดูแลระบบ' | 'เจ้าหน้าที่' | 'ครู' | 'ผู้ใช้';
 
@@ -90,6 +92,7 @@ export interface AppMenuDefinition {
   label: string;
   shortLabel: string;
   description: string;
+  adminOnly?: boolean;
 }
 
 export const APP_MENU_DEFINITIONS: AppMenuDefinition[] = [
@@ -124,10 +127,25 @@ export const APP_MENU_DEFINITIONS: AppMenuDefinition[] = [
     description: 'ดูภาพรวมสถิติพัสดุรายวัน รายหอพัก และปริมาณงาน',
   },
   {
+    key: 'bulk-delete',
+    label: 'ลบพัสดุจำนวนมากออกจากระบบ (Bulk Parcel Deletion)',
+    shortLabel: 'ลบพัสดุจำนวนมาก',
+    description: 'ลบพัสดุจำนวนมากออกจากระบบ (Bulk Parcel Deletion) ลบทีละหอพัก หรือลบพัสดุทั้งหมด (เฉพาะผู้ดูแลระบบ)',
+    adminOnly: true,
+  },
+  {
+    key: 'backup-restore',
+    label: 'สำรอง ส่งออก & กู้คืนข้อมูล',
+    shortLabel: 'สำรอง/กู้คืน',
+    description: 'สำรอง ส่งออก และกู้คืนข้อมูลแบบทั้งหมด และแยกตามข้อมูลนักเรียนหรือสถานะพัสดุ (เฉพาะผู้ดูแลระบบ)',
+    adminOnly: true,
+  },
+  {
     key: 'members',
     label: 'จัดการสมาชิก & สิทธิ์เมนู',
     shortLabel: 'สมาชิก/สิทธิ์',
     description: 'เพิ่ม ลบ แก้ไข สมาชิก (ผู้ดูแลระบบ, เจ้าหน้าที่, ครู) และหน้าอนุญาตการเข้าถึงเมนู',
+    adminOnly: true,
   },
   {
     key: 'deliverables',
@@ -143,6 +161,8 @@ export const ALL_MENU_KEYS: AppMenuKey[] = [
   'manifest',
   'students',
   'dashboard',
+  'bulk-delete',
+  'backup-restore',
   'members',
   'deliverables',
 ];

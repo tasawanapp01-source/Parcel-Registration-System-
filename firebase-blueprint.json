@@ -291,7 +291,7 @@
         },
         "allowedMenus": {
           "type": "array",
-          "description": "รายการรหัสเมนูที่อนุญาตให้เข้าถึง"
+          "description": "รายการรหัสเมนูที่อนุญาตให้เข้าถึง (inbound, tracking, manifest, students, dashboard, bulk-delete, backup-restore, members, deliverables)"
         },
         "useCustomMenus": {
           "type": "boolean",
@@ -373,7 +373,7 @@
         },
         "allowedMenus": {
           "type": "array",
-          "description": "รายการเมนูที่อนุญาตสำหรับระดับนี้"
+          "description": "รายการเมนูที่อนุญาตสำหรับระดับนี้ (inbound, tracking, manifest, students, dashboard, bulk-delete, backup-restore, members, deliverables)"
         },
         "canEdit": {
           "type": "boolean",
