@@ -20,6 +20,7 @@ interface ManifestPrintPreviewModalProps {
   printDateDisplay: string;
   selectedStatusLabel: string;
   selectedDate?: string;
+  selectedSortLabel?: string;
 }
 
 export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps> = ({
@@ -31,6 +32,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
   printDateDisplay,
   selectedStatusLabel,
   selectedDate,
+  selectedSortLabel,
 }) => {
   const [orientation, setOrientation] = useState<PrintOrientation>('portrait');
   const [density, setDensity] = useState<RowDensity>('compact');
@@ -406,6 +408,9 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                 )}
                 {selectedStatusLabel && (
                   <span>· ตัวกรอง: <strong className="text-slate-900">{selectedStatusLabel}</strong></span>
+                )}
+                {selectedSortLabel && (
+                  <span>· เรียงตาม: <strong className="text-slate-900">{selectedSortLabel}</strong></span>
                 )}
                 <span>· รวมทั้งหมด <strong className="text-slate-900">{parcels.length}</strong> รายการ</span>
                 <span>(เซ็นแล้ว {signedCount} / รอเซ็น {unsignedCount}{infirmaryCount > 0 ? `, งานพยาบาล ${infirmaryCount}` : ''}{legalHoldCount > 0 ? `, ติดนิติการ ${legalHoldCount}` : ''})</span>

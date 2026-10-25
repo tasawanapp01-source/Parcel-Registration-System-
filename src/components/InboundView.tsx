@@ -174,8 +174,10 @@ export const InboundView: React.FC = () => {
   } | null>(null);
 
   // 3. ประเภทสิ่งของ และรายละเอียดเพิ่มเติม (เครื่องสำอาง / อื่นๆ)
-  const [category, setCategory] = useState<ParcelCategory>('ของใช้ส่วนตัว');
+  // ตั้งค่าเริ่มต้นเป็น null สไตล์ disable ก่อนจนกว่าจะมีการเลือกหมวดหมู่สิ่งของ
+  const [category, setCategory] = useState<ParcelCategory | null>(null);
   const [customCategoryDetail, setCustomCategoryDetail] = useState<string>('');
+  const [isExtraDetailOpen, setIsExtraDetailOpen] = useState<boolean>(false);
 
   // 4. สถานะการคัดแยกพัสดุ (ตั้งค่าเริ่มต้นเป็น null สีเทาสไตล์ disable เมื่อผู้ใช้คลิกเลือกจึงแสดงสีสรรของปุ่ม)
   const [status, setStatus] = useState<ParcelStatus | null>(null);
@@ -623,6 +625,11 @@ export const InboundView: React.FC = () => {
       return;
     }
 
+    if (!category) {
+      setFormError('กรุณาเลือกประเภทสิ่งของในขั้นตอนที่ 3 ก่อนบันทึก');
+      return;
+    }
+
     // ตรวจสอบการกรอกประเภทสิ่งของ กรณีเลือก "อื่นๆ" หรือ "เครื่องสำอาง"
     const trimmedDetail = customCategoryDetail.trim();
     if (category === 'อื่นๆ' && !trimmedDetail) {
@@ -677,8 +684,9 @@ export const InboundView: React.FC = () => {
     setTrackingNumber('');
     setLastScannedCode(null);
     setCourier('Flash Express');
-    setCategory('ของใช้ส่วนตัว');
+    setCategory(null);
     setCustomCategoryDetail('');
+    setIsExtraDetailOpen(false);
     setNote('');
     setStatus(null); // รีเซ็ตสถานะกลับเป็น null เพื่อให้ปุ่มบันทึก disable ทันที
 
@@ -1405,13 +1413,20 @@ export const InboundView: React.FC = () => {
 
           {/* ขั้นตอนที่ 3: กรอกประเภทสิ่งของ (เพิ่ม เครื่องสำอาง และ อื่นๆ ให้กรอกว่าเป็นอะไร) */}
           <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 space-y-4">
-            <div>
-              <span className="block text-base font-bold text-slate-900">
-                3. กรอกประเภทสิ่งของ
-              </span>
-              <span className="block text-xs text-slate-500 mt-0.5">
-                เลือกหมวดหมู่สิ่งของ (กรณีเลือก "เครื่องสำอาง" หรือ "อื่นๆ" สามารถระบุรายละเอียดว่าเป็นอะไรได้ด้านล่าง)
-              </span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+              <div>
+                <span className="block text-base font-bold text-slate-900">
+                  3. กรอกประเภทสิ่งของ
+                </span>
+                <span className="block text-xs text-slate-500 mt-0.5">
+                  เลือกหมวดหมู่สิ่งของ (กรณีเลือก "เครื่องสำอาง" หรือ "อื่นๆ" สามารถระบุรายละเอียดว่าเป็นอะไรได้ด้านล่าง)
+                </span>
+              </div>
+              {!category && (
+                <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 self-start sm:self-auto">
+                  * กรุณาคลิกเลือกหมวดหมู่
+                </span>
+              )}
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -1424,11 +1439,18 @@ export const InboundView: React.FC = () => {
                     onClick={() => {
                       setCategory(cat);
                       setFormError(null);
+                      if (cat === 'อื่นๆ' || cat === 'เครื่องสำอาง') {
+                        setIsExtraDetailOpen(true);
+                        setTimeout(() => customCategoryInputRef.current?.focus(), 50);
+                      } else {
+                        setIsExtraDetailOpen(false);
+                        setCustomCategoryDetail('');
+                      }
                     }}
                     className={`min-h-[52px] px-3.5 py-2.5 text-sm font-semibold rounded-xl border text-left transition-colors cursor-pointer ${
                       active
-                        ? 'bg-slate-900 text-white border-slate-900'
-                        : 'bg-slate-50 text-slate-800 border-slate-200 hover:bg-slate-100'
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                        : 'bg-slate-50 text-slate-800 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
                     }`}
                   >
                     {cat}
@@ -1437,43 +1459,93 @@ export const InboundView: React.FC = () => {
               })}
             </div>
 
-            {/* ช่องกรอกรายละเอียดว่าเป็นอะไร (แสดงเด่นชัดเมื่อเลือก "อื่นๆ" หรือ "เครื่องสำอาง" และอนุญาตให้ระบุเพิ่มเติมได้ทุกหมวด) */}
-            <div
-              className={`p-4 rounded-xl border space-y-2 transition-colors ${
-                category === 'อื่นๆ' || category === 'เครื่องสำอาง'
-                  ? 'bg-amber-50/70 border-amber-300'
-                  : 'bg-slate-50 border-slate-200'
-              }`}
-            >
-              <label
-                htmlFor="custom-category-detail-input"
-                className="block text-xs font-bold text-slate-800"
-              >
-                {category === 'อื่นๆ'
-                  ? 'ระบุประเภทสิ่งของ (อื่นๆ ว่าเป็นอะไร) *'
-                  : category === 'เครื่องสำอาง'
-                  ? 'ระบุรายละเอียดเครื่องสำอาง (ว่าเป็นอะไร)'
-                  : `ระบุรายละเอียดสิ่งของเพิ่มเติมสำหรับ "${category}" (ถ้ามี)`}
-              </label>
-              <input
-                ref={customCategoryInputRef}
-                id="custom-category-detail-input"
-                type="text"
-                value={customCategoryDetail}
-                onChange={(e) => {
-                  setCustomCategoryDetail(e.target.value);
-                  setFormError(null);
-                }}
-                placeholder={
-                  category === 'อื่นๆ'
-                    ? 'กรอกว่าเป็นอะไร...'
-                    : category === 'เครื่องสำอาง'
-                    ? 'กรอกรายละเอียดเครื่องสำอางว่าเป็นอะไร...'
-                    : 'ระบุว่าเป็นอะไร (เว้นว่างได้)...'
-                }
-                className="w-full min-h-[46px] px-4 py-2.5 text-sm text-slate-900 bg-white border border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none"
-              />
-            </div>
+            {/* ช่องกรอกรายละเอียดประเภทสิ่งของ: ให้ disable ก่อนจนกว่าจะมีการเลือกหมวดหมู่สิ่งของ */}
+            {(() => {
+              const isDetailRequired = category === 'อื่นๆ';
+              const isCosmetics = category === 'เครื่องสำอาง';
+              const isCustomActive = isDetailRequired || isCosmetics || isExtraDetailOpen;
+              const isInputDisabled = !category || !isCustomActive;
+
+              return (
+                <div
+                  className={`p-4 rounded-xl border space-y-2 transition-all ${
+                    !category
+                      ? 'bg-slate-100/70 border-slate-200 opacity-60'
+                      : isDetailRequired || isCosmetics
+                      ? 'bg-amber-50/70 border-amber-300 ring-2 ring-amber-400/20'
+                      : isExtraDetailOpen
+                      ? 'bg-slate-50 border-slate-300'
+                      : 'bg-slate-100/50 border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <label
+                      htmlFor="custom-category-detail-input"
+                      className={`block text-xs font-bold ${
+                        !category
+                          ? 'text-slate-500'
+                          : isDetailRequired
+                          ? 'text-amber-950 font-extrabold'
+                          : 'text-slate-800'
+                      }`}
+                    >
+                      {!category
+                        ? 'กรอกประเภทสิ่งของ (ปิดใช้งาน - กรุณาคลิกเลือกหมวดหมู่สิ่งของด้านบนก่อน)'
+                        : isDetailRequired
+                        ? 'ระบุประเภทสิ่งของ (อื่นๆ ว่าเป็นอะไร) *'
+                        : isCosmetics
+                        ? 'ระบุรายละเอียดเครื่องสำอาง (ว่าเป็นอะไร)'
+                        : `ระบุรายละเอียดสิ่งของเพิ่มเติมสำหรับ "${category}" (ถ้ามี)`}
+                    </label>
+
+                    {category && !isDetailRequired && !isCosmetics && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsExtraDetailOpen((prev) => !prev);
+                          if (!isExtraDetailOpen) {
+                            setTimeout(() => customCategoryInputRef.current?.focus(), 50);
+                          }
+                        }}
+                        className="text-xs font-semibold text-emerald-700 hover:text-emerald-900 underline cursor-pointer"
+                      >
+                        {isExtraDetailOpen ? 'ซ่อนการระบุเพิ่มเติม' : '+ ระบุรายละเอียดเพิ่มเติม'}
+                      </button>
+                    )}
+                  </div>
+
+                  <input
+                    ref={customCategoryInputRef}
+                    id="custom-category-detail-input"
+                    type="text"
+                    disabled={isInputDisabled}
+                    value={customCategoryDetail}
+                    onChange={(e) => {
+                      setCustomCategoryDetail(e.target.value);
+                      setFormError(null);
+                    }}
+                    placeholder={
+                      !category
+                        ? 'ปิดใช้งานชั่วคราว - กรุณาคลิกเลือกหมวดหมู่สิ่งของด้านบนก่อน...'
+                        : isDetailRequired
+                        ? 'กรอกว่าเป็นอะไร (จำเป็นต้องระบุ)...'
+                        : isCosmetics
+                        ? 'กรอกรายละเอียดเครื่องสำอางว่าเป็นอะไร (เช่น ครีม, ลิปสติก)...'
+                        : isExtraDetailOpen
+                        ? 'ระบุรายละเอียดเพิ่มเติม (เว้นว่างได้)...'
+                        : `ไม่ต้องกรอกเพิ่มเติมสำหรับ "${category}" (หากต้องการพิมพ์ ให้เลือก "อื่นๆ" หรือ "เครื่องสำอาง")`
+                    }
+                    className={`w-full min-h-[46px] px-4 py-2.5 text-sm rounded-xl border transition-colors focus:outline-none ${
+                      isInputDisabled
+                        ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed select-none placeholder:text-slate-400'
+                        : isDetailRequired || isCosmetics
+                        ? 'bg-white text-slate-900 border-amber-300 focus:border-amber-600 focus:ring-2 focus:ring-amber-500/20'
+                        : 'bg-white text-slate-900 border-slate-300 focus:border-slate-900'
+                    }`}
+                  />
+                </div>
+              );
+            })()}
           </section>
 
           {/* ขั้นตอนที่ 4: เลือกสถานะการคัดแยกพัสดุ */}
@@ -1590,7 +1662,9 @@ export const InboundView: React.FC = () => {
                       {isCategoryValid ? (
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                       ) : (
-                        <span className="text-[10px] text-slate-400">(ระบุรายละเอียด)</span>
+                        <span className="text-[10px] text-slate-400">
+                          {!category ? '(ยังไม่ได้เลือก)' : '(ระบุรายละเอียด)'}
+                        </span>
                       )}
                     </span>
 

@@ -483,6 +483,47 @@ export function formatStudentCode(rawCode: string | number | undefined | null): 
 }
 
 /**
+ * ฟังก์ชันเปรียบเทียบรหัสนักเรียน จากมากไปหาน้อย (Descending: Max to Min)
+ * รหัสที่เป็นตัวเลขจะถูกจัดเรียงตามค่าตัวเลขจริงจากมากไปหาน้อย (เช่น 07123 > 06500 > 05100)
+ * รายการที่ไม่มีรหัสนักเรียนหรือไม่ระบุตัวตนจะถูกย้ายไปไว้ท้ายสุด
+ */
+export function compareStudentCodeDesc(
+  codeA?: string | number | null,
+  codeB?: string | number | null
+): number {
+  const normA = formatStudentCode(codeA);
+  const normB = formatStudentCode(codeB);
+
+  const isValidA = Boolean(normA && normA !== '-' && normA.toUpperCase() !== 'UNKNOWN');
+  const isValidB = Boolean(normB && normB !== '-' && normB.toUpperCase() !== 'UNKNOWN');
+
+  if (isValidA && !isValidB) return -1;
+  if (!isValidA && isValidB) return 1;
+  if (!isValidA && !isValidB) return 0;
+
+  const numA = parseInt(normA.replace(/\D/g, ''), 10);
+  const numB = parseInt(normB.replace(/\D/g, ''), 10);
+  const hasNumA = !isNaN(numA);
+  const hasNumB = !isNaN(numB);
+
+  if (hasNumA && hasNumB && numA !== numB) {
+    return numB - numA; // จากมากไปหาน้อย (Descending)
+  }
+
+  return normB.localeCompare(normA, 'th', { numeric: true });
+}
+
+/**
+ * ฟังก์ชันเปรียบเทียบรหัสนักเรียน จากน้อยไปหามาก (Ascending: Min to Max)
+ */
+export function compareStudentCodeAsc(
+  codeA?: string | number | null,
+  codeB?: string | number | null
+): number {
+  return -compareStudentCodeDesc(codeA, codeB);
+}
+
+/**
  * สร้างรหัสพัสดุอัตโนมัติสำหรับกรณี "ผู้ปกครองฝากส่ง" โดยตรวจสอบไม่ให้ซ้ำกับข้อมูลที่มีอยู่ในระบบและฐานข้อมูล
  * มีการเพิ่มข้อความ "-RD" ต่อท้ายเลขบาร์โค้ดที่สุ่ม
  */

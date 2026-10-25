@@ -17,6 +17,9 @@ import {
   getRelativeDateString,
   formatThaiSlashDate,
   formatStudentCode,
+  compareStudentCodeDesc,
+  compareStudentCodeAsc,
+  compareDormitoryNatural,
 } from '../types/parcel';
 import { ManifestPrintPreviewModal } from './ManifestPrintPreviewModal';
 
@@ -45,6 +48,13 @@ const MANIFEST_STATUS_FILTERS = [
   { value: 'LEGAL_HOLD', label: 'เฉพาะพัสดุติดนิติการ' },
   { value: 'SIGNED', label: 'พัสดุที่เซ็นรับแล้ว' },
   { value: 'ALL', label: 'พัสดุทั้งหมดทุกสถานะ' },
+];
+
+const MANIFEST_SORT_OPTIONS = [
+  { value: 'STUDENT_CODE_DESC', label: 'รหัสนักเรียน (จากมากไปหาน้อย) [ค่าเริ่มต้น]' },
+  { value: 'DORM_THEN_CODE_DESC', label: 'แยกตามหอพัก แล้วเรียงรหัส นร. (มากไปน้อย)' },
+  { value: 'STUDENT_CODE_ASC', label: 'รหัสนักเรียน (จากน้อยไปหามาก)' },
+  { value: 'ROOM_NAME', label: 'หอพัก · ห้องพักหอ · ชื่อนักเรียน' },
 ];
 
 function formatThaiDateDisplay(isoDateStr: string): string {
@@ -79,6 +89,7 @@ export const ManifestView: React.FC = () => {
   const [selectedDormitory, setSelectedDormitory] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL_REGISTERED');
   const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedSort, setSelectedSort] = useState<string>('STUDENT_CODE_DESC');
   const [selectedParcelIds, setSelectedParcelIds] = useState<string[]>([]);
   const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState<boolean>(false);
 
@@ -204,18 +215,55 @@ export const ManifestView: React.FC = () => {
     });
   }, [parcels, selectedDormitory, selectedDate, selectedStatus, todayIso]);
 
-  // จัดเรียงรายการพัสดุตาม หอพัก, ห้องพักหอ, และชื่อ เพื่อให้อ่านและพิมพ์นำส่งเป็นระเบียบ
+  // จัดเรียงรายการพัสดุตามรหัสนักเรียน จากมากไปหาน้อย (เป็นค่าเริ่มต้น) เพื่อให้อ่าน ค้นหา และพิมพ์นำส่งเป็นระเบียบ
   const sortedManifestParcels = useMemo(() => {
     return [...manifestParcels].sort((a, b) => {
+      if (selectedSort === 'STUDENT_CODE_DESC') {
+        const codeCmp = compareStudentCodeDesc(a.studentCode, b.studentCode);
+        if (codeCmp !== 0) return codeCmp;
+        if (a.dormitory !== b.dormitory) {
+          return compareDormitoryNatural(a.dormitory, b.dormitory);
+        }
+        if (a.dormRoom !== b.dormRoom) {
+          return (a.dormRoom || '').localeCompare(b.dormRoom || '', 'th', { numeric: true });
+        }
+        return (a.studentFullName || '').localeCompare(b.studentFullName || '', 'th');
+      }
+
+      if (selectedSort === 'DORM_THEN_CODE_DESC') {
+        if (a.dormitory !== b.dormitory) {
+          return compareDormitoryNatural(a.dormitory, b.dormitory);
+        }
+        const codeCmp = compareStudentCodeDesc(a.studentCode, b.studentCode);
+        if (codeCmp !== 0) return codeCmp;
+        if (a.dormRoom !== b.dormRoom) {
+          return (a.dormRoom || '').localeCompare(b.dormRoom || '', 'th', { numeric: true });
+        }
+        return (a.studentFullName || '').localeCompare(b.studentFullName || '', 'th');
+      }
+
+      if (selectedSort === 'STUDENT_CODE_ASC') {
+        const codeCmp = compareStudentCodeAsc(a.studentCode, b.studentCode);
+        if (codeCmp !== 0) return codeCmp;
+        if (a.dormitory !== b.dormitory) {
+          return compareDormitoryNatural(a.dormitory, b.dormitory);
+        }
+        if (a.dormRoom !== b.dormRoom) {
+          return (a.dormRoom || '').localeCompare(b.dormRoom || '', 'th', { numeric: true });
+        }
+        return (a.studentFullName || '').localeCompare(b.studentFullName || '', 'th');
+      }
+
+      // ROOM_NAME: หอพัก · ห้องพักหอ · ชื่อนักเรียน
       if (a.dormitory !== b.dormitory) {
-        return (a.dormitory || '').localeCompare(b.dormitory || '', 'th');
+        return compareDormitoryNatural(a.dormitory, b.dormitory);
       }
       if (a.dormRoom !== b.dormRoom) {
         return (a.dormRoom || '').localeCompare(b.dormRoom || '', 'th', { numeric: true });
       }
       return (a.studentFullName || '').localeCompare(b.studentFullName || '', 'th');
     });
-  }, [manifestParcels]);
+  }, [manifestParcels, selectedSort]);
 
   const unsignedParcelsInView = useMemo(
     () => sortedManifestParcels.filter((p) => p.status !== 'ส่งมอบสำเร็จ'),
@@ -250,10 +298,10 @@ export const ManifestView: React.FC = () => {
     sortedManifestParcels.length > 0 &&
     sortedManifestParcels.every((p) => selectedParcelIds.includes(p.id));
 
-  // รีเซ็ตหน้าเมื่อตัวกรองเปลี่ยน
+  // รีเซ็ตหน้าเมื่อตัวกรองหรือการเรียงลำดับเปลี่ยน
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedDormitory, selectedStatus, selectedDate]);
+  }, [selectedDormitory, selectedStatus, selectedDate, selectedSort]);
 
   const totalItems = sortedManifestParcels.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
@@ -448,7 +496,7 @@ export const ManifestView: React.FC = () => {
         </div>
 
         {/* ตัวกรองหอพัก สถานะ และวันที่รับเข้า (ปฏิทินภาษาไทย) */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label htmlFor="manifest-dorm-select" className="block text-xs font-semibold text-slate-700 mb-1.5">
               1. เลือกหอพักปลายทาง
@@ -642,6 +690,27 @@ export const ManifestView: React.FC = () => {
                 </div>
               </div>
             )}
+          </div>
+
+          <div>
+            <label htmlFor="manifest-sort-select" className="block text-xs font-semibold text-slate-700 mb-1.5">
+              4. เรียงลำดับรายการ
+            </label>
+            <select
+              id="manifest-sort-select"
+              value={selectedSort}
+              onChange={(e) => setSelectedSort(e.target.value)}
+              className="w-full min-h-[44px] px-3.5 py-2 text-sm font-semibold bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-slate-900 focus:outline-none"
+            >
+              {MANIFEST_SORT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-emerald-700 font-medium leading-tight">
+              * เรียงตามรหัสนักเรียน จากมากไปหาน้อย
+            </p>
           </div>
         </div>
 
@@ -854,7 +923,7 @@ export const ManifestView: React.FC = () => {
               ใบรายการนำส่งและลงนามรับพัสดุนักเรียนประจำหอพัก
             </h2>
             <p className="text-xs text-slate-600 font-mono tabular-nums">
-              วันที่พิมพ์รายการ: {todayThaiDisplay} · รวมทั้งหมด {sortedManifestParcels.length} ชิ้น
+              วันที่พิมพ์รายการ: {todayThaiDisplay} · เรียงตาม: {MANIFEST_SORT_OPTIONS.find((s) => s.value === selectedSort)?.label.split(' [')[0] || 'รหัสนักเรียน (มากไปน้อย)'} · รวมทั้งหมด {sortedManifestParcels.length} ชิ้น
             </p>
           </div>
 
@@ -1190,6 +1259,9 @@ export const ManifestView: React.FC = () => {
           MANIFEST_STATUS_FILTERS.find((s) => s.value === selectedStatus)?.label || selectedStatus
         }
         selectedDate={selectedDate}
+        selectedSortLabel={
+          MANIFEST_SORT_OPTIONS.find((s) => s.value === selectedSort)?.label.split(' [')[0] || ''
+        }
       />
     </div>
   );
