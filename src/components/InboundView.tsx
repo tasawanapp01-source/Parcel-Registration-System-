@@ -158,9 +158,9 @@ export const InboundView: React.FC = () => {
   const [courier, setCourier] = useState<string>('Flash Express');
   const [lastScannedCode, setLastScannedCode] = useState<string | null>(null);
 
-  // 2. ข้อมูลนักเรียน (กรอกและดึงข้อมูลนักเรียน)
+  // 2. ข้อมูลนักเรียน (กรอกและดึงข้อมูลนักเรียน - รวมเหลือ 1 ช่องค้นหา)
   const [studentCodeInput, setStudentCodeInput] = useState<string>('');
-  const [studentSearchQuery, setStudentSearchQuery] = useState<string>('');
+  const [studentSearchInput, setStudentSearchInput] = useState<string>('');
   const [studentPrefix, setStudentPrefix] = useState<string>('นาย');
   const [studentFullName, setStudentFullName] = useState<string>('');
   const [studentNickname, setStudentNickname] = useState<string>('');
@@ -263,6 +263,7 @@ export const InboundView: React.FC = () => {
   };
 
   const trackingInputRef = useRef<HTMLInputElement | null>(null);
+  const studentSearchInputRef = useRef<HTMLInputElement | null>(null);
   const studentCodeInputRef = useRef<HTMLInputElement | null>(null);
   const customCategoryInputRef = useRef<HTMLInputElement | null>(null);
   const barcodeFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -273,14 +274,16 @@ export const InboundView: React.FC = () => {
     [students, parcels]
   );
 
-  // ค้นหาข้อมูลนักเรียนอัตโนมัติจาก Local Cache Map (0 Firestore Reads)
+  // ค้นหาข้อมูลนักเรียนอัตโนมัติจาก Local Cache Map (0 Firestore Reads) เมื่อระบุรหัสนักเรียนชัดเจน
   const matchedStudent = useMemo(() => {
-    return lookupStudentByCode(studentCodeInput);
+    const code = studentCodeInput.trim();
+    if (!code) return null;
+    return lookupStudentByCode(code) || lookupStudentByCode(formatStudentCode(code));
   }, [lookupStudentByCode, studentCodeInput]);
 
   // คำนวณจำนวนพัสดุของนักเรียนที่กำลังเลือกอยู่
   const activeStudentParcelStats = useMemo(() => {
-    return getStudentParcelCounts(studentCodeInput, studentFullName, matchedStudent);
+    return getStudentParcelCounts(studentCodeInput, studentFullName, matchedStudent || undefined);
   }, [getStudentParcelCounts, studentCodeInput, studentFullName, matchedStudent]);
 
   // ปิดกล่องแจ้งเตือนสถานะการดึงข้อมูลนักเรียนอัตโนมัติเมื่อแสดงครบกำหนด
@@ -296,6 +299,7 @@ export const InboundView: React.FC = () => {
   const populateStudentFields = useCallback(
     (st: Student) => {
       setStudentCodeInput(st.studentCode);
+      // ไม่เติมเลข 0 นำหน้า หรือแทนที่ข้อความที่ผู้ใช้พิมพ์ค้นหาในช่องค้นหา
       setStudentPrefix(st.prefix && st.prefix !== '-' ? st.prefix : 'นาย');
       const fullName = `${st.prefix && st.prefix !== '-' ? st.prefix : ''}${st.firstName} ${
         st.lastName && st.lastName !== '-' ? st.lastName : ''
@@ -337,26 +341,29 @@ export const InboundView: React.FC = () => {
     populateStudentFields(matchedStudent);
   }, [matchedStudent, recordLocalSearchSaving, populateStudentFields]);
 
-  // ปุ่มกด "ดึงข้อมูลนักเรียน" จากรหัสนักเรียน หรือคำค้นหาชื่อ/นามสกุล/ชื่อเล่น/หอพัก
+  // ปุ่มกด "ดึงข้อมูลนักเรียน" จากช่องค้นหารวม (ค้นหาแบบ LIKE ส่วนหนึ่งของรหัสนักเรียน เหมือน ชื่อ, นามสกุล, ชื่อเล่น โดยไม่เติมเลข 0 นำหน้า)
   const handleFetchStudentData = () => {
     setFormError(null);
-    let rawCode = studentCodeInput.trim();
-    if (rawCode && rawCode !== '-' && rawCode.length < 5) {
-      const padded = formatStudentCode(rawCode);
-      setStudentCodeInput(padded);
-      rawCode = padded;
+    const query = studentSearchInput.trim();
+    if (!query) {
+      setStudentFetchFeedback({
+        type: 'warning',
+        message: 'กรุณากรอกรหัสนักเรียน, ชื่อ, นามสกุล, ชื่อเล่น หรือหอพัก เพื่อดึงข้อมูล',
+      });
+      return;
     }
-    const codeQuery = rawCode;
-    const textQuery = studentSearchQuery.trim().toLowerCase();
 
-    const matchStudent = (s: Student, q: string) => {
-      const qLower = q.trim().toLowerCase();
-      if (!qLower) return false;
+    const qLower = query.toLowerCase();
+
+    // ฟังก์ชันค้นหาแบบ LIKE ส่วนหนึ่งของรหัสนักเรียน เหมือน ชื่อ, นามสกุล, ชื่อเล่น, หอพัก
+    const matchStudent = (s: Student) => {
       const cleanFullName = `${s.prefix || ''}${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
       const nameWithoutPrefix = `${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
+      const rawCode = s.studentCode.toLowerCase();
+      const formattedCode = formatStudentCode(s.studentCode).toLowerCase();
       return (
-        s.studentCode.toLowerCase().includes(qLower) ||
-        formatStudentCode(s.studentCode).toLowerCase().includes(qLower) ||
+        rawCode.includes(qLower) ||
+        formattedCode.includes(qLower) ||
         s.firstName.toLowerCase().includes(qLower) ||
         s.lastName.toLowerCase().includes(qLower) ||
         s.nickname.toLowerCase().includes(qLower) ||
@@ -366,56 +373,49 @@ export const InboundView: React.FC = () => {
       );
     };
 
-    if (codeQuery) {
-      const byCode = lookupStudentByCode(codeQuery);
-      if (byCode) {
-        lastAutoPopulatedCodeRef.current = byCode.studentCode;
-        recordLocalSearchSaving();
-        populateStudentFields(byCode);
-        return;
-      }
-      // ลองค้นหาจากชื่อ นามสกุล หรือรหัสบางส่วนในกรณีที่ผู้ใช้พิมพ์ในช่องรหัส
-      const fuzzyByCodeField = students.find((s) => matchStudent(s, codeQuery));
-      if (fuzzyByCodeField) {
-        lastAutoPopulatedCodeRef.current = fuzzyByCodeField.studentCode;
-        recordLocalSearchSaving();
-        populateStudentFields(fuzzyByCodeField);
-        return;
-      }
-    }
+    // 1. ตรวจสอบกรณีตรงเป๊ะ (Exact Match) ทั้งรหัส, ชื่อ, ชื่อเล่น
+    const exactMatch = students.find(
+      (s) =>
+        s.studentCode.toLowerCase() === qLower ||
+        formatStudentCode(s.studentCode).toLowerCase() === qLower ||
+        s.firstName.toLowerCase() === qLower ||
+        s.nickname.toLowerCase() === qLower
+    );
 
-    if (textQuery) {
-      const bySearch = students.find((s) => matchStudent(s, textQuery));
-      if (bySearch) {
-        lastAutoPopulatedCodeRef.current = bySearch.studentCode;
-        recordLocalSearchSaving();
-        populateStudentFields(bySearch);
-        return;
-      }
+    // 2. หากไม่ตรงเป๊ะ ให้ค้นหาแบบ LIKE (ส่วนหนึ่งของรหัสนักเรียน หรือชื่อ-สกุล)
+    const matched = exactMatch || students.find(matchStudent);
+
+    if (matched) {
+      lastAutoPopulatedCodeRef.current = matched.studentCode;
+      recordLocalSearchSaving();
+      populateStudentFields(matched);
+      return;
     }
 
     setStudentFetchFeedback({
       type: 'warning',
       message:
         students.length === 0
-          ? 'ยังไม่มีรายชื่อนักเรียนในแคชของเครื่อง คุณสามารถกรอกข้อมูลนักเรียนในฟอร์มด้านล่างโดยตรง หรือกดปุ่มนำเข้าข้อมูลนักเรียน'
-          : `ไม่พบข้อมูลนักเรียนจากคำค้น "${codeQuery || textQuery}" สามารถกดแก้ไข/กรอกข้อมูลเองด้านล่างได้`,
+          ? 'ยังไม่มีรายชื่อนักเรียนในแคชของเครื่อง คุณสามารถกด "แก้ไข / กรอกข้อมูลเอง" หรือนำเข้าข้อมูลนักเรียน'
+          : `ไม่พบข้อมูลนักเรียนจากคำค้น "${query}" สามารถกด "แก้ไข / กรอกข้อมูลเอง" ด้านล่างได้`,
     });
   };
 
   // กรองรายชื่อนักเรียนจากข้อมูลจริงที่นำเข้าแล้ว (ค้นหาด้วย รหัส, ชื่อ, นามสกุล, ชื่อเล่น, หอพัก)
   // ไม่ต้องแสดงจนกว่าจะมีการค้นหาข้อมูลนักเรียน ตามคำสั่งผู้ใช้
-  const isStudentSearchActive = Boolean(studentSearchQuery.trim() || studentCodeInput.trim());
+  const isStudentSearchActive = Boolean(studentSearchInput.trim());
 
   const filteredStudentSuggestions = useMemo(() => {
-    const q = (studentSearchQuery.trim() || studentCodeInput.trim()).toLowerCase();
+    const q = studentSearchInput.trim().toLowerCase();
     if (!q) return [];
     return students
       .filter((s) => {
         const cleanFullName = `${s.prefix || ''}${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
         const nameWithoutPrefix = `${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
+        const formattedCode = formatStudentCode(s.studentCode).toLowerCase();
         return (
           s.studentCode.toLowerCase().includes(q) ||
+          formattedCode.includes(q) ||
           s.firstName.toLowerCase().includes(q) ||
           s.lastName.toLowerCase().includes(q) ||
           s.nickname.toLowerCase().includes(q) ||
@@ -425,7 +425,7 @@ export const InboundView: React.FC = () => {
         );
       })
       .slice(0, 10);
-  }, [students, studentSearchQuery, studentCodeInput]);
+  }, [students, studentSearchInput]);
 
   // สีประจำหอพัก (Color-Coding)
   const activeDormitoryName = studentDormitory.trim() || (matchedStudent ? matchedStudent.dormitory : '');
@@ -471,8 +471,8 @@ export const InboundView: React.FC = () => {
       setLastScannedCode(cleaned);
       setIsScannerOpen(false);
       setTimeout(() => {
-        if (studentCodeInputRef.current) {
-          studentCodeInputRef.current.focus();
+        if (studentSearchInputRef.current) {
+          studentSearchInputRef.current.focus();
         }
       }, 150);
     },
@@ -616,11 +616,11 @@ export const InboundView: React.FC = () => {
       }
     }
 
-    const finalStudentCode = formatStudentCode(studentCodeInput.trim());
+    const finalStudentCode = formatStudentCode(studentCodeInput.trim() || studentSearchInput.trim());
     const finalStudentName = studentFullName.trim();
     if (!finalStudentCode && !finalStudentName && status !== 'พัสดุไม่ทราบเจ้าของ') {
       setFormError('กรุณากรอกข้อมูลนักเรียน หรือดึงข้อมูลนักเรียนในขั้นตอนที่ 2 (หรือเลือกสถานะ "พัสดุไม่ทราบเจ้าของ")');
-      if (studentCodeInputRef.current) studentCodeInputRef.current.focus();
+      if (studentSearchInputRef.current) studentSearchInputRef.current.focus();
       return;
     }
 
@@ -688,9 +688,9 @@ export const InboundView: React.FC = () => {
     setNote('');
     setStatus(null); // รีเซ็ตสถานะกลับเป็น null เพื่อให้ปุ่มบันทึก disable ทันที
 
-    // เคลียร์กล่องรับข้อมูล รหัสนักเรียน ค้นหาด้วยชื่อ/นามสกุล/ชื่อเล่น/หอพัก และข้อมูลผู้รับทั้งหมด
+    // เคลียร์กล่องรับข้อมูล ค้นหาข้อมูลนักเรียน และข้อมูลผู้รับทั้งหมด
     setStudentCodeInput('');
-    setStudentSearchQuery('');
+    setStudentSearchInput('');
     setStudentFullName('');
     setStudentNickname('');
     setStudentGradeRoom('');
@@ -1049,79 +1049,63 @@ export const InboundView: React.FC = () => {
               </div>
             </div>
 
-            {/* แถบค้นหาและปุ่มกดดึงข้อมูลนักเรียน */}
+            {/* แถบค้นหาและปุ่มกดดึงข้อมูลนักเรียน (รวมเป็น 1 ช่องค้นหา) */}
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-                <div className="sm:col-span-5">
-                  <div className="flex items-center justify-between mb-1">
-                    <label
-                      htmlFor="student-code-input"
-                      className="block text-xs font-semibold text-slate-700"
-                    >
-                      รหัสนักเรียน <span className="text-slate-500 font-normal">(≥ 5 หลัก)</span>
-                    </label>
-                    <span className="text-[10px] text-slate-500 font-medium">
-                      (เติม 0 ให้อัตโนมัติ)
-                    </span>
-                  </div>
-                  <input
-                    ref={studentCodeInputRef}
-                    id="student-code-input"
-                    type="text"
-                    value={studentCodeInput}
-                    onChange={(e) => {
-                      setStudentCodeInput(e.target.value);
-                      setFormError(null);
-                    }}
-                    onBlur={(e) => {
-                      const val = e.target.value.trim();
-                      if (val && val !== '-' && val.length < 5) {
-                        const padded = formatStudentCode(val);
-                        setStudentCodeInput(padded);
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleFetchStudentData();
-                      }
-                    }}
-                    placeholder="เช่น 123 -> 00123"
-                    className="w-full min-h-[46px] px-3.5 py-2 text-sm font-mono font-bold text-slate-900 bg-white border-2 border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none"
-                  />
-                </div>
-
-                <div className="sm:col-span-4">
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-1 mb-1.5">
                   <label
-                    htmlFor="student-quick-filter"
-                    className="block text-xs font-semibold text-slate-700 mb-1"
+                    htmlFor="student-unified-search-input"
+                    className="block text-xs font-bold text-slate-800"
                   >
-                    ค้นหาด้วยชื่อ / นามสกุล / ชื่อเล่น / หอพัก
+                    ช่องค้นหาและดึงข้อมูลนักเรียน
                   </label>
-                  <div className="relative">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    (ค้นหาด้วยรหัสนักเรียน, ชื่อ, นามสกุล, ชื่อเล่น หรือหอพัก)
+                  </span>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <input
-                      id="student-quick-filter"
+                      ref={studentSearchInputRef}
+                      id="student-unified-search-input"
                       type="text"
-                      value={studentSearchQuery}
-                      onChange={(e) => setStudentSearchQuery(e.target.value)}
+                      value={studentSearchInput}
+                      onChange={(e) => {
+                        setStudentSearchInput(e.target.value);
+                        setFormError(null);
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
                           handleFetchStudentData();
                         }
                       }}
-                      placeholder="พิมพ์ชื่อ, นามสกุล, ชื่อเล่น หรือหอพัก..."
-                      className="w-full min-h-[46px] pl-9 pr-3 py-2 text-sm text-slate-900 bg-white border border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none"
+                      placeholder="ค้นหาด้วยรหัสนักเรียน (เช่น 123 หรือบางส่วนของรหัส), ชื่อ, นามสกุล, ชื่อเล่น หรือหอพัก..."
+                      className="w-full min-h-[46px] pl-10 pr-9 py-2 text-sm font-medium text-slate-900 bg-white border-2 border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none transition-colors"
                     />
+                    {studentSearchInput && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStudentSearchInput('');
+                          setStudentCodeInput('');
+                          if (studentSearchInputRef.current) {
+                            studentSearchInputRef.current.focus();
+                          }
+                        }}
+                        aria-label="ล้างช่องค้นหา"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
-                </div>
 
-                <div className="sm:col-span-3">
                   <button
                     type="button"
                     onClick={handleFetchStudentData}
-                    className="w-full min-h-[46px] px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                    className="sm:w-auto min-h-[46px] px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shadow-sm shrink-0"
                   >
                     <Search className="w-4 h-4 shrink-0" />
                     <span>ดึงข้อมูลนักเรียน</span>
@@ -1321,6 +1305,20 @@ export const InboundView: React.FC = () => {
 
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
                     <div className="sm:col-span-3">
+                      <label className="block text-xs font-medium text-slate-600 mb-1">รหัสนักเรียน</label>
+                      <input
+                        ref={studentCodeInputRef}
+                        type="text"
+                        value={studentCodeInput}
+                        onChange={(e) => {
+                          setStudentCodeInput(e.target.value);
+                        }}
+                        placeholder="เช่น 00123 หรือ 123"
+                        className="w-full min-h-[44px] px-3.5 py-2 text-sm font-mono font-bold text-slate-900 bg-white border border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
                       <label className="block text-xs font-medium text-slate-600 mb-1">คำนำหน้า</label>
                       <select
                         aria-label="คำนำหน้าชื่อนักเรียน"
@@ -1335,7 +1333,7 @@ export const InboundView: React.FC = () => {
                       </select>
                     </div>
 
-                    <div className="sm:col-span-6">
+                    <div className="sm:col-span-5">
                       <label className="block text-xs font-medium text-slate-600 mb-1">
                         ชื่อ-นามสกุลนักเรียน *
                       </label>
@@ -1348,7 +1346,7 @@ export const InboundView: React.FC = () => {
                       />
                     </div>
 
-                    <div className="sm:col-span-3">
+                    <div className="sm:col-span-2">
                       <label className="block text-xs font-medium text-slate-600 mb-1">ชื่อเล่น</label>
                       <input
                         type="text"
