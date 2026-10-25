@@ -177,7 +177,6 @@ export const InboundView: React.FC = () => {
   // ตั้งค่าเริ่มต้นเป็น null สไตล์ disable ก่อนจนกว่าจะมีการเลือกหมวดหมู่สิ่งของ
   const [category, setCategory] = useState<ParcelCategory | null>(null);
   const [customCategoryDetail, setCustomCategoryDetail] = useState<string>('');
-  const [isExtraDetailOpen, setIsExtraDetailOpen] = useState<boolean>(false);
 
   // 4. สถานะการคัดแยกพัสดุ (ตั้งค่าเริ่มต้นเป็น null สีเทาสไตล์ disable เมื่อผู้ใช้คลิกเลือกจึงแสดงสีสรรของปุ่ม)
   const [status, setStatus] = useState<ParcelStatus | null>(null);
@@ -686,7 +685,6 @@ export const InboundView: React.FC = () => {
     setCourier('Flash Express');
     setCategory(null);
     setCustomCategoryDetail('');
-    setIsExtraDetailOpen(false);
     setNote('');
     setStatus(null); // รีเซ็ตสถานะกลับเป็น null เพื่อให้ปุ่มบันทึก disable ทันที
 
@@ -1439,13 +1437,7 @@ export const InboundView: React.FC = () => {
                     onClick={() => {
                       setCategory(cat);
                       setFormError(null);
-                      if (cat === 'อื่นๆ' || cat === 'เครื่องสำอาง') {
-                        setIsExtraDetailOpen(true);
-                        setTimeout(() => customCategoryInputRef.current?.focus(), 50);
-                      } else {
-                        setIsExtraDetailOpen(false);
-                        setCustomCategoryDetail('');
-                      }
+                      setTimeout(() => customCategoryInputRef.current?.focus(), 50);
                     }}
                     className={`min-h-[52px] px-3.5 py-2.5 text-sm font-semibold rounded-xl border text-left transition-colors cursor-pointer ${
                       active
@@ -1459,12 +1451,11 @@ export const InboundView: React.FC = () => {
               })}
             </div>
 
-            {/* ช่องกรอกรายละเอียดประเภทสิ่งของ: ให้ disable ก่อนจนกว่าจะมีการเลือกหมวดหมู่สิ่งของ */}
+            {/* ช่องกรอกรายละเอียดประเภทสิ่งของ: disable ก่อนจนกว่าจะมีการเลือก เมื่อเลือกประเภทสิ่งของแล้ว ให้เปิดช่องกรอกประเภทสิ่งของทันที */}
             {(() => {
               const isDetailRequired = category === 'อื่นๆ';
               const isCosmetics = category === 'เครื่องสำอาง';
-              const isCustomActive = isDetailRequired || isCosmetics || isExtraDetailOpen;
-              const isInputDisabled = !category || !isCustomActive;
+              const isInputDisabled = !category;
 
               return (
                 <div
@@ -1473,9 +1464,7 @@ export const InboundView: React.FC = () => {
                       ? 'bg-slate-100/70 border-slate-200 opacity-60'
                       : isDetailRequired || isCosmetics
                       ? 'bg-amber-50/70 border-amber-300 ring-2 ring-amber-400/20'
-                      : isExtraDetailOpen
-                      ? 'bg-slate-50 border-slate-300'
-                      : 'bg-slate-100/50 border-slate-200'
+                      : 'bg-emerald-50/40 border-emerald-300 ring-2 ring-emerald-500/10'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -1486,7 +1475,9 @@ export const InboundView: React.FC = () => {
                           ? 'text-slate-500'
                           : isDetailRequired
                           ? 'text-amber-950 font-extrabold'
-                          : 'text-slate-800'
+                          : isCosmetics
+                          ? 'text-amber-900 font-bold'
+                          : 'text-slate-900'
                       }`}
                     >
                       {!category
@@ -1494,23 +1485,14 @@ export const InboundView: React.FC = () => {
                         : isDetailRequired
                         ? 'ระบุประเภทสิ่งของ (อื่นๆ ว่าเป็นอะไร) *'
                         : isCosmetics
-                        ? 'ระบุรายละเอียดเครื่องสำอาง (ว่าเป็นอะไร)'
-                        : `ระบุรายละเอียดสิ่งของเพิ่มเติมสำหรับ "${category}" (ถ้ามี)`}
+                        ? 'ระบุรายละเอียดเครื่องสำอาง (ว่าเป็นอะไร เช่น ครีม, ลิปสติก)'
+                        : `กรอกประเภทสิ่งของ / ระบุรายละเอียดเพิ่มเติมสำหรับ "${category}" (ถ้ามี หรือเว้นว่างได้)`}
                     </label>
 
-                    {category && !isDetailRequired && !isCosmetics && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsExtraDetailOpen((prev) => !prev);
-                          if (!isExtraDetailOpen) {
-                            setTimeout(() => customCategoryInputRef.current?.focus(), 50);
-                          }
-                        }}
-                        className="text-xs font-semibold text-emerald-700 hover:text-emerald-900 underline cursor-pointer"
-                      >
-                        {isExtraDetailOpen ? 'ซ่อนการระบุเพิ่มเติม' : '+ ระบุรายละเอียดเพิ่มเติม'}
-                      </button>
+                    {category && (
+                      <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md">
+                        เปิดช่องกรอกแล้ว
+                      </span>
                     )}
                   </div>
 
@@ -1531,16 +1513,14 @@ export const InboundView: React.FC = () => {
                         ? 'กรอกว่าเป็นอะไร (จำเป็นต้องระบุ)...'
                         : isCosmetics
                         ? 'กรอกรายละเอียดเครื่องสำอางว่าเป็นอะไร (เช่น ครีม, ลิปสติก)...'
-                        : isExtraDetailOpen
-                        ? 'ระบุรายละเอียดเพิ่มเติม (เว้นว่างได้)...'
-                        : `ไม่ต้องกรอกเพิ่มเติมสำหรับ "${category}" (หากต้องการพิมพ์ ให้เลือก "อื่นๆ" หรือ "เครื่องสำอาง")`
+                        : `กรอกรายละเอียดสิ่งของเพิ่มเติมสำหรับ "${category}" เช่น ขนมปัง, เสื้อกันหนาว (เว้นว่างได้)...`
                     }
                     className={`w-full min-h-[46px] px-4 py-2.5 text-sm rounded-xl border transition-colors focus:outline-none ${
                       isInputDisabled
                         ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed select-none placeholder:text-slate-400'
                         : isDetailRequired || isCosmetics
                         ? 'bg-white text-slate-900 border-amber-300 focus:border-amber-600 focus:ring-2 focus:ring-amber-500/20'
-                        : 'bg-white text-slate-900 border-slate-300 focus:border-slate-900'
+                        : 'bg-white text-slate-900 border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20'
                     }`}
                   />
                 </div>
