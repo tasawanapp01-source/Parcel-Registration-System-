@@ -20,6 +20,7 @@ import {
   compareStudentCodeDesc,
   compareStudentCodeAsc,
   compareDormitoryNatural,
+  formatParcelRegistrationDateTime,
 } from '../types/parcel';
 import { ManifestPrintPreviewModal } from './ManifestPrintPreviewModal';
 
@@ -1023,6 +1024,11 @@ export const ManifestView: React.FC = () => {
                     ? formatThaiSlashDate(p.deliveredDate || p.receivedDate || p.updatedAt)
                     : '';
 
+                  const isRdCode = Boolean(
+                    p.trackingNumber?.toUpperCase().endsWith('-RD') ||
+                    p.category?.toUpperCase().endsWith('-RD')
+                  );
+
                   return (
                     <tr
                       key={p.id}
@@ -1061,9 +1067,9 @@ export const ManifestView: React.FC = () => {
                       </td>
                       <td className="py-2 px-2 border border-slate-300 leading-tight">
                         <div
-                          style={p.trackingNumber?.toUpperCase().endsWith('-RD') ? { color: '#DC2626' } : undefined}
+                          style={isRdCode ? { color: '#DC2626' } : undefined}
                           className={`font-mono font-bold tabular-nums truncate ${
-                            p.trackingNumber?.toUpperCase().endsWith('-RD') ? 'text-red-600 font-extrabold' : 'text-slate-900'
+                            isRdCode ? 'text-red-600 font-extrabold' : 'text-slate-900'
                           }`}
                         >
                           {p.trackingNumber}
@@ -1079,10 +1085,25 @@ export const ManifestView: React.FC = () => {
                         {p.gradeRoom && <span className="text-slate-500 font-normal text-[10px] ml-1">ชั้น {p.gradeRoom}</span>}
                       </td>
                       <td className="py-2 px-2 border border-slate-300 leading-tight">
-                        <div className="font-semibold text-slate-800 truncate">{p.category}</div>
+                        <div
+                          style={isRdCode ? { color: '#DC2626' } : undefined}
+                          className={`font-semibold truncate ${
+                            isRdCode ? 'text-red-600 font-bold' : 'text-slate-800'
+                          }`}
+                        >
+                          {p.category}
+                        </div>
                         {p.status === 'ติดนิติการ' && (
-                          <div className="text-[9.5px] font-bold text-red-700 leading-tight mt-0.5">
-                            [ติดนิติการ]
+                          <div className="text-[9.5px] leading-tight mt-0.5">
+                            <span
+                              style={{ color: '#166534' }}
+                              className="font-bold text-emerald-800"
+                            >
+                              {formatParcelRegistrationDateTime(p)}
+                            </span>{' '}
+                            <span className="font-bold text-red-700">
+                              [ติดนิติการ]
+                            </span>
                           </div>
                         )}
                         {p.status === 'ติดต่องานพยาบาล' && (

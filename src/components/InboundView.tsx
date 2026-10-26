@@ -168,6 +168,7 @@ export const InboundView: React.FC = () => {
   const [studentDormitory, setStudentDormitory] = useState<string>('');
   const [studentDormRoom, setStudentDormRoom] = useState<string>('');
   const [isManualEditStudentOpen, setIsManualEditStudentOpen] = useState<boolean>(false);
+  const [isStudentSelected, setIsStudentSelected] = useState<boolean>(false);
   const [studentFetchFeedback, setStudentFetchFeedback] = useState<{
     type: 'success' | 'warning';
     message: string;
@@ -389,6 +390,7 @@ export const InboundView: React.FC = () => {
       lastAutoPopulatedCodeRef.current = matched.studentCode;
       recordLocalSearchSaving();
       populateStudentFields(matched);
+      setIsStudentSelected(true);
       return;
     }
 
@@ -697,6 +699,7 @@ export const InboundView: React.FC = () => {
     setStudentDormitory('');
     setStudentDormRoom('');
     setIsManualEditStudentOpen(false);
+    setIsStudentSelected(false);
     lastAutoPopulatedCodeRef.current = '';
     setStudentFetchFeedback(null);
     setFormError(null);
@@ -1073,6 +1076,7 @@ export const InboundView: React.FC = () => {
                       value={studentSearchInput}
                       onChange={(e) => {
                         setStudentSearchInput(e.target.value);
+                        setIsStudentSelected(false);
                         setFormError(null);
                       }}
                       onKeyDown={(e) => {
@@ -1090,6 +1094,7 @@ export const InboundView: React.FC = () => {
                         onClick={() => {
                           setStudentSearchInput('');
                           setStudentCodeInput('');
+                          setIsStudentSelected(false);
                           if (studentSearchInputRef.current) {
                             studentSearchInputRef.current.focus();
                           }
@@ -1113,8 +1118,8 @@ export const InboundView: React.FC = () => {
                 </div>
               </div>
 
-              {/* รายชื่อนักเรียนแนะนำแสดงเฉพาะเมื่อมีการค้นหาข้อมูลนักเรียน ตามคำสั่งผู้ใช้ */}
-              {isStudentSearchActive && filteredStudentSuggestions.length > 0 && (
+              {/* รายชื่อนักเรียนแนะนำแสดงเฉพาะเมื่อมีการค้นหาข้อมูลนักเรียน และยังไม่ได้คลิกเลือกข้อมูลนักเรียน ตามคำสั่งผู้ใช้ */}
+              {!isStudentSelected && isStudentSearchActive && filteredStudentSuggestions.length > 0 && (
                 <div className="pt-1">
                   <span className="block text-xs font-medium text-slate-500 mb-1.5">
                     คลิกเลือกนักเรียนเพื่อดึงข้อมูลอัตโนมัติ ({filteredStudentSuggestions.length} รายการ):
@@ -1130,6 +1135,7 @@ export const InboundView: React.FC = () => {
                           onClick={() => {
                             lastAutoPopulatedCodeRef.current = st.studentCode;
                             populateStudentFields(st);
+                            setIsStudentSelected(true);
                           }}
                           className={`min-h-[38px] px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
                             isSelected
@@ -1223,12 +1229,24 @@ export const InboundView: React.FC = () => {
                           รหัส: {formatStudentCode(studentCodeInput.trim() || matchedStudent?.studentCode)}
                         </span>
                       )}
+                      {activeDormitoryName && (
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-extrabold border shadow-2xs ${dormTheme.bgClass} ${dormTheme.borderClass}`}
+                          style={{ borderColor: dormTheme.hexColor, color: dormTheme.hexColor }}
+                        >
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dormTheme.hexColor }} />
+                          <span>{activeDormitoryName}</span>
+                          {dormTheme.basketCode && dormTheme.basketCode !== '-' && (
+                            <span className="opacity-80 font-mono text-[11px]">({dormTheme.basketCode})</span>
+                          )}
+                        </span>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                      <div className="bg-white p-3 rounded-lg border border-slate-200">
-                        <span className="text-xs font-medium text-slate-500 block">ระดับชั้น/ห้อง:</span>
-                        <span className="text-sm font-bold text-slate-900 font-mono">
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between">
+                        <span className="text-xs font-medium text-slate-500 block mb-1">ระดับชั้น/ห้อง:</span>
+                        <span className="text-base font-bold text-slate-900 font-mono">
                           {studentGradeRoom.trim() ||
                             (matchedStudent
                               ? `${matchedStudent.grade}${matchedStudent.room ? `/${matchedStudent.room}` : ''}`
@@ -1236,20 +1254,53 @@ export const InboundView: React.FC = () => {
                         </span>
                       </div>
 
-                      <div className="bg-white p-3 rounded-lg border border-slate-200">
-                        <span className="text-xs font-medium text-slate-500 block">หอพัก:</span>
-                        <span className="text-sm font-bold text-slate-900">
-                          {studentDormitory.trim() || matchedStudent?.dormitory || '-'}{' '}
-                          {(studentDormRoom.trim() || matchedStudent?.dormRoom) && (
-                            <span className="font-mono font-normal text-slate-600 text-xs">
-                              (ห้อง {studentDormRoom.trim() || matchedStudent?.dormRoom})
+                      {/* หอพัก: เน้นและขยายข้อความ หอพักล้านนา และใช้สีตามหอพัก */}
+                      <div
+                        className={`p-3.5 rounded-xl border-2 transition-all shadow-xs ${dormTheme.bgClass} ${dormTheme.borderClass}`}
+                        style={{ borderColor: dormTheme.hexColor }}
+                      >
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0 shadow-2xs"
+                              style={{ backgroundColor: dormTheme.hexColor }}
+                            />
+                            หอพักผู้รับพัสดุ:
+                          </span>
+                          {dormTheme.basketCode && dormTheme.basketCode !== '-' && (
+                            <span
+                              className={`px-2 py-0.5 rounded-md text-[11px] font-extrabold ${dormTheme.accentBgClass} shadow-2xs`}
+                            >
+                              {dormTheme.basketCode}
                             </span>
                           )}
-                        </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          {/* เน้นและขยายข้อความ หอพักล้านนา ตัวโต ชัดเจน พร้อมใช้สีประจำหอพัก */}
+                          <span
+                            className={`text-xl sm:text-2xl font-black tracking-tight ${dormTheme.textClass}`}
+                            style={{ color: dormTheme.hexColor }}
+                          >
+                            {studentDormitory.trim() || matchedStudent?.dormitory || '-'}
+                          </span>
+
+                          {(studentDormRoom.trim() || matchedStudent?.dormRoom) && (
+                            <span className="px-2 py-0.5 rounded-md bg-white/95 text-slate-800 border border-slate-300 font-mono text-xs font-bold shadow-2xs">
+                              ห้อง {studentDormRoom.trim() || matchedStudent?.dormRoom}
+                            </span>
+                          )}
+
+                          {dormTheme.colorName && dormTheme.colorName !== 'สีเทามาตรฐาน (Slate)' && (
+                            <span className="text-xs font-semibold text-slate-500">
+                              ({dormTheme.colorName})
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
-                    {/* ข้อความแสดงผลสรุป */}
+                    {/* ข้อความแสดงผลสรุป (รูปแบบปกติ) */}
                     <div className="text-xs text-slate-700 bg-white p-2.5 rounded-lg border border-slate-200 font-medium flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="font-bold text-slate-900">ข้อความข้อมูลผู้รับ:</span>
                       <span>
@@ -1267,7 +1318,12 @@ export const InboundView: React.FC = () => {
                       <span className="text-slate-300">·</span>
                       <span>
                         หอพัก:{' '}
-                        {studentDormitory.trim() || matchedStudent?.dormitory || '-'}
+                        {studentDormitory.trim() || matchedStudent?.dormitory || '-'}{' '}
+                        {(studentDormRoom.trim() || matchedStudent?.dormRoom) && (
+                          <span className="font-mono text-slate-500">
+                            (ห้อง {studentDormRoom.trim() || matchedStudent?.dormRoom})
+                          </span>
+                        )}
                       </span>
                     </div>
                   </div>

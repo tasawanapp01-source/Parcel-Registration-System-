@@ -6,7 +6,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { Parcel, DormitoryTheme, formatThaiSlashDate, formatStudentCode } from '../types/parcel';
+import { Parcel, DormitoryTheme, formatThaiSlashDate, formatStudentCode, formatParcelRegistrationDateTime } from '../types/parcel';
 
 export type PrintOrientation = 'portrait' | 'landscape';
 export type RowDensity = 'normal' | 'compact';
@@ -217,8 +217,21 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             print-color-adjust: exact !important;
           }
 
-          /* 6. สีแดงสำหรับเลขพัสดุ (Tracking) ที่ลงท้ายด้วย -RD */
+          /* 6. สีแดงสำหรับรหัสที่ลงท้ายด้วย -RD ในคอลัมน์ประเภทสิ่งของ และเลขพัสดุ */
+          .print-rd-category,
           .print-rd-tracking {
+            color: #DC2626 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          /* 7. สีเขียวเข้มสำหรับ วันที่ลงทะเบียนพัสดุ เวลา และสีแดงสำหรับป้าย [ติดนิติการ] */
+          .print-reg-date-time {
+            color: #166534 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .print-legal-tag {
             color: #DC2626 !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
@@ -480,7 +493,10 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                       const isSigned = p.status === 'ส่งมอบสำเร็จ';
                       const isLegalHold = p.status === 'ติดนิติการ';
                       const isInfirmary = p.status === 'ติดต่องานพยาบาล';
-                      const isRdCode = p.trackingNumber?.toUpperCase().endsWith('-RD');
+                      const isRdCode = Boolean(
+                        p.trackingNumber?.toUpperCase().endsWith('-RD') ||
+                        p.category?.toUpperCase().endsWith('-RD')
+                      );
                       const cellPy = density === 'compact' ? 'py-1' : 'py-1.5';
                       const recordedDate = isSigned
                         ? formatThaiSlashDate(p.deliveredDate || p.receivedDate || p.updatedAt)
@@ -529,14 +545,32 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                           </td>
                           {/* ประเภทสิ่งของ พร้อมสถานะติดนิติการ/งานพยาบาลต่อท้ายโดยขึ้นบรรทัดใหม่ */}
                           <td className={`${cellPy} px-2 border border-slate-300 leading-tight`}>
-                            <div className="font-semibold text-slate-800 truncate">{p.category}</div>
+                            <div
+                              style={isRdCode ? { color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : undefined}
+                              className={`font-semibold truncate ${
+                                isRdCode ? 'text-red-600 print-rd-category font-bold' : 'text-slate-800'
+                              }`}
+                            >
+                              {p.category}
+                            </div>
                             {isLegalHold && (
-                              <div className="text-[9.5px] font-bold text-red-700 leading-tight">
-                                [ติดนิติการ]
+                              <div className="text-[9px] sm:text-[9.5px] leading-tight mt-0.5">
+                                <span
+                                  style={{ color: '#166534', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+                                  className="font-bold text-emerald-800 print-reg-date-time"
+                                >
+                                  {formatParcelRegistrationDateTime(p)}
+                                </span>{' '}
+                                <span
+                                  style={{ color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+                                  className="font-bold text-red-700 print-legal-tag"
+                                >
+                                  [ติดนิติการ]
+                                </span>
                               </div>
                             )}
                             {isInfirmary && (
-                              <div className="text-[9.5px] font-bold text-amber-800 leading-tight">
+                              <div className="text-[9.5px] font-bold text-amber-800 leading-tight mt-0.5">
                                 [ติดต่องานพยาบาล]
                               </div>
                             )}
@@ -603,7 +637,10 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                       const isSigned = p.status === 'ส่งมอบสำเร็จ';
                       const isLegalHold = p.status === 'ติดนิติการ';
                       const isInfirmary = p.status === 'ติดต่องานพยาบาล';
-                      const isRdCode = p.trackingNumber?.toUpperCase().endsWith('-RD');
+                      const isRdCode = Boolean(
+                        p.trackingNumber?.toUpperCase().endsWith('-RD') ||
+                        p.category?.toUpperCase().endsWith('-RD')
+                      );
                       const cellPy = density === 'compact' ? 'py-1' : 'py-1.5';
                       const recordedDate = isSigned
                         ? formatThaiSlashDate(p.deliveredDate || p.receivedDate || p.updatedAt)
@@ -652,10 +689,28 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                           </td>
                           {/* ประเภทสิ่งของ พร้อมสถานะติดนิติการ/งานพยาบาลต่อท้ายโดยขึ้นบรรทัดใหม่ */}
                           <td className={`${cellPy} px-2 border border-slate-300 leading-tight`}>
-                            <div className="font-semibold text-slate-800 truncate">{p.category}</div>
+                            <div
+                              style={isRdCode ? { color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : undefined}
+                              className={`font-semibold truncate ${
+                                isRdCode ? 'text-red-600 print-rd-category font-bold' : 'text-slate-800'
+                              }`}
+                            >
+                              {p.category}
+                            </div>
                             {isLegalHold && (
-                              <div className="text-[9.5px] font-bold text-red-700 leading-tight mt-0.5">
-                                [ติดนิติการ]
+                              <div className="text-[8.5px] sm:text-[9.5px] leading-tight mt-0.5">
+                                <span
+                                  style={{ color: '#166534', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+                                  className="font-bold text-emerald-800 print-reg-date-time"
+                                >
+                                  {formatParcelRegistrationDateTime(p)}
+                                </span>{' '}
+                                <span
+                                  style={{ color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+                                  className="font-bold text-red-700 print-legal-tag"
+                                >
+                                  [ติดนิติการ]
+                                </span>
                               </div>
                             )}
                             {isInfirmary && (

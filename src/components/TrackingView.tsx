@@ -512,55 +512,118 @@ export const TrackingView: React.FC = () => {
                         <span className="text-xs font-normal text-slate-600">ชั้น {parcel.gradeRoom}</span>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
-                        <span className="font-semibold text-slate-800">
-                          {dormTheme.basketCode} ({parcel.dormitory})
+                      {/* ข้อมูลหอพัก, ห้องพัก, ประเภทสิ่งของ, วันเวลารับเข้า พร้อมเน้นข้อความด้วยสี */}
+                      <div className="flex flex-wrap items-center gap-2 text-xs pt-0.5">
+                        {/* 1. หอพัก (เช่น หอพักล้านนา 2) เน้นด้วยสีประจำหอพัก */}
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border shadow-2xs ${dormTheme.bgClass} ${dormTheme.borderClass} ${dormTheme.textClass}`}
+                          style={{ borderColor: dormTheme.hexColor }}
+                        >
+                          <span
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: dormTheme.hexColor }}
+                          />
+                          <span>{parcel.dormitory || 'ไม่ระบุหอพัก'}</span>
+                          <span className="text-[11px] font-mono opacity-85">({dormTheme.basketCode})</span>
                         </span>
-                        <span>·</span>
-                        <span className="font-mono tabular-nums">
-                          ห้อง {parcel.dormRoom}
+
+                        {/* ห้องพัก */}
+                        <span className="px-2 py-1 rounded-lg bg-slate-100 text-slate-800 border border-slate-200 font-mono text-xs shadow-2xs">
+                          ห้อง {parcel.dormRoom || '-'}
                         </span>
-                        <span>·</span>
-                        <span>ประเภท: {parcel.category}</span>
-                        <span>·</span>
-                        <span className="font-mono tabular-nums">
-                          รับเข้า {parcel.receivedDate} เวลา {String(parcel.receivedHour).padStart(2, '0')}:00 น.
+
+                        {/* 2. ประเภทสิ่งของ (เช่น ประเภท: เสื้อผ้า/เครื่องแต่งกาย (ผ้าขนหนู)) เน้นด้วยสีคราม Indigo หรือสีแดงกรณี -RD */}
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border shadow-2xs ${
+                            parcel.trackingNumber?.toUpperCase().endsWith('-RD') || parcel.category?.toUpperCase().endsWith('-RD')
+                              ? 'bg-red-50 text-red-700 border-red-300 font-bold'
+                              : 'bg-indigo-50 text-indigo-950 border-indigo-200'
+                          }`}
+                        >
+                          <span className="font-bold text-indigo-700">ประเภท:</span>
+                          <strong className="font-bold">{parcel.category}</strong>
                         </span>
+
+                        {/* 3. วันที่และเวลารับเข้า (เช่น รับเข้า 2026-10-25 เวลา 14:00 น.) เน้นด้วยสีเขียวมรกต Emerald */}
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono border shadow-2xs bg-emerald-50 text-emerald-950 border-emerald-300">
+                          <span className="font-sans font-bold text-emerald-700">รับเข้า</span>
+                          <strong className="font-bold text-emerald-950">{parcel.receivedDate}</strong>
+                          <span className="font-sans font-medium text-emerald-700">เวลา</span>
+                          <strong className="font-bold text-emerald-950">
+                            {(() => {
+                              if (parcel.createdAt) {
+                                const d = new Date(parcel.createdAt);
+                                if (!isNaN(d.getTime())) {
+                                  const hh = String(d.getHours()).padStart(2, '0');
+                                  const mm = String(d.getMinutes()).padStart(2, '0');
+                                  return `${hh}:${mm}`;
+                                }
+                              }
+                              return `${String(parcel.receivedHour ?? 0).padStart(2, '0')}:00`;
+                            })()} น.
+                          </strong>
+                        </span>
+
                         {parcel.status === 'ส่งมอบสำเร็จ' && (
-                          <>
-                            <span>·</span>
-                            <span className="font-mono font-bold text-emerald-700 tabular-nums bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                              วันที่รับพัสดุ: {formatThaiSlashDate(parcel.deliveredDate || parcel.receivedDate || parcel.updatedAt)}
-                            </span>
-                          </>
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-mono font-bold text-sky-950 tabular-nums bg-sky-100/80 border border-sky-300 shadow-2xs">
+                            <span className="font-sans font-bold text-sky-700">วันที่รับพัสดุ:</span>
+                            <span className="font-extrabold text-sky-950">{formatThaiSlashDate(parcel.deliveredDate || parcel.receivedDate || parcel.updatedAt)}</span>
+                          </span>
                         )}
                       </div>
 
+                      {/* 4. สถิติจำนวนพัสดุของนักเรียน: วัน 0 · สัปดาห์ 1 · เดือน 1 ชิ้น เน้นข้อความด้วยสีเฉพาะ */}
                       {studentStats && (
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700 pt-0.5 font-mono tabular-nums">
+                        <div className="flex flex-wrap items-center gap-2 text-xs pt-1">
                           <span className="font-sans font-semibold text-slate-600">
                             จำนวนพัสดุของนักเรียน:
                           </span>
-                          <span>
-                            วัน <strong>{studentStats.dayCount}</strong> · สัปดาห์{' '}
-                            <strong
-                              className={
+                          <div className="flex flex-wrap items-center gap-1.5 font-mono">
+                            {/* วัน 0 เน้นด้วยสีฟ้า/น้ำเงิน Blue */}
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-950 border border-blue-200 shadow-2xs">
+                              <span className="font-sans font-medium text-blue-700">วัน</span>
+                              <strong className="font-extrabold text-blue-950 text-xs tabular-nums">{studentStats.dayCount}</strong>
+                            </span>
+                            <span className="text-slate-300">·</span>
+
+                            {/* สัปดาห์ 1 เน้นด้วยสีม่วง Purple หรือสีแดงสดกรณีเกินเกณฑ์ */}
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border shadow-2xs ${
                                 studentStats.isOverWeeklyLimit
-                                  ? 'text-red-600 font-extrabold'
-                                  : 'text-slate-900'
-                              }
+                                  ? 'bg-red-50 text-red-950 border-red-300'
+                                  : 'bg-purple-50 text-purple-950 border-purple-200'
+                              }`}
                             >
-                              {studentStats.weekCount}
-                            </strong>{' '}
-                            · เดือน <strong>{studentStats.monthCount}</strong> ชิ้น
-                          </span>
+                              <span className={`font-sans font-medium ${studentStats.isOverWeeklyLimit ? 'text-red-700 font-bold' : 'text-purple-700'}`}>
+                                สัปดาห์
+                              </span>
+                              <strong
+                                className={`text-xs tabular-nums ${
+                                  studentStats.isOverWeeklyLimit
+                                    ? 'font-black text-red-700'
+                                    : 'font-extrabold text-purple-950'
+                                }`}
+                              >
+                                {studentStats.weekCount}
+                              </strong>
+                            </span>
+                            <span className="text-slate-300">·</span>
+
+                            {/* เดือน 1 ชิ้น เน้นด้วยสีส้มอำพัน Amber */}
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-950 border border-amber-200 shadow-2xs">
+                              <span className="font-sans font-medium text-amber-800">เดือน</span>
+                              <strong className="font-extrabold text-amber-950 text-xs tabular-nums">{studentStats.monthCount}</strong>
+                              <span className="font-sans text-amber-800 text-[11px]">ชิ้น</span>
+                            </span>
+                          </div>
+
                           {studentStats.isOverWeeklyLimit && (
                             <button
                               type="button"
                               onClick={() => openWeeklyWarningPopup(studentStats, 'manual')}
-                              className="font-sans px-2.5 py-0.5 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold rounded-md flex items-center gap-1 cursor-pointer"
+                              className="font-sans px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold rounded-lg flex items-center gap-1 cursor-pointer shadow-2xs"
                             >
-                              <AlertTriangle className="w-3 h-3" />
+                              <AlertTriangle className="w-3.5 h-3.5" />
                               <span>เกิน {WEEKLY_PARCEL_WARNING_LIMIT} ชิ้น/สัปดาห์ (ดูแจ้งเตือน)</span>
                             </button>
                           )}

@@ -349,10 +349,39 @@ const COLOR_PALETTE: Omit<DormitoryTheme, 'name' | 'shortName'>[] = [
     accentBgClass: 'bg-violet-600 text-white',
     hexColor: '#7C3AED',
   },
+  {
+    basketCode: 'ตะกร้า D1',
+    colorName: 'สีชมพูฟูเชีย (Fuchsia)',
+    bgClass: 'bg-fuchsia-50',
+    borderClass: 'border-fuchsia-600',
+    textClass: 'text-fuchsia-950',
+    accentBgClass: 'bg-fuchsia-600 text-white',
+    hexColor: '#C026D3',
+  },
+  {
+    basketCode: 'ตะกร้า D2',
+    colorName: 'สีฟ้าไซแอน (Cyan)',
+    bgClass: 'bg-cyan-50',
+    borderClass: 'border-cyan-600',
+    textClass: 'text-cyan-950',
+    accentBgClass: 'bg-cyan-600 text-white',
+    hexColor: '#0891B2',
+  },
 ];
+
+function extractDormNumber(str: string): number {
+  const thaiDigits = ['๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙'];
+  let s = str;
+  thaiDigits.forEach((td, i) => {
+    s = s.replaceAll(td, String(i));
+  });
+  const m = s.match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : 999999;
+}
 
 /**
  * คืนค่าธีมสีและรหัสตะกร้าประจำหอพักตามชื่อหอพักที่ผู้ใช้นำเข้าหรือกรอกจริง (ไม่มีข้อมูลตัวอย่าง)
+ * สำหรับหอพักล้านนา (เช่น หอพักล้านนา 1, 2, ... 10) จะจับคู่สีและตะกร้าตามหมายเลขหอพักโดยเฉพาะ
  */
 export function getDormitoryTheme(dormName: string): DormitoryTheme {
   const normalized = (dormName || '').trim();
@@ -370,6 +399,21 @@ export function getDormitoryTheme(dormName: string): DormitoryTheme {
     };
   }
 
+  // หากเป็นหอพักล้านนา ให้จับคู่สีและหมายเลขตะกร้าตามเลขหอพักล้านนา 1 - 10
+  if (normalized.includes('ล้านนา')) {
+    const dormNum = extractDormNumber(normalized);
+    if (dormNum !== 999999 && dormNum >= 1) {
+      const paletteIndex = (dormNum - 1) % COLOR_PALETTE.length;
+      const paletteItem = COLOR_PALETTE[paletteIndex];
+      return {
+        name: normalized,
+        shortName: normalized,
+        ...paletteItem,
+        basketCode: `ตะกร้า ${dormNum}`,
+      };
+    }
+  }
+
   let hash = 0;
   for (let i = 0; i < normalized.length; i++) {
     hash = (hash * 31 + normalized.charCodeAt(i)) >>> 0;
@@ -381,16 +425,6 @@ export function getDormitoryTheme(dormName: string): DormitoryTheme {
     shortName: normalized,
     ...paletteItem,
   };
-}
-
-function extractDormNumber(str: string): number {
-  const thaiDigits = ['๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙'];
-  let s = str;
-  thaiDigits.forEach((td, i) => {
-    s = s.replaceAll(td, String(i));
-  });
-  const m = s.match(/(\d+)/);
-  return m ? parseInt(m[1], 10) : 999999;
 }
 
 /**
@@ -657,6 +691,72 @@ export function formatThaiSlashDate(dateStr?: string): string {
     return `${day}/${month}/${yearBE}`;
   }
   return trimmed;
+}
+
+/**
+ * จัดรูปแบบวันที่และเวลาลงทะเบียนพัสดุสำหรับแสดงผลในตารางและใบนำส่ง
+ * รูปแบบ: "ลงทะเบียน DD-MM-BBBB เวลา HH.MM น" (เช่น "ลงทะเบียน 25-10-2569 เวลา 15.00 น")
+ */
+export function formatParcelRegistrationDateTime(parcel: {
+  createdAt?: string;
+  receivedDate?: string;
+  receivedHour?: number;
+}): string {
+  let dayStr = '';
+  let monthStr = '';
+  let yearBEStr = '';
+  let timeStr = '';
+
+  // 1. ดึงเวลาและวันเดือนปีจาก createdAt (ISO timestamp)
+  if (parcel.createdAt) {
+    const d = new Date(parcel.createdAt);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const yearBE = d.getFullYear() + 543;
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      dayStr = day;
+      monthStr = month;
+      yearBEStr = String(yearBE);
+      timeStr = `${hours}.${minutes} น`;
+    }
+  }
+
+  // 2. หากมี receivedDate (YYYY-MM-DD) ให้นำวันเดือนปีมาใช้เพื่อความแม่นยำตามรอบบันทึกรับเข้า
+  if (parcel.receivedDate) {
+    const parts = parcel.receivedDate.split('-');
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const day = parseInt(parts[2], 10);
+      if (!isNaN(y) && !isNaN(m) && !isNaN(day)) {
+        dayStr = String(day).padStart(2, '0');
+        monthStr = String(m).padStart(2, '0');
+        yearBEStr = String(y + 543);
+      }
+    }
+  }
+
+  // 3. กำหนดเวลาสำรองหากไม่มีเวลาใน createdAt
+  if (!timeStr) {
+    if (parcel.receivedHour !== undefined && parcel.receivedHour !== null && !isNaN(parcel.receivedHour)) {
+      const h = String(parcel.receivedHour).padStart(2, '0');
+      timeStr = `${h}.00 น`;
+    } else {
+      timeStr = '12.00 น';
+    }
+  }
+
+  // 4. หากไม่มีวันเดือนปีเลย ให้ใช้วันที่ปัจจุบัน
+  if (!dayStr || !monthStr || !yearBEStr) {
+    const now = new Date();
+    dayStr = String(now.getDate()).padStart(2, '0');
+    monthStr = String(now.getMonth() + 1).padStart(2, '0');
+    yearBEStr = String(now.getFullYear() + 543);
+  }
+
+  return `ลงทะเบียน ${dayStr}-${monthStr}-${yearBEStr} เวลา ${timeStr}`;
 }
 
 /**
