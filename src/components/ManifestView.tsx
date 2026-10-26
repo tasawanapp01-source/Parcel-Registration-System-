@@ -1093,26 +1093,26 @@ export const ManifestView: React.FC = () => {
                         >
                           {p.category}
                         </div>
-                        {p.status === 'ติดนิติการ' && (
-                          <div className="text-[9.5px] leading-tight mt-0.5">
-                            <span
-                              style={{ color: '#166534' }}
-                              className="font-bold text-emerald-800"
-                            >
-                              {formatParcelRegistrationDateTime(p)}
-                            </span>{' '}
-                            <span className="font-bold text-red-700">
+                        <div className="text-[9.5px] leading-tight mt-0.5">
+                          <span
+                            style={{ color: '#166534' }}
+                            className="font-bold text-emerald-800 font-mono"
+                          >
+                            {formatParcelRegistrationDateTime(p)}
+                          </span>
+                          {p.status === 'ติดนิติการ' && (
+                            <span className="font-bold text-red-700 ml-1">
                               [ติดนิติการ]
                             </span>
-                          </div>
-                        )}
-                        {p.status === 'ติดต่องานพยาบาล' && (
-                          <div className="text-[9.5px] font-bold text-amber-800 leading-tight mt-0.5">
-                            [ติดต่องานพยาบาล]
-                          </div>
-                        )}
+                          )}
+                          {p.status === 'ติดต่องานพยาบาล' && (
+                            <span className="font-bold text-amber-800 ml-1">
+                              [ติดต่องานพยาบาล]
+                            </span>
+                          )}
+                        </div>
                         {p.note && p.status !== 'ติดนิติการ' && p.status !== 'ติดต่องานพยาบาล' && (
-                          <div className="text-[9.5px] text-slate-500 mt-0.5 truncate max-w-[120px]">
+                          <div className="text-[9.5px] text-slate-500 mt-0.5 truncate max-w-[140px]">
                             {p.note}
                           </div>
                         )}

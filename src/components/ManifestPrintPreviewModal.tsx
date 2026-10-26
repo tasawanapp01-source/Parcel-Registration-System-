@@ -543,7 +543,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                             {p.nickname && <span className="text-slate-600 font-normal ml-1">({p.nickname})</span>}
                             {p.gradeRoom && <span className="text-slate-500 font-normal text-[10px] ml-1.5">ชั้น {p.gradeRoom}</span>}
                           </td>
-                          {/* ประเภทสิ่งของ พร้อมสถานะติดนิติการ/งานพยาบาลต่อท้ายโดยขึ้นบรรทัดใหม่ */}
+                          {/* ประเภทสิ่งของ พร้อมวันเวลาลงทะเบียนทุกประเภท และสถานะติดนิติการ/งานพยาบาล */}
                           <td className={`${cellPy} px-2 border border-slate-300 leading-tight`}>
                             <div
                               style={isRdCode ? { color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : undefined}
@@ -553,27 +553,27 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                             >
                               {p.category}
                             </div>
-                            {isLegalHold && (
-                              <div className="text-[9px] sm:text-[9.5px] leading-tight mt-0.5">
-                                <span
-                                  style={{ color: '#166534', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
-                                  className="font-bold text-emerald-800 print-reg-date-time"
-                                >
-                                  {formatParcelRegistrationDateTime(p)}
-                                </span>{' '}
+                            <div className="text-[9px] sm:text-[9.5px] leading-tight mt-0.5">
+                              <span
+                                style={{ color: '#166534', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+                                className="font-bold text-emerald-800 print-reg-date-time font-mono"
+                              >
+                                {formatParcelRegistrationDateTime(p)}
+                              </span>
+                              {isLegalHold && (
                                 <span
                                   style={{ color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
-                                  className="font-bold text-red-700 print-legal-tag"
+                                  className="font-bold text-red-700 print-legal-tag ml-1"
                                 >
                                   [ติดนิติการ]
                                 </span>
-                              </div>
-                            )}
-                            {isInfirmary && (
-                              <div className="text-[9.5px] font-bold text-amber-800 leading-tight mt-0.5">
-                                [ติดต่องานพยาบาล]
-                              </div>
-                            )}
+                              )}
+                              {isInfirmary && (
+                                <span className="font-bold text-amber-800 ml-1">
+                                  [ติดต่องานพยาบาล]
+                                </span>
+                              )}
+                            </div>
                           </td>
                           {/* ลายมือชื่อผู้รับ: ขยายเป็น 12% */}
                           <td className={`${cellPy} px-1 border border-slate-300 text-center`}>
@@ -687,7 +687,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                             {p.nickname && <span className="text-slate-600 font-normal ml-1">({p.nickname})</span>}
                             {p.gradeRoom && <span className="text-slate-500 font-normal text-[9.5px] ml-1">ชั้น {p.gradeRoom}</span>}
                           </td>
-                          {/* ประเภทสิ่งของ พร้อมสถานะติดนิติการ/งานพยาบาลต่อท้ายโดยขึ้นบรรทัดใหม่ */}
+                          {/* ประเภทสิ่งของ พร้อมวันเวลาลงทะเบียนทุกประเภท และสถานะติดนิติการ/งานพยาบาล */}
                           <td className={`${cellPy} px-2 border border-slate-300 leading-tight`}>
                             <div
                               style={isRdCode ? { color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : undefined}
@@ -697,27 +697,27 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                             >
                               {p.category}
                             </div>
-                            {isLegalHold && (
-                              <div className="text-[8.5px] sm:text-[9.5px] leading-tight mt-0.5">
-                                <span
-                                  style={{ color: '#166534', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
-                                  className="font-bold text-emerald-800 print-reg-date-time"
-                                >
-                                  {formatParcelRegistrationDateTime(p)}
-                                </span>{' '}
+                            <div className="text-[8.5px] sm:text-[9.5px] leading-tight mt-0.5">
+                              <span
+                                style={{ color: '#166534', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+                                className="font-bold text-emerald-800 print-reg-date-time font-mono"
+                              >
+                                {formatParcelRegistrationDateTime(p)}
+                              </span>
+                              {isLegalHold && (
                                 <span
                                   style={{ color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
-                                  className="font-bold text-red-700 print-legal-tag"
+                                  className="font-bold text-red-700 print-legal-tag ml-1"
                                 >
                                   [ติดนิติการ]
                                 </span>
-                              </div>
-                            )}
-                            {isInfirmary && (
-                              <div className="text-[9.5px] font-bold text-amber-800 leading-tight mt-0.5">
-                                [ติดต่องานพยาบาล]
-                              </div>
-                            )}
+                              )}
+                              {isInfirmary && (
+                                <span className="font-bold text-amber-800 ml-1">
+                                  [ติดต่องานพยาบาล]
+                                </span>
+                              )}
+                            </div>
                           </td>
                           {/* ลายมือชื่อผู้รับ: 12% */}
                           <td className={`${cellPy} px-1 border border-slate-300 text-center`}>
