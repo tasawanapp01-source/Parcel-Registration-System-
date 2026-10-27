@@ -1025,8 +1025,8 @@ export const ManifestView: React.FC = () => {
                     : '';
 
                   const isRdCode = Boolean(
-                    p.trackingNumber?.toUpperCase().endsWith('-RD') ||
-                    p.category?.toUpperCase().endsWith('-RD')
+                    p.trackingNumber?.trim().toUpperCase().endsWith('-RD') ||
+                    p.category?.trim().toUpperCase().endsWith('-RD')
                   );
 
                   return (
@@ -1067,7 +1067,7 @@ export const ManifestView: React.FC = () => {
                       </td>
                       <td className="py-2 px-2 border border-slate-300 leading-tight">
                         <div
-                          style={isRdCode ? { color: '#DC2626' } : undefined}
+                          style={isRdCode ? { color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : undefined}
                           className={`font-mono font-bold tabular-nums truncate ${
                             isRdCode ? 'text-red-600 font-extrabold' : 'text-slate-900'
                           }`}

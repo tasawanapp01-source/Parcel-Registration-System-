@@ -219,7 +219,21 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
 
           /* 6. สีแดงสำหรับรหัสที่ลงท้ายด้วย -RD ในคอลัมน์ประเภทสิ่งของ และเลขพัสดุ */
           .print-rd-category,
-          .print-rd-tracking {
+          .print-rd-tracking,
+          td.print-rd-tracking,
+          td .print-rd-tracking,
+          div.print-rd-tracking,
+          span.print-rd-tracking,
+          tbody tr td.print-rd-tracking,
+          tbody tr td .print-rd-tracking,
+          tbody tr:not(.print-highlight-legal):not(.print-highlight-infirmary) td.print-rd-tracking,
+          tbody tr:not(.print-highlight-legal):not(.print-highlight-infirmary) td .print-rd-tracking,
+          tbody tr.print-highlight-legal td.print-rd-tracking,
+          tbody tr.print-highlight-legal td .print-rd-tracking,
+          tbody tr.print-highlight-infirmary td.print-rd-tracking,
+          tbody tr.print-highlight-infirmary td .print-rd-tracking,
+          tbody tr td.print-rd-category,
+          tbody tr td .print-rd-category {
             color: #DC2626 !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
@@ -494,8 +508,8 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                       const isLegalHold = p.status === 'ติดนิติการ';
                       const isInfirmary = p.status === 'ติดต่องานพยาบาล';
                       const isRdCode = Boolean(
-                        p.trackingNumber?.toUpperCase().endsWith('-RD') ||
-                        p.category?.toUpperCase().endsWith('-RD')
+                        p.trackingNumber?.trim().toUpperCase().endsWith('-RD') ||
+                        p.category?.trim().toUpperCase().endsWith('-RD')
                       );
                       const cellPy = density === 'compact' ? 'py-1' : 'py-1.5';
                       const recordedDate = isSigned
@@ -524,12 +538,19 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                             {idx + 1}
                           </td>
                           <td
-                            style={isRdCode ? { color: '#DC2626' } : undefined}
+                            style={isRdCode ? { color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : undefined}
                             className={`${cellPy} px-2 border border-slate-300 font-mono font-bold tabular-nums truncate ${
                               isRdCode ? 'text-red-600 print-rd-tracking font-extrabold' : 'text-slate-900'
                             }`}
                           >
-                            {p.trackingNumber}
+                            <div
+                              style={isRdCode ? { color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : undefined}
+                              className={`font-mono font-bold tabular-nums truncate ${
+                                isRdCode ? 'text-red-600 print-rd-tracking font-extrabold' : 'text-slate-900'
+                              }`}
+                            >
+                              {p.trackingNumber}
+                            </div>
                           </td>
                           <td className={`${cellPy} px-2 border border-slate-300 text-slate-700 truncate`}>
                             {p.courier}
@@ -638,8 +659,8 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                       const isLegalHold = p.status === 'ติดนิติการ';
                       const isInfirmary = p.status === 'ติดต่องานพยาบาล';
                       const isRdCode = Boolean(
-                        p.trackingNumber?.toUpperCase().endsWith('-RD') ||
-                        p.category?.toUpperCase().endsWith('-RD')
+                        p.trackingNumber?.trim().toUpperCase().endsWith('-RD') ||
+                        p.category?.trim().toUpperCase().endsWith('-RD')
                       );
                       const cellPy = density === 'compact' ? 'py-1' : 'py-1.5';
                       const recordedDate = isSigned
@@ -669,7 +690,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                           </td>
                           <td className={`${cellPy} px-2 border border-slate-300 leading-tight`}>
                             <div
-                              style={isRdCode ? { color: '#DC2626' } : undefined}
+                              style={isRdCode ? { color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : undefined}
                               className={`font-mono font-bold tabular-nums truncate ${
                                 isRdCode ? 'text-red-600 print-rd-tracking font-extrabold' : 'text-slate-900'
                               }`}
