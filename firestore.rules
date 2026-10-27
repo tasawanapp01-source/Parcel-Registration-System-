@@ -60,7 +60,8 @@ service cloud.firestore {
           'deliverables',
           'members',
           'bulk-delete',
-          'backup-restore'
+          'backup-restore',
+          'parcel-rate-limit'
         ]) &&
         (menus.size() == 0 || (menus[0] is string && menus[0].size() >= 1 && menus[0].size() <= 30));
     }
@@ -178,6 +179,27 @@ service cloud.firestore {
       isValidMenuList(data.allowedMenus) &&
       (!('canEdit' in data) || data.canEdit is bool) &&
       (!('canDelete' in data) || data.canDelete is bool) &&
+      data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') && isAuthorizedOwner(data.ownerId) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidSystemSetting(data) {
+      return data.keys().hasAll([
+        'settingId', 'dailyEnabled', 'dailyLimit', 'weeklyEnabled', 'weeklyLimit',
+        'monthlyEnabled', 'monthlyLimit', 'ownerId', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'settingId', 'dailyEnabled', 'dailyLimit', 'weeklyEnabled', 'weeklyLimit',
+        'monthlyEnabled', 'monthlyLimit', 'ownerId', 'createdAt', 'updatedAt'
+      ]) &&
+      data.settingId is string && data.settingId.size() >= 1 && data.settingId.size() <= 64 && data.settingId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.dailyEnabled is bool &&
+      data.dailyLimit is int && data.dailyLimit >= 0 && data.dailyLimit <= 10000 &&
+      data.weeklyEnabled is bool &&
+      data.weeklyLimit is int && data.weeklyLimit >= 0 && data.weeklyLimit <= 10000 &&
+      data.monthlyEnabled is bool &&
+      data.monthlyLimit is int && data.monthlyLimit >= 0 && data.monthlyLimit <= 10000 &&
       data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') && isAuthorizedOwner(data.ownerId) &&
       data.createdAt is timestamp &&
       data.updatedAt is timestamp;
@@ -306,6 +328,35 @@ service cloud.firestore {
         );
 
       allow delete: if isValidId(roleId) && (isAuthorizedOwner(existing().ownerId) || isAdmin());
+    }
+
+    // 9. System Settings Collection
+    match /system_settings/{settingId} {
+      allow get: if isValidId(settingId) && (isAuthorizedOwner(existing().ownerId) || isAdmin());
+      allow list: if isWorkspaceAccount(resource.data.ownerId) || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid || isBootstrappedAdmin()));
+
+      allow create: if isValidId(settingId) &&
+        isValidSystemSetting(incoming()) &&
+        settingId == incoming().settingId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isValidId(settingId) &&
+        isValidSystemSetting(incoming()) &&
+        settingId == incoming().settingId &&
+        (incoming().createdAt == existing().createdAt || incoming().createdAt == request.time) &&
+        incoming().updatedAt == request.time && (
+          isAdmin() ||
+          (
+            (isAuthorizedOwner(existing().ownerId) || isAuthorizedOwner(incoming().ownerId)) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'settingId', 'dailyEnabled', 'dailyLimit', 'weeklyEnabled', 'weeklyLimit',
+              'monthlyEnabled', 'monthlyLimit', 'ownerId', 'createdAt', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isValidId(settingId) && (isAuthorizedOwner(existing().ownerId) || isAdmin());
     }
   }
 }

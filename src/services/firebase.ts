@@ -38,6 +38,8 @@ import {
   INITIAL_ROLE_PERMISSIONS,
   INITIAL_STUDENTS,
   INITIAL_PARCELS,
+  ParcelRateLimitConfig,
+  DEFAULT_PARCEL_RATE_LIMIT_CONFIG,
   getRelativeDateString,
   formatStudentCode,
 } from '../types/parcel';
@@ -657,6 +659,86 @@ export async function saveRolePermissionDirectly(
   }
 }
 
+/**
+ * โครงสร้างสำหรับบันทึกการตั้งค่าระบบลง Firestore (Defensive Payload Sanitization)
+ */
+export function buildValidSystemSettingPayload(
+  config: ParcelRateLimitConfig,
+  ownerId: string = AUTO_CLOUD_OWNER_ID
+) {
+  return {
+    settingId: 'parcel_rate_limits',
+    dailyEnabled: Boolean(config.daily?.enabled),
+    dailyLimit: Math.max(0, Math.floor(Number(config.daily?.limit) || 0)),
+    weeklyEnabled: Boolean(config.weekly?.enabled),
+    weeklyLimit: Math.max(0, Math.floor(Number(config.weekly?.limit) || 0)),
+    monthlyEnabled: Boolean(config.monthly?.enabled),
+    monthlyLimit: Math.max(0, Math.floor(Number(config.monthly?.limit) || 0)),
+    ownerId: sanitizeId(ownerId, 128),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+}
+
+/**
+ * บันทึกการตั้งค่าอัตราการสั่งพัสดุ (Parcel Rate Limits) ลง Firestore โดยตรง
+ */
+export async function saveParcelRateLimitConfigDirectly(
+  config: ParcelRateLimitConfig,
+  ownerId: string = AUTO_CLOUD_OWNER_ID
+): Promise<void> {
+  const docRef = doc(db, 'system_settings', 'parcel_rate_limits');
+  try {
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const current = snap.data();
+      const payload = {
+        ...buildValidSystemSettingPayload(config, ownerId),
+        createdAt: current.createdAt || serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(docRef, payload);
+    } else {
+      const payload = buildValidSystemSettingPayload(config, ownerId);
+      await setDoc(docRef, payload);
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'system_settings/parcel_rate_limits');
+  }
+}
+
+/**
+ * ดึงข้อมูลการตั้งค่าอัตราการสั่งพัสดุจาก Firestore โดยตรง
+ */
+export async function fetchParcelRateLimitConfigDirectly(
+  _ownerId: string = AUTO_CLOUD_OWNER_ID
+): Promise<ParcelRateLimitConfig | null> {
+  const docRef = doc(db, 'system_settings', 'parcel_rate_limits');
+  try {
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const d = snap.data();
+      return {
+        daily: {
+          enabled: Boolean(d.dailyEnabled),
+          limit: Math.max(0, Number(d.dailyLimit) || 1),
+        },
+        weekly: {
+          enabled: Boolean(d.weeklyEnabled),
+          limit: Math.max(0, Number(d.weeklyLimit) || 3),
+        },
+        monthly: {
+          enabled: Boolean(d.monthlyEnabled),
+          limit: Math.max(0, Number(d.monthlyLimit) || 10),
+        },
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // -------------------------------------------------------------
 // 6. การแปลง Document Snapshot และการดึงข้อมูล Real-time
 // -------------------------------------------------------------
@@ -853,6 +935,7 @@ export async function fetchCloudDataDirectly(
   parcels: Parcel[];
   members: Member[];
   rolePermissions: RolePermission[];
+  rateLimitConfig: ParcelRateLimitConfig | null;
   readsCount: number;
 }> {
   let readsCount = 0;
@@ -860,6 +943,7 @@ export async function fetchCloudDataDirectly(
   const parcelMap = new Map<string, Parcel>();
   const memberMap = new Map<string, Member>();
   const rolePermMap = new Map<string, RolePermission>();
+  let rateLimitConfig: ParcelRateLimitConfig | null = null;
 
   const ownerIdsToFetch = Array.from(
     new Set(
@@ -927,6 +1011,30 @@ export async function fetchCloudDataDirectly(
     }
   }
 
+  try {
+    const rateLimitSnap = await getDoc(doc(db, 'system_settings', 'parcel_rate_limits'));
+    readsCount += 1;
+    if (rateLimitSnap.exists()) {
+      const d = rateLimitSnap.data();
+      rateLimitConfig = {
+        daily: {
+          enabled: Boolean(d.dailyEnabled),
+          limit: Math.max(0, Number(d.dailyLimit) || 1),
+        },
+        weekly: {
+          enabled: Boolean(d.weeklyEnabled),
+          limit: Math.max(0, Number(d.weeklyLimit) || 3),
+        },
+        monthly: {
+          enabled: Boolean(d.monthlyEnabled),
+          limit: Math.max(0, Number(d.monthlyLimit) || 10),
+        },
+      };
+    }
+  } catch {
+    // fallback
+  }
+
   return {
     students: Array.from(studentMap.values()).sort((a, b) => a.seqNo - b.seqNo),
     parcels: Array.from(parcelMap.values()).sort(
@@ -934,6 +1042,7 @@ export async function fetchCloudDataDirectly(
     ),
     members: Array.from(memberMap.values()),
     rolePermissions: Array.from(rolePermMap.values()),
+    rateLimitConfig,
     readsCount,
   };
 }
@@ -946,7 +1055,8 @@ export function subscribeToWorkspaceCloudData(
   onStudentsSnapshot: (students: Student[]) => void,
   onParcelsSnapshot: (parcels: Parcel[]) => void,
   onMembersSnapshot?: (members: Member[]) => void,
-  onRolePermissionsSnapshot?: (rolePermissions: RolePermission[]) => void
+  onRolePermissionsSnapshot?: (rolePermissions: RolePermission[]) => void,
+  onRateLimitConfigSnapshot?: (config: ParcelRateLimitConfig) => void
 ): () => void {
   const effectiveOwnerId = ownerId || AUTO_CLOUD_OWNER_ID;
   const stQuery = query(collection(db, 'students'), where('ownerId', '==', effectiveOwnerId));
@@ -1030,11 +1140,40 @@ export function subscribeToWorkspaceCloudData(
     }
   );
 
+  const rateLimitDocRef = doc(db, 'system_settings', 'parcel_rate_limits');
+  const unsubRateLimit = onSnapshot(
+    rateLimitDocRef,
+    (snap) => {
+      if (!onRateLimitConfigSnapshot) return;
+      if (snap.exists()) {
+        const d = snap.data();
+        onRateLimitConfigSnapshot({
+          daily: {
+            enabled: Boolean(d.dailyEnabled),
+            limit: Math.max(0, Number(d.dailyLimit) || 1),
+          },
+          weekly: {
+            enabled: Boolean(d.weeklyEnabled),
+            limit: Math.max(0, Number(d.weeklyLimit) || 3),
+          },
+          monthly: {
+            enabled: Boolean(d.monthlyEnabled),
+            limit: Math.max(0, Number(d.monthlyLimit) || 10),
+          },
+        });
+      }
+    },
+    () => {
+      // silent fallback
+    }
+  );
+
   return () => {
     unsubStudents();
     unsubParcels();
     unsubMembers();
     unsubRolePerms();
+    unsubRateLimit();
   };
 }
 

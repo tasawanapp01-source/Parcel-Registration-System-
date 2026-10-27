@@ -409,6 +409,73 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "SystemSetting": {
+      "title": "SystemSetting",
+      "description": "การตั้งค่าระบบ เช่น อัตราการสั่งพัสดุจำกัดรายวัน รายสัปดาห์ และรายเดือน",
+      "type": "object",
+      "properties": {
+        "settingId": {
+          "type": "string",
+          "description": "รหัสการตั้งค่า",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "dailyEnabled": {
+          "type": "boolean",
+          "description": "เปิดใช้งานการจำกัดจำนวนรายวันหรือไม่"
+        },
+        "dailyLimit": {
+          "type": "number",
+          "description": "จำนวนชิ้นพัสดุที่อนุญาตต่อวัน"
+        },
+        "weeklyEnabled": {
+          "type": "boolean",
+          "description": "เปิดใช้งานการจำกัดจำนวนรายสัปดาห์หรือไม่"
+        },
+        "weeklyLimit": {
+          "type": "number",
+          "description": "จำนวนชิ้นพัสดุที่อนุญาตต่อสัปดาห์"
+        },
+        "monthlyEnabled": {
+          "type": "boolean",
+          "description": "เปิดใช้งานการจำกัดจำนวนรายเดือนหรือไม่"
+        },
+        "monthlyLimit": {
+          "type": "number",
+          "description": "จำนวนชิ้นพัสดุที่อนุญาตต่อเดือน"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID เจ้าของระบบหลัก",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "เวลาที่สร้าง"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "เวลาที่แก้ไขล่าสุด"
+        }
+      },
+      "required": [
+        "settingId",
+        "dailyEnabled",
+        "dailyLimit",
+        "weeklyEnabled",
+        "weeklyLimit",
+        "monthlyEnabled",
+        "monthlyLimit",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -435,6 +502,12 @@
         "$ref": "#/entities/RolePermission"
       },
       "description": "เก็บการตั้งค่าอนุญาตการเข้าถึงเมนูของแต่ละระดับผู้ใช้"
+    },
+    "/system_settings/{settingId}": {
+      "schema": {
+        "$ref": "#/entities/SystemSetting"
+      },
+      "description": "เก็บการตั้งค่าระบบของโรงเรียน เช่น อัตราการสั่งพัสดุจำกัดรายวัน รายสัปดาห์ และรายเดือน"
     }
   }
 }

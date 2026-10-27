@@ -21,6 +21,7 @@ import {
   PackageCheck,
   Trash2,
   Database,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { ParcelSystemProvider, useParcelSystem } from './context/ParcelSystemContext';
 import { Member, AppMenuKey, APP_MENU_DEFINITIONS } from './types/parcel';
@@ -33,6 +34,7 @@ import { DeliverablesView } from './components/DeliverablesView';
 import { MembersAccessView } from './components/MembersAccessView';
 import { BulkDeleteParcelsView } from './components/BulkDeleteParcelsView';
 import { BackupRestoreView } from './components/BackupRestoreView';
+import { ParcelRateLimitView } from './components/ParcelRateLimitView';
 import { LoginView } from './components/LoginView';
 
 interface MainWorkspaceProps {
@@ -115,6 +117,7 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
     'members',
     'bulk-delete',
     'backup-restore',
+    'parcel-rate-limit',
     'deliverables',
   ].includes(activeTab);
   const hasAnySettingsMenu =
@@ -123,6 +126,7 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
     isMenuAllowed('members') ||
     isMenuAllowed('bulk-delete') ||
     isMenuAllowed('backup-restore') ||
+    isMenuAllowed('parcel-rate-limit') ||
     isMenuAllowed('deliverables');
 
   const getMemberDisplayName = (member: Member) => {
@@ -245,10 +249,12 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
                         ? 'ข้อมูลนักเรียน'
                         : activeTab === 'bulk-delete'
                         ? 'ลบพัสดุจำนวนมาก (Bulk Deletion)'
-                        : activeTab === 'members'
-                        ? 'จัดการสมาชิก & สิทธิ์'
                         : activeTab === 'backup-restore'
                         ? 'สำรอง & กู้คืน'
+                        : activeTab === 'parcel-rate-limit'
+                        ? 'กำหนดอัตราการสั่งพัสดุ'
+                        : activeTab === 'members'
+                        ? 'จัดการสมาชิก & สิทธิ์'
                         : 'ติดตั้งระบบ'}
                     </span>
                   )}
@@ -271,6 +277,7 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
                     {(isMenuAllowed('students') ||
                       isMenuAllowed('bulk-delete') ||
                       isMenuAllowed('backup-restore') ||
+                      isMenuAllowed('parcel-rate-limit') ||
                       isMenuAllowed('members')) && (
                       <div className="py-1">
                         <div className="px-3.5 py-1 text-[10px] font-extrabold text-indigo-600 uppercase tracking-wider flex items-center gap-1.5">
@@ -329,7 +336,34 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
                           </button>
                         )}
 
-                        {/* 3. สำรอง ส่งออก & กู้คืนข้อมูล */}
+                        {/* 3. กำหนดอัตราการสั่งพัสดุ (Rate Limit per Day / Week / Month) */}
+                        {isMenuAllowed('parcel-rate-limit') && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTab('parcel-rate-limit');
+                              setIsSettingsOpen(false);
+                            }}
+                            className={`w-full px-3.5 py-2 text-left text-xs flex items-center gap-2.5 transition-colors cursor-pointer ${
+                              activeTab === 'parcel-rate-limit'
+                                ? 'bg-amber-50 text-amber-800 font-bold'
+                                : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                              <SlidersHorizontal className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <div className="font-semibold leading-tight text-slate-900 flex items-center gap-1.5">
+                                <span>กำหนดอัตราการสั่งพัสดุ</span>
+                                <span className="text-[9px] px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded font-mono font-bold">โควตา/เตือน</span>
+                              </div>
+                              <div className="text-[10px] text-slate-400">ต่อวัน / ต่อสัปดาห์ / ต่อเดือน และเตือน POPUP</div>
+                            </div>
+                          </button>
+                        )}
+
+                        {/* 4. สำรอง ส่งออก & กู้คืนข้อมูล */}
                         {isMenuAllowed('backup-restore') && (
                           <button
                             type="button"
@@ -356,7 +390,7 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
                           </button>
                         )}
 
-                        {/* 4. จัดการสมาชิก & สิทธิ์ */}
+                        {/* 5. จัดการสมาชิก & สิทธิ์ */}
                         {isMenuAllowed('members') && (
                           <button
                             type="button"
@@ -602,6 +636,21 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
                 </button>
               )}
 
+              {isMenuAllowed('parcel-rate-limit') && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('parcel-rate-limit')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTab === 'parcel-rate-limit'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'bg-amber-50 text-amber-800 hover:bg-amber-100/90 border border-amber-200'
+                  }`}
+                >
+                  <SlidersHorizontal className="w-4 h-4" />
+                  <span>กำหนดอัตราการสั่งพัสดุ</span>
+                </button>
+              )}
+
               {isMenuAllowed('backup-restore') && (
                 <button
                   type="button"
@@ -656,75 +705,195 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
         {activeTab === 'students' && isMenuAllowed('students') && <StudentsImportView />}
         {activeTab === 'dashboard' && isMenuAllowed('dashboard') && <DashboardView />}
         {activeTab === 'bulk-delete' && isMenuAllowed('bulk-delete') && <BulkDeleteParcelsView />}
+        {activeTab === 'parcel-rate-limit' && isMenuAllowed('parcel-rate-limit') && <ParcelRateLimitView />}
         {activeTab === 'backup-restore' && isMenuAllowed('backup-restore') && <BackupRestoreView />}
         {activeTab === 'members' && isMenuAllowed('members') && <MembersAccessView />}
         {activeTab === 'deliverables' && isMenuAllowed('deliverables') && <DeliverablesView />}
       </main>
 
-      {/* กล่องแจ้งเตือนเมื่อสแกนพบ แสดงเฉพาะ ชื่อ หอพัก และจำนวนชิ้นรวมปัจจุบัน เตือนแล้วปิดเลย */}
+      {/* กล่องแจ้งเตือน POPUP ขณะทำการสแกนลงทะเบียนพัสดุเมื่อสั่งเกินอัตรากำหนด (รายวัน/รายสัปดาห์/รายเดือน) */}
       {weeklyWarningPopup.isOpen && activePopupStudent && (
         <div
           role="dialog"
           aria-modal="true"
-          aria-labelledby="weekly-parcel-warning-title"
+          aria-labelledby="rate-limit-warning-title"
           onClick={closeWeeklyWarningPopup}
-          className="no-print fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4"
+          className="no-print fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white border-2 border-red-600 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-xl"
+            className="bg-white border-2 border-red-500 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150"
           >
+            {/* ส่วนหัว Modal */}
             <div className="flex items-center justify-between gap-3 border-b border-red-100 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0">
-                  <AlertTriangle className="w-5 h-5" />
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-red-600 to-rose-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-red-200">
+                  <AlertTriangle className="w-5 h-5 animate-bounce" />
                 </div>
-                <h2
-                  id="weekly-parcel-warning-title"
-                  className="text-base font-extrabold text-red-700"
-                >
-                  แจ้งเตือนจำนวนพัสดุ
-                </h2>
+                <div>
+                  <h2
+                    id="rate-limit-warning-title"
+                    className="text-base font-extrabold text-red-700 leading-tight"
+                  >
+                    แจ้งเตือนการสั่งพัสดุเกินอัตราที่กำหนด!
+                  </h2>
+                  <p className="text-[11px] text-slate-500">
+                    ตรวจพบขณะทำการสแกนลงทะเบียนพัสดุ
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
                 aria-label="ปิดกล่องแจ้งเตือน"
                 onClick={closeWeeklyWarningPopup}
-                className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-2.5 text-sm">
-              <div className="flex items-baseline justify-between gap-3 py-1.5 border-b border-slate-100">
-                <span className="text-slate-500 font-medium shrink-0">ชื่อ</span>
-                <span className="font-bold text-slate-900 text-right">
+            {/* แบนเนอร์สาเหตุที่เกินกำหนด */}
+            {weeklyWarningPopup.exceededReasons && weeklyWarningPopup.exceededReasons.length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-3 space-y-1.5">
+                <div className="text-[11px] font-extrabold text-red-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-red-600" />
+                  <span>เงื่อนไขที่เกินอัตรากำหนด:</span>
+                </div>
+                {weeklyWarningPopup.exceededReasons.map((reason, idx) => (
+                  <div
+                    key={idx}
+                    className="text-xs font-bold text-red-900 bg-white/80 border border-red-200/80 rounded-xl px-3 py-1.5 flex items-center gap-2"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-red-600 shrink-0"></span>
+                    <span>{reason}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ข้อมูลนักเรียน */}
+            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 space-y-2 text-xs">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-slate-500 font-medium">ชื่อ-นามสกุล นักเรียน:</span>
+                <span className="font-extrabold text-slate-900 text-sm">
                   {activePopupStudent.studentFullName}
                 </span>
               </div>
-
-              <div className="flex items-baseline justify-between gap-3 py-1.5 border-b border-slate-100">
-                <span className="text-slate-500 font-medium shrink-0">หอพัก</span>
-                <span className="font-bold text-slate-900 text-right">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-slate-500 font-medium">หอพัก:</span>
+                <span className="font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200">
                   {activePopupStudent.dormitory || '-'}
                 </span>
               </div>
+            </div>
 
-              <div className="flex items-baseline justify-between gap-3 py-1.5">
-                <span className="text-slate-500 font-medium shrink-0">จำนวนชิ้นรวมปัจจุบัน</span>
-                <span className="text-lg font-mono font-extrabold text-red-600 tabular-nums">
+            {/* ตารางแสดงการนับตาม 3 ช่วงเวลา: รายวัน, รายสัปดาห์, รายเดือน */}
+            <div className="space-y-2">
+              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                สถิติการรับพัสดุตามเกณฑ์นับ:
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                {/* 1. รายวัน */}
+                <div
+                  className={`p-2.5 rounded-xl border text-center transition-all ${
+                    activePopupStudent.isOverDailyLimit
+                      ? 'bg-red-50/90 border-red-300 ring-2 ring-red-400'
+                      : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="text-[10px] font-extrabold text-slate-600 mb-0.5">
+                    รายวัน
+                  </div>
+                  <div
+                    className={`text-lg font-mono font-black tabular-nums ${
+                      activePopupStudent.isOverDailyLimit ? 'text-red-600' : 'text-slate-800'
+                    }`}
+                  >
+                    {activePopupStudent.dayCount}
+                  </div>
+                  <div className="text-[9px] text-slate-400 leading-tight">
+                    ยอดวันนี้
+                  </div>
+                  {activePopupStudent.isOverDailyLimit && (
+                    <span className="inline-block mt-1 text-[9px] font-bold text-red-700 bg-red-100 px-1 py-0.2 rounded">
+                      เกินโควตา
+                    </span>
+                  )}
+                </div>
+
+                {/* 2. รายสัปดาห์ (จันทร์-อาทิตย์) */}
+                <div
+                  className={`p-2.5 rounded-xl border text-center transition-all ${
+                    activePopupStudent.isOverWeeklyLimit
+                      ? 'bg-red-50/90 border-red-300 ring-2 ring-red-400'
+                      : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="text-[10px] font-extrabold text-slate-600 mb-0.5">
+                    รายสัปดาห์
+                  </div>
+                  <div
+                    className={`text-lg font-mono font-black tabular-nums ${
+                      activePopupStudent.isOverWeeklyLimit ? 'text-red-600' : 'text-slate-800'
+                    }`}
+                  >
+                    {activePopupStudent.weekCount}
+                  </div>
+                  <div className="text-[9px] text-slate-400 leading-tight">
+                    สัปดาห์นี้ (จ.-อา.)
+                  </div>
+                  {activePopupStudent.isOverWeeklyLimit && (
+                    <span className="inline-block mt-1 text-[9px] font-bold text-red-700 bg-red-100 px-1 py-0.2 rounded">
+                      เกินโควตา
+                    </span>
+                  )}
+                </div>
+
+                {/* 3. รายเดือน (วันที่ 1 ถึงสิ้นเดือน) */}
+                <div
+                  className={`p-2.5 rounded-xl border text-center transition-all ${
+                    activePopupStudent.isOverMonthlyLimit
+                      ? 'bg-red-50/90 border-red-300 ring-2 ring-red-400'
+                      : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="text-[10px] font-extrabold text-slate-600 mb-0.5">
+                    รายเดือน
+                  </div>
+                  <div
+                    className={`text-lg font-mono font-black tabular-nums ${
+                      activePopupStudent.isOverMonthlyLimit ? 'text-red-600' : 'text-slate-800'
+                    }`}
+                  >
+                    {activePopupStudent.monthCount}
+                  </div>
+                  <div className="text-[9px] text-slate-400 leading-tight">
+                    เดือนนี้ (1-สิ้นเดือน)
+                  </div>
+                  {activePopupStudent.isOverMonthlyLimit && (
+                    <span className="inline-block mt-1 text-[9px] font-bold text-red-700 bg-red-100 px-1 py-0.2 rounded">
+                      เกินโควตา
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-1 px-1">
+                <span>ยอดพัสดุสะสมรวมทั้งหมด:</span>
+                <span className="font-mono font-bold text-slate-800">
                   {activePopupStudent.totalCount} ชิ้น
                 </span>
               </div>
             </div>
 
+            {/* ปุ่มปิดและดำเนินการต่อ */}
             <button
               type="button"
               onClick={closeWeeklyWarningPopup}
-              className="w-full min-h-[44px] py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl transition-colors cursor-pointer"
+              className="w-full min-h-[44px] py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-98 text-white text-sm font-bold rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
             >
-              ปิด
+              <span>รับทราบ / ดำเนินการต่อ (ปิด)</span>
             </button>
           </div>
         </div>
@@ -881,6 +1050,33 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
                       <span className="text-[9px] px-1.5 py-0.2 bg-red-100 text-red-800 rounded font-mono font-bold">Bulk Deletion</span>
                     </div>
                     <div className="text-[10px] text-slate-500 font-normal">ลบทีละหอพัก หรือล้างพัสดุทั้งหมดออกจากระบบ</div>
+                  </div>
+                </button>
+              )}
+
+              {/* 3. กำหนดอัตราการสั่งพัสดุ (Rate Limit per Day / Week / Month) */}
+              {isMenuAllowed('parcel-rate-limit') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('parcel-rate-limit');
+                    setIsMobileSettingsOpen(false);
+                  }}
+                  className={`w-full p-3 text-left rounded-xl flex items-center gap-3 transition-colors ${
+                    activeTab === 'parcel-rate-limit'
+                      ? 'bg-amber-50 border border-amber-200 text-amber-900 font-bold'
+                      : 'bg-slate-50 hover:bg-amber-50/50 text-slate-700'
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                    <SlidersHorizontal className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                      <span>กำหนดอัตราการสั่งพัสดุ</span>
+                      <span className="text-[9px] px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded font-mono font-bold">โควตา/เตือน</span>
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-normal">ต่อวัน / ต่อสัปดาห์ / ต่อเดือน และเตือน POPUP</div>
                   </div>
                 </button>
               )}

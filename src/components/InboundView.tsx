@@ -40,6 +40,7 @@ import {
   getRelativeDateString,
   formatThaiSlashDate,
   extractParcelLocalYMD,
+  isStudentOverConfiguredLimit,
 } from '../types/parcel';
 
 const INBOUND_STATUS_OPTIONS: {
@@ -149,6 +150,7 @@ export const InboundView: React.FC = () => {
     pullFromFirebaseToLocal,
     getStudentParcelCounts,
     openWeeklyWarningPopup,
+    parcelRateLimitConfig,
     user,
     isSyncing,
   } = useParcelSystem();
@@ -317,15 +319,18 @@ export const InboundView: React.FC = () => {
       setStudentDormRoom(st.dormRoom && st.dormRoom !== '-' ? st.dormRoom : '');
 
       const stStats = getStudentParcelCounts(st.studentCode, fullName, st);
+      const limitCheck = isStudentOverConfiguredLimit(stStats, parcelRateLimitConfig, 1);
+
       setStudentFetchFeedback({
-        type: 'success',
-        message: `ชื่อ: ${fullName} · หอพัก: ${dormName || '-'} · จำนวนชิ้นรวมปัจจุบัน: ${stStats.totalCount} ชิ้น`,
+        type: limitCheck.isOver || stStats.isOverLimit ? 'warning' : 'success',
+        message: `ชื่อ: ${fullName} · หอพัก: ${dormName || '-'} · วันนี้: ${stStats.dayCount} ชิ้น · สัปดาห์นี้: ${stStats.weekCount} ชิ้น · เดือนนี้: ${stStats.monthCount} ชิ้น`,
       });
-      if (stStats.isOverWeeklyLimit) {
-        openWeeklyWarningPopup(stStats, 'student_lookup');
+
+      if (limitCheck.isOver || stStats.isOverLimit) {
+        openWeeklyWarningPopup(stStats, 'student_lookup', undefined, limitCheck.reasons);
       }
     },
-    [getStudentParcelCounts, openWeeklyWarningPopup]
+    [getStudentParcelCounts, openWeeklyWarningPopup, parcelRateLimitConfig]
   );
 
   // เมื่อพิมพ์หรือสแกนรหัสนักเรียนตรงกับในระบบ ให้ดึงข้อมูลและแจ้งเตือนครั้งเดียวต่อการสแกน

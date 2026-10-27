@@ -83,7 +83,8 @@ export type AppMenuKey =
   | 'deliverables'
   | 'members'
   | 'bulk-delete'
-  | 'backup-restore';
+  | 'backup-restore'
+  | 'parcel-rate-limit';
 
 export type MemberRole = 'ผู้ดูแลระบบ' | 'เจ้าหน้าที่' | 'ครู' | 'ผู้ใช้';
 
@@ -127,6 +128,13 @@ export const APP_MENU_DEFINITIONS: AppMenuDefinition[] = [
     description: 'ดูภาพรวมสถิติพัสดุรายวัน รายหอพัก และปริมาณงาน',
   },
   {
+    key: 'parcel-rate-limit',
+    label: 'กำหนดอัตราการสั่งพัสดุ',
+    shortLabel: 'อัตราสั่งพัสดุ',
+    description: 'กำหนดอัตราจำกัดการสั่งพัสดุ รายวัน รายสัปดาห์ และรายเดือน พร้อมแจ้งเตือน POPUP ขณะสแกน',
+    adminOnly: true,
+  },
+  {
     key: 'bulk-delete',
     label: 'ลบพัสดุจำนวนมากออกจากระบบ (Bulk Parcel Deletion)',
     shortLabel: 'ลบพัสดุจำนวนมาก',
@@ -161,6 +169,7 @@ export const ALL_MENU_KEYS: AppMenuKey[] = [
   'manifest',
   'students',
   'dashboard',
+  'parcel-rate-limit',
   'bulk-delete',
   'backup-restore',
   'members',
@@ -846,7 +855,116 @@ export const INITIAL_MEMBERS: Member[] = [
   },
 ];
 
-export const WEEKLY_PARCEL_WARNING_LIMIT = 3; // เกิน 3 ชิ้นต่อสัปดาห์ (ตั้งแต่ 4 ชิ้นขึ้นไป) แสดง Popup เตือน
+export const WEEKLY_PARCEL_WARNING_LIMIT = 3; // ค่าสำรองเริ่มต้น 3 ชิ้นต่อสัปดาห์
+
+/**
+ * โครงสร้างการตั้งค่าอัตราการสั่งพัสดุ (Parcel Ordering Rate Limit)
+ * แยกเป็น รายวัน, รายสัปดาห์, รายเดือน
+ * แต่ละช่วงมีตัวเลือก:
+ * - ไม่กำหนด (enabled: false)
+ * - จำนวน (enabled: true, limit: N ชิ้น)
+ */
+export interface RateLimitPeriodSetting {
+  enabled: boolean; // false = 'ไม่กำหนด', true = 'จำนวน'
+  limit: number;    // จำนวนที่อนุญาตให้สั่งได้ (เช่น 1, 3, 10...)
+}
+
+export interface ParcelRateLimitConfig {
+  daily: RateLimitPeriodSetting;
+  weekly: RateLimitPeriodSetting;
+  monthly: RateLimitPeriodSetting;
+}
+
+export const DEFAULT_PARCEL_RATE_LIMIT_CONFIG: ParcelRateLimitConfig = {
+  daily: {
+    enabled: false,
+    limit: 1,
+  },
+  weekly: {
+    enabled: true,
+    limit: 3,
+  },
+  monthly: {
+    enabled: false,
+    limit: 10,
+  },
+};
+
+/**
+ * คำนวณช่วงวันที่ของสัปดาห์ปัจจุบัน (เริ่มต้นสัปดาห์ถึงท้ายสัปดาห์: จันทร์ - อาทิตย์)
+ */
+export function getWeekRangeYMD(targetDate: Date = new Date()): {
+  startYMD: string;
+  endYMD: string;
+  startThaiDisplay: string;
+  endThaiDisplay: string;
+} {
+  const d = new Date(targetDate);
+  const day = d.getDay(); // 0 is Sunday, 1 is Monday... 6 is Saturday
+  // สัปดาห์ตามมาตรฐานสากลและปฏิทินไทย: เริ่มวันจันทร์ (1) ถึงวันอาทิตย์ (0)
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diffToMonday);
+  monday.setHours(0, 0, 0, 0);
+
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+
+  const toYMD = (dt: Date) => {
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const dayStr = String(dt.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dayStr}`;
+  };
+
+  const startYMD = toYMD(monday);
+  const endYMD = toYMD(sunday);
+
+  return {
+    startYMD,
+    endYMD,
+    startThaiDisplay: formatThaiSlashDate(startYMD),
+    endThaiDisplay: formatThaiSlashDate(endYMD),
+  };
+}
+
+/**
+ * คำนวณช่วงวันที่ของเดือนปัจจุบัน (เริ่มจากวันที่ 1 ถึงวันสุดท้ายของเดือน)
+ */
+export function getMonthRangeYMD(targetDate: Date = new Date()): {
+  startYMD: string;
+  endYMD: string;
+  yearMonth: string;
+  monthNameTh: string;
+  yearBE: number;
+  startThaiDisplay: string;
+  endThaiDisplay: string;
+} {
+  const y = targetDate.getFullYear();
+  const m = targetDate.getMonth(); // 0-11
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+
+  const mStr = String(m + 1).padStart(2, '0');
+  const startYMD = `${y}-${mStr}-01`;
+  const endYMD = `${y}-${mStr}-${String(daysInMonth).padStart(2, '0')}`;
+  const yearMonth = `${y}-${mStr}`;
+
+  const thaiMonths = [
+    'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+  ];
+
+  return {
+    startYMD,
+    endYMD,
+    yearMonth,
+    monthNameTh: thaiMonths[m] || '',
+    yearBE: y + 543,
+    startThaiDisplay: formatThaiSlashDate(startYMD),
+    endThaiDisplay: formatThaiSlashDate(endYMD),
+  };
+}
 
 export interface StudentParcelCountStats {
   studentKey: string;
@@ -856,11 +974,15 @@ export interface StudentParcelCountStats {
   gradeRoom: string;
   dormitory: string;
   dormRoom: string;
-  dayCount: number;           // จำนวนพัสดุรายวัน (วันนี้)
-  weekCount: number;          // จำนวนพัสดุรายสัปดาห์ (7 วันล่าสุด)
-  monthCount: number;         // จำนวนพัสดุรายเดือน (เดือนนี้ / 30 วันล่าสุด)
+  dayCount: number;           // จำนวนพัสดุรายวัน (นับยอดรวมที่รับลงทะเบียนในแต่ละวัน/วันนี้)
+  weekCount: number;          // จำนวนพัสดุรายสัปดาห์ (เริ่มต้นสัปดาห์ถึงท้ายสัปดาห์: จันทร์ - อาทิตย์)
+  monthCount: number;         // จำนวนพัสดุรายเดือน (เริ่มจากวันที่ 1 ถึงวันสุดท้ายของเดือน)
   totalCount: number;         // จำนวนพัสดุสะสมทั้งหมด
-  isOverWeeklyLimit: boolean; // true เมื่อ weekCount > 3
+  isOverLimit: boolean;       // true เมื่อเกินเกณฑ์ใดๆ ที่เปิดใช้งาน (วัน, สัปดาห์ หรือ เดือน)
+  isOverDailyLimit: boolean;  // true เมื่อเกินอัตราต่อวัน
+  isOverWeeklyLimit: boolean; // true เมื่อเกินอัตราต่อสัปดาห์
+  isOverMonthlyLimit: boolean;// true เมื่อเกินอัตราต่อเดือน
+  exceededReasons: string[];  // รายการสาเหตุที่เกินเกณฑ์
   dayParcels: Parcel[];
   weekParcels: Parcel[];
   monthParcels: Parcel[];
@@ -893,24 +1015,67 @@ export function extractParcelLocalYMD(parcel: Parcel, fallbackTodayStr?: string)
   return todayStr;
 }
 
-function parseYMDToMidnightMs(ymd: string): number {
-  const parts = ymd.split('-');
-  if (parts.length !== 3) return Date.now();
-  return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).getTime();
+/**
+ * ตรวจสอบว่านักเรียนเกินเกณฑ์อัตราพัสดุที่ตั้งไว้หรือไม่
+ */
+export function isStudentOverConfiguredLimit(
+  stats: StudentParcelCountStats,
+  config: ParcelRateLimitConfig,
+  incomingCount = 0
+): {
+  isOver: boolean;
+  isDailyOver: boolean;
+  isWeeklyOver: boolean;
+  isMonthlyOver: boolean;
+  reasons: string[];
+} {
+  const isDailyOver = Boolean(
+    config.daily.enabled && stats.dayCount + incomingCount > config.daily.limit
+  );
+  const isWeeklyOver = Boolean(
+    config.weekly.enabled && stats.weekCount + incomingCount > config.weekly.limit
+  );
+  const isMonthlyOver = Boolean(
+    config.monthly.enabled && stats.monthCount + incomingCount > config.monthly.limit
+  );
+  const isOver = isDailyOver || isWeeklyOver || isMonthlyOver;
+
+  const reasons: string[] = [];
+  if (isDailyOver) {
+    reasons.push(
+      `รายวัน: รับแล้ว ${stats.dayCount} ชิ้น${incomingCount > 0 ? ` (+พัสดุนี้เป็น ${stats.dayCount + incomingCount} ชิ้น)` : ''} (กำหนดไม่เกิน ${config.daily.limit} ชิ้น/วัน)`
+    );
+  }
+  if (isWeeklyOver) {
+    reasons.push(
+      `รายสัปดาห์: รับแล้ว ${stats.weekCount} ชิ้น${incomingCount > 0 ? ` (+พัสดุนี้เป็น ${stats.weekCount + incomingCount} ชิ้น)` : ''} (กำหนดไม่เกิน ${config.weekly.limit} ชิ้น/สัปดาห์)`
+    );
+  }
+  if (isMonthlyOver) {
+    reasons.push(
+      `รายเดือน: รับแล้ว ${stats.monthCount} ชิ้น${incomingCount > 0 ? ` (+พัสดุนี้เป็น ${stats.monthCount + incomingCount} ชิ้น)` : ''} (กำหนดไม่เกิน ${config.monthly.limit} ชิ้น/เดือน)`
+    );
+  }
+
+  return { isOver, isDailyOver, isWeeklyOver, isMonthlyOver, reasons };
 }
 
 /**
- * คำนวณจำนวนพัสดุของนักเรียนรายคน แยกเป็น วัน (วันนี้), สัปดาห์ (7 วันล่าสุด), เดือน (เดือนปัจจุบัน/30 วัน)
+ * คำนวณจำนวนพัสดุของนักเรียนรายคน ตามเงื่อนไข:
+ * 1. รายวัน: ให้นับยอดรวมที่รับลงทะเบียนในแต่ละวัน (วันนี้)
+ * 2. รายสัปดาห์: ให้นับยอดรวมที่รับลงทะเบียนในแต่ละสัปดาห์ เริ่มต้นสัปดาห์ถึงท้ายสัปดาห์ (จันทร์ - อาทิตย์)
+ * 3. รายเดือน: ให้นับยอดรวมที่รับลงทะเบียนในแต่ละเดือน เริ่มจากวันที่ 1 ถึงวันสุดท้ายของเดือน
  */
 export function getStudentParcelCountStats(
   parcels: Parcel[],
   studentCode?: string,
   studentFullName?: string,
-  studentMeta?: Partial<Pick<Student, 'prefix' | 'firstName' | 'lastName' | 'nickname' | 'grade' | 'room' | 'dormitory' | 'dormRoom'>>
+  studentMeta?: Partial<Pick<Student, 'prefix' | 'firstName' | 'lastName' | 'nickname' | 'grade' | 'room' | 'dormitory' | 'dormRoom'>>,
+  rateLimitConfig: ParcelRateLimitConfig = DEFAULT_PARCEL_RATE_LIMIT_CONFIG
 ): StudentParcelCountStats {
   const todayStr = getRelativeDateString(0);
-  const todayMs = parseYMDToMidnightMs(todayStr);
-  const currentYearMonth = todayStr.slice(0, 7);
+  const weekRange = getWeekRangeYMD(new Date());
+  const monthRange = getMonthRangeYMD(new Date());
 
   const cleanCode = (studentCode || '').trim();
   const lowerCode = cleanCode.toLowerCase();
@@ -951,12 +1116,13 @@ export function getStudentParcelCountStats(
 
   for (const p of matchedParcels) {
     const pYMD = extractParcelLocalYMD(p, todayStr);
-    const pMs = parseYMDToMidnightMs(pYMD);
-    const diffDays = Math.round((todayMs - pMs) / 86400000);
 
+    // 1. รายวัน: นับยอดรวมที่รับลงทะเบียนในแต่ละวัน
     const isDay = pYMD === todayStr;
-    const isWeek = diffDays >= 0 && diffDays < 7;
-    const isMonth = (diffDays >= 0 && diffDays < 30) || pYMD.slice(0, 7) === currentYearMonth;
+    // 2. รายสัปดาห์: นับยอดรวมที่รับลงทะเบียนในแต่ละสัปดาห์ เริ่มต้นสัปดาห์ถึงท้ายสัปดาห์
+    const isWeek = pYMD >= weekRange.startYMD && pYMD <= weekRange.endYMD;
+    // 3. รายเดือน: นับยอดรวมที่รับลงทะเบียนในแต่ละเดือน เริ่มจากวันที่ 1 ถึงวันสุดท้ายของเดือน
+    const isMonth = pYMD >= monthRange.startYMD && pYMD <= monthRange.endYMD;
 
     if (isDay) dayParcels.push(p);
     if (isWeek) weekParcels.push(p);
@@ -968,6 +1134,32 @@ export function getStudentParcelCountStats(
     studentMeta?.grade && studentMeta.grade !== '-'
       ? `${studentMeta.grade}${studentMeta.room && studentMeta.room !== '-' ? `/${studentMeta.room}` : ''}`
       : '';
+
+  const dayCount = dayParcels.length;
+  const weekCount = weekParcels.length;
+  const monthCount = monthParcels.length;
+
+  const isOverDailyLimit = Boolean(rateLimitConfig.daily.enabled && dayCount > rateLimitConfig.daily.limit);
+  const isOverWeeklyLimit = Boolean(rateLimitConfig.weekly.enabled && weekCount > rateLimitConfig.weekly.limit);
+  const isOverMonthlyLimit = Boolean(rateLimitConfig.monthly.enabled && monthCount > rateLimitConfig.monthly.limit);
+  const isOverLimit = isOverDailyLimit || isOverWeeklyLimit || isOverMonthlyLimit;
+
+  const exceededReasons: string[] = [];
+  if (isOverDailyLimit) {
+    exceededReasons.push(
+      `เกินเกณฑ์รายวัน: รับแล้ว ${dayCount} ชิ้น (กำหนดไม่เกิน ${rateLimitConfig.daily.limit} ชิ้น/วัน)`
+    );
+  }
+  if (isOverWeeklyLimit) {
+    exceededReasons.push(
+      `เกินเกณฑ์รายสัปดาห์: รับแล้ว ${weekCount} ชิ้น (กำหนดไม่เกิน ${rateLimitConfig.weekly.limit} ชิ้น/สัปดาห์)`
+    );
+  }
+  if (isOverMonthlyLimit) {
+    exceededReasons.push(
+      `เกินเกณฑ์รายเดือน: รับแล้ว ${monthCount} ชิ้น (กำหนดไม่เกิน ${rateLimitConfig.monthly.limit} ชิ้น/เดือน)`
+    );
+  }
 
   return {
     studentKey: hasValidCode ? `code:${lowerCode}` : `name:${normTargetName || 'unknown'}`,
@@ -986,11 +1178,15 @@ export function getStudentParcelCountStats(
       (studentMeta?.dormRoom && studentMeta.dormRoom !== '-' ? studentMeta.dormRoom : '') ||
       latestParcel?.dormRoom ||
       '-',
-    dayCount: dayParcels.length,
-    weekCount: weekParcels.length,
-    monthCount: monthParcels.length,
+    dayCount,
+    weekCount,
+    monthCount,
     totalCount: matchedParcels.length,
-    isOverWeeklyLimit: weekParcels.length > WEEKLY_PARCEL_WARNING_LIMIT,
+    isOverLimit,
+    isOverDailyLimit,
+    isOverWeeklyLimit,
+    isOverMonthlyLimit,
+    exceededReasons,
     dayParcels,
     weekParcels,
     monthParcels,
@@ -1002,18 +1198,20 @@ export function getStudentParcelCountStats(
  */
 export function buildAllStudentParcelStats(
   students: Student[],
-  parcels: Parcel[]
+  parcels: Parcel[],
+  rateLimitConfig: ParcelRateLimitConfig = DEFAULT_PARCEL_RATE_LIMIT_CONFIG
 ): {
   byStudentCode: Map<string, StudentParcelCountStats>;
   allStats: StudentParcelCountStats[];
   overWeeklyLimitList: StudentParcelCountStats[];
+  overLimitList: StudentParcelCountStats[];
 } {
   const byStudentCode = new Map<string, StudentParcelCountStats>();
   const handledKeys = new Set<string>();
   const allStats: StudentParcelCountStats[] = [];
 
   for (const st of students) {
-    const stats = getStudentParcelCountStats(parcels, st.studentCode, undefined, st);
+    const stats = getStudentParcelCountStats(parcels, st.studentCode, undefined, st, rateLimitConfig);
     const codeKey = st.studentCode.trim().toLowerCase();
     if (codeKey) {
       byStudentCode.set(codeKey, stats);
@@ -1048,7 +1246,9 @@ export function buildAllStudentParcelStats(
     const stats = getStudentParcelCountStats(
       parcels,
       hasCode ? p.studentCode : undefined,
-      p.studentFullName
+      p.studentFullName,
+      undefined,
+      rateLimitConfig
     );
     if (hasCode) {
       byStudentCode.set(pCode, stats);
@@ -1060,6 +1260,10 @@ export function buildAllStudentParcelStats(
     allStats.push(stats);
   }
 
+  const overLimitList = allStats
+    .filter((item) => item.isOverLimit)
+    .sort((a, b) => b.weekCount - a.weekCount || b.dayCount - a.dayCount || b.monthCount - a.monthCount);
+
   const overWeeklyLimitList = allStats
     .filter((item) => item.isOverWeeklyLimit)
     .sort((a, b) => b.weekCount - a.weekCount || b.dayCount - a.dayCount || b.monthCount - a.monthCount);
@@ -1068,6 +1272,8 @@ export function buildAllStudentParcelStats(
     byStudentCode,
     allStats,
     overWeeklyLimitList,
+    overLimitList,
   };
 }
+
 

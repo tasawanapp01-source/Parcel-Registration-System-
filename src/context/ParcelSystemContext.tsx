@@ -19,6 +19,9 @@ import {
   isUnknownOwnerParcel,
   StudentParcelCountStats,
   WEEKLY_PARCEL_WARNING_LIMIT,
+  ParcelRateLimitConfig,
+  DEFAULT_PARCEL_RATE_LIMIT_CONFIG,
+  isStudentOverConfiguredLimit,
   getStudentParcelCountStats,
   buildAllStudentParcelStats,
   formatStudentCode,
@@ -42,6 +45,8 @@ import {
   saveMemberDirectly,
   deleteMemberDirectly,
   saveRolePermissionDirectly,
+  saveParcelRateLimitConfigDirectly,
+  fetchParcelRateLimitConfigDirectly,
   initializeDefaultCloudDataIfEmpty,
   fetchCloudDataDirectly,
   subscribeToWorkspaceCloudData,
@@ -108,7 +113,9 @@ export interface UpsertMemberInput {
 export interface WeeklyWarningPopupState {
   isOpen: boolean;
   focusedStudent: StudentParcelCountStats | null;
-  triggerReason?: 'inbound_added' | 'student_lookup' | 'auto_detect' | 'manual';
+  triggerReason?: 'inbound_added' | 'student_lookup' | 'auto_detect' | 'manual' | 'test_preview';
+  customWarningMessage?: string;
+  exceededReasons?: string[];
 }
 
 interface ParcelSystemContextValue {
@@ -136,9 +143,12 @@ interface ParcelSystemContextValue {
   students: Student[];
   studentMap: Map<string, Student>;
   parcels: Parcel[];
+  parcelRateLimitConfig: ParcelRateLimitConfig;
+  updateParcelRateLimitConfig: (config: ParcelRateLimitConfig) => Promise<void>;
   studentParcelStatsMap: Map<string, StudentParcelCountStats>;
   allStudentParcelStats: StudentParcelCountStats[];
   overWeeklyLimitStudents: StudentParcelCountStats[];
+  overLimitStudents: StudentParcelCountStats[];
   getStudentParcelCounts: (
     studentCode?: string,
     studentFullName?: string,
@@ -147,7 +157,9 @@ interface ParcelSystemContextValue {
   weeklyWarningPopup: WeeklyWarningPopupState;
   openWeeklyWarningPopup: (
     focusedStudent?: StudentParcelCountStats | null,
-    reason?: WeeklyWarningPopupState['triggerReason']
+    reason?: WeeklyWarningPopupState['triggerReason'],
+    customMessage?: string,
+    customReasons?: string[]
   ) => void;
   closeWeeklyWarningPopup: () => void;
   pendingWrites: PendingWriteItem[];
@@ -219,6 +231,33 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [parcels, setParcels] = useState<Parcel[]>([]);
   const [members, setMembers] = useState<Member[]>(INITIAL_MEMBERS);
   const [rolePermissions, setRolePermissions] = useState<RolePermission[]>(INITIAL_ROLE_PERMISSIONS);
+  const [parcelRateLimitConfig, setParcelRateLimitConfig] = useState<ParcelRateLimitConfig>(() => {
+    try {
+      const saved = localStorage.getItem('spms_rate_limit_config_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return {
+            daily: {
+              enabled: Boolean(parsed.daily?.enabled),
+              limit: Math.max(0, Number(parsed.daily?.limit) || 1),
+            },
+            weekly: {
+              enabled: Boolean(parsed.weekly?.enabled),
+              limit: Math.max(0, Number(parsed.weekly?.limit) || 3),
+            },
+            monthly: {
+              enabled: Boolean(parsed.monthly?.enabled),
+              limit: Math.max(0, Number(parsed.monthly?.limit) || 10),
+            },
+          };
+        }
+      }
+    } catch {
+      // fallback
+    }
+    return DEFAULT_PARCEL_RATE_LIMIT_CONFIG;
+  });
 
   // รหัสสมาชิกปัจจุบันสำหรับการล็อกอิน
   const [currentMemberId, setCurrentMemberId] = useState<string | null>(() => {
@@ -310,6 +349,14 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
       if (data.rolePermissions.length > 0) {
         setRolePermissions(data.rolePermissions);
       }
+      if (data.rateLimitConfig) {
+        setParcelRateLimitConfig(data.rateLimitConfig);
+        try {
+          localStorage.setItem('spms_rate_limit_config_v1', JSON.stringify(data.rateLimitConfig));
+        } catch {
+          // ignore
+        }
+      }
       setQuotaMetrics((prev) => ({
         ...prev,
         firestoreReadsUsed: prev.firestoreReadsUsed + data.readsCount,
@@ -350,6 +397,16 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
         if (cloudRolePerms.length > 0) {
           setRolePermissions(cloudRolePerms);
         }
+      },
+      (cloudRateLimitConfig) => {
+        if (cloudRateLimitConfig) {
+          setParcelRateLimitConfig(cloudRateLimitConfig);
+          try {
+            localStorage.setItem('spms_rate_limit_config_v1', JSON.stringify(cloudRateLimitConfig));
+          } catch {
+            // ignore
+          }
+        }
       }
     );
 
@@ -375,7 +432,37 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
     byStudentCode: studentParcelStatsMap,
     allStats: allStudentParcelStats,
     overWeeklyLimitList: overWeeklyLimitStudents,
-  } = useMemo(() => buildAllStudentParcelStats(students, parcels), [students, parcels]);
+    overLimitList: overLimitStudents,
+  } = useMemo(
+    () => buildAllStudentParcelStats(students, parcels, parcelRateLimitConfig),
+    [students, parcels, parcelRateLimitConfig]
+  );
+
+  const updateParcelRateLimitConfig = useCallback(
+    async (newConfig: ParcelRateLimitConfig): Promise<void> => {
+      setParcelRateLimitConfig(newConfig);
+      try {
+        localStorage.setItem('spms_rate_limit_config_v1', JSON.stringify(newConfig));
+      } catch {
+        // ignore
+      }
+      try {
+        await saveParcelRateLimitConfigDirectly(newConfig, AUTO_CLOUD_OWNER_ID);
+        setQuotaMetrics((prev) => ({
+          ...prev,
+          firestoreWritesUsed: prev.firestoreWritesUsed + 1,
+          lastSyncedAt: new Date().toISOString(),
+        }));
+        showToast('บันทึกการตั้งค่าอัตราการสั่งพัสดุลงฐานข้อมูล Firestore เรียบร้อยแล้ว', 'success');
+      } catch (err) {
+        showToast(
+          `บันทึกในเครื่องแล้ว แต่เกิดข้อผิดพลาดในการบันทึกบน Cloud: ${err instanceof Error ? err.message : 'Error'}`,
+          'warning'
+        );
+      }
+    },
+    [showToast]
+  );
 
   const getStudentParcelCounts = useCallback(
     (
@@ -390,20 +477,30 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
           studentParcelStatsMap.get(formatStudentCode(cleanCode).toLowerCase());
         if (cached) return cached;
       }
-      return getStudentParcelCountStats(parcels, studentCode, studentFullName, studentMeta);
+      return getStudentParcelCountStats(
+        parcels,
+        studentCode,
+        studentFullName,
+        studentMeta,
+        parcelRateLimitConfig
+      );
     },
-    [parcels, studentParcelStatsMap]
+    [parcels, studentParcelStatsMap, parcelRateLimitConfig]
   );
 
   const openWeeklyWarningPopup = useCallback(
     (
       focusedStudent?: StudentParcelCountStats | null,
-      reason: WeeklyWarningPopupState['triggerReason'] = 'manual'
+      reason: WeeklyWarningPopupState['triggerReason'] = 'manual',
+      customMessage?: string,
+      customReasons?: string[]
     ) => {
       setWeeklyWarningPopup({
         isOpen: true,
         focusedStudent: focusedStudent || null,
         triggerReason: reason,
+        customWarningMessage: customMessage,
+        exceededReasons: customReasons || focusedStudent?.exceededReasons || [],
       });
     },
     []
@@ -558,23 +655,24 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
         throw err;
       }
 
-      // ตรวจสอบเตือนพัสดุเกินสัปดาห์ละ 3 ชิ้น
+      // ตรวจสอบเตือนพัสดุเกินอัตราที่กำหนด (รายวัน, รายสัปดาห์, รายเดือน)
       if (!isUnknownOwnerParcel(newParcel)) {
         const updatedList = [newParcel, ...parcels];
         const stats = getStudentParcelCountStats(
           updatedList,
           newParcel.studentCode,
           newParcel.studentFullName,
-          matchedStudent
+          matchedStudent,
+          parcelRateLimitConfig
         );
-        if (stats.weekCount > WEEKLY_PARCEL_WARNING_LIMIT) {
+        if (stats.isOverLimit) {
           openWeeklyWarningPopup(stats, 'inbound_added');
         }
       }
 
       return newParcel;
     },
-    [lookupStudentByCode, parcels, openWeeklyWarningPopup, showToast]
+    [lookupStudentByCode, parcels, openWeeklyWarningPopup, showToast, parcelRateLimitConfig]
   );
 
   /**
@@ -1361,9 +1459,12 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
       students,
       studentMap,
       parcels,
+      parcelRateLimitConfig,
+      updateParcelRateLimitConfig,
       studentParcelStatsMap,
       allStudentParcelStats,
       overWeeklyLimitStudents,
+      overLimitStudents,
       getStudentParcelCounts,
       weeklyWarningPopup,
       openWeeklyWarningPopup,
@@ -1420,9 +1521,12 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
       students,
       studentMap,
       parcels,
+      parcelRateLimitConfig,
+      updateParcelRateLimitConfig,
       studentParcelStatsMap,
       allStudentParcelStats,
       overWeeklyLimitStudents,
+      overLimitStudents,
       getStudentParcelCounts,
       weeklyWarningPopup,
       openWeeklyWarningPopup,
