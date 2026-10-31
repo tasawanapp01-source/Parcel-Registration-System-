@@ -538,16 +538,11 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                             {idx + 1}
                           </td>
                           <td
-                            style={isRdCode ? { color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : undefined}
-                            className={`${cellPy} px-2 border border-slate-300 font-mono font-bold tabular-nums truncate ${
-                              isRdCode ? 'text-red-600 print-rd-tracking font-extrabold' : 'text-slate-900'
-                            }`}
+                            className={`${cellPy} px-2 border border-slate-300 font-mono font-bold tabular-nums truncate`}
                           >
                             <div
-                              style={isRdCode ? { color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : undefined}
-                              className={`font-mono font-bold tabular-nums truncate ${
-                                isRdCode ? 'text-red-600 print-rd-tracking font-extrabold' : 'text-slate-900'
-                              }`}
+                              style={{ color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+                              className="font-mono font-bold tabular-nums truncate text-red-600 print-rd-tracking font-extrabold"
                             >
                               {p.trackingNumber}
                             </div>
@@ -690,10 +685,8 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                           </td>
                           <td className={`${cellPy} px-2 border border-slate-300 leading-tight`}>
                             <div
-                              style={isRdCode ? { color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : undefined}
-                              className={`font-mono font-bold tabular-nums truncate ${
-                                isRdCode ? 'text-red-600 print-rd-tracking font-extrabold' : 'text-slate-900'
-                              }`}
+                              style={{ color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+                              className="font-mono font-bold tabular-nums truncate text-red-600 print-rd-tracking font-extrabold"
                             >
                               {p.trackingNumber}
                             </div>

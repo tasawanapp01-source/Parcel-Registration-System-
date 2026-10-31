@@ -1067,10 +1067,8 @@ export const ManifestView: React.FC = () => {
                       </td>
                       <td className="py-2 px-2 border border-slate-300 leading-tight">
                         <div
-                          style={isRdCode ? { color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : undefined}
-                          className={`font-mono font-bold tabular-nums truncate ${
-                            isRdCode ? 'text-red-600 font-extrabold' : 'text-slate-900'
-                          }`}
+                          style={{ color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+                          className="font-mono font-bold tabular-nums truncate text-red-600 font-extrabold"
                         >
                           {p.trackingNumber}
                         </div>

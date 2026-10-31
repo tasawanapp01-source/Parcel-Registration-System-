@@ -95,7 +95,9 @@ export const TrackingView: React.FC = () => {
   };
 
   const filteredParcels = useMemo(() => {
-    const base = searchParcelsLocal(searchKeyword, selectedStatus, selectedDormitory);
+    const trimmed = searchKeyword.trim();
+    if (!trimmed) return [];
+    const base = searchParcelsLocal(trimmed, selectedStatus, selectedDormitory);
     if (!onlyOverWeeklyLimit) return base;
     return base.filter((p) => {
       if (isUnknownOwnerParcel(p)) return false;
@@ -386,39 +388,67 @@ export const TrackingView: React.FC = () => {
               </button>
             )}
             <span>
-              พบพัสดุตรงตามเงื่อนไข{' '}
-              <strong className="font-mono text-slate-900 tabular-nums">{filteredParcels.length}</strong> รายการ
+              {searchKeyword.trim() ? (
+                <>
+                  พบพัสดุตรงตามการค้นหา{' '}
+                  <strong className="font-mono text-slate-900 tabular-nums">{filteredParcels.length}</strong> รายการ
+                </>
+              ) : (
+                'กรุณาระบุคำค้นหาเพื่อแสดงรายการพัสดุ'
+              )}
             </span>
           </div>
           <span>กดปุ่ม "ส่งมอบสำเร็จ" เพื่อเลือกวันที่รับพัสดุ (วันนี้, เมื่อวาน, หรือระบุวันที่)</span>
         </div>
 
-        {filteredParcels.length === 0 ? (
+        {!searchKeyword.trim() ? (
+          <div className="bg-white border border-slate-200 rounded-2xl p-10 md:p-14 text-center space-y-4">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-2xs">
+              <Search className="w-8 h-8" />
+            </div>
+            <div className="space-y-1.5 max-w-md mx-auto">
+              <h3 className="text-base font-bold text-slate-900">
+                พิมพ์คำค้นหา หรือสแกนบาร์โค้ดเพื่อค้นหาพัสดุ
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                ระบบจะแสดงเฉพาะรายการพัสดุที่ตรงตามการค้นหาเท่านั้น สามารถค้นหาได้ด้วย:
+              </p>
+              <div className="pt-2 flex flex-wrap justify-center gap-1.5 text-xs">
+                <span className="px-2.5 py-1 bg-slate-100 text-slate-700 font-mono font-semibold rounded-lg">
+                  เลขพัสดุ (หรือ 6 ตัวท้าย)
+                </span>
+                <span className="px-2.5 py-1 bg-slate-100 text-slate-700 font-mono font-semibold rounded-lg">
+                  รหัสนักเรียน
+                </span>
+                <span className="px-2.5 py-1 bg-slate-100 text-slate-700 font-semibold rounded-lg">
+                  ชื่อ-นามสกุล / ชื่อเล่น
+                </span>
+                <span className="px-2.5 py-1 bg-slate-100 text-slate-700 font-semibold rounded-lg">
+                  หอพัก
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : filteredParcels.length === 0 ? (
           <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-3">
             <p className="text-base font-bold text-slate-800">
-              {parcels.length === 0
-                ? 'ยังไม่มีรายการพัสดุในระบบ'
-                : `ไม่พบรายการพัสดุที่ตรงกับเงื่อนไขการค้นหา`}
+              ไม่พบรายการพัสดุที่ตรงกับคำค้นหา "{searchKeyword}"
             </p>
             <p className="text-xs text-slate-500">
-              {parcels.length === 0
-                ? 'เมื่อมีการสแกนรับเข้าพัสดุในหน้า "รับเข้าพัสดุ" รายการทั้งหมดจะแสดงที่นี่'
-                : 'ลองล้างตัวกรองสถานะ หรือเปลี่ยนคำค้นหา'}
+              ลองตรวจสอบเลขพัสดุ รหัสนักเรียน หรือเปลี่ยนคำค้นหา
             </p>
-            {(searchKeyword || selectedStatus !== 'ALL' || selectedDormitory !== 'ALL' || onlyOverWeeklyLimit) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchKeyword('');
-                  setSelectedStatus('ALL');
-                  setSelectedDormitory('ALL');
-                  setOnlyOverWeeklyLimit(false);
-                }}
-                className="min-h-[44px] px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                ล้างตัวกรองทั้งหมด
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                setSearchKeyword('');
+                setSelectedStatus('ALL');
+                setSelectedDormitory('ALL');
+                setOnlyOverWeeklyLimit(false);
+              }}
+              className="min-h-[44px] px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              ล้างการค้นหา
+            </button>
           </div>
         ) : (
           <div className="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-200 overflow-hidden">
