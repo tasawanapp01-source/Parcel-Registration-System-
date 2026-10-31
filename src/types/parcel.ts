@@ -505,6 +505,30 @@ export function detectCourierFromTracking(tracking: string): string {
 }
 
 /**
+ * รหัสคำนำหน้าขนส่งมาตรฐานสำหรับสร้างเลขพัสดุจากเลข 6 ตัวท้าย
+ */
+export function getCourierTrackingPrefix(courierName: string): string {
+  switch (courierName) {
+    case 'Flash Express':
+      return 'TH';
+    case 'Kerry Express':
+      return 'KER';
+    case 'ไปรษณีย์ไทย (EMS)':
+      return 'ED';
+    case 'J&T Express':
+      return 'JT';
+    case 'Shopee Xpress (SPX)':
+      return 'SPX';
+    case 'Lex Express':
+      return 'LEX';
+    case 'ผู้ปกครองฝากส่ง':
+      return 'PRT';
+    default:
+      return 'PKG';
+  }
+}
+
+/**
  * จัดรูปแบบรหัสนักเรียน: กำหนดให้รหัสนักเรียนมีจำนวนไม่น้อยกว่า 5 หลัก
  * หากไม่ครบ 5 หลัก ให้เพิ่ม 0 นำหน้าให้ครบ 5 หลัก (เช่น 123 -> 00123)
  */
