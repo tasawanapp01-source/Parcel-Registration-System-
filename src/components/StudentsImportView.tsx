@@ -175,6 +175,8 @@ export const StudentsImportView: React.FC = () => {
     clearAllStudents,
     getStudentParcelCounts,
     overWeeklyLimitStudents,
+    overLimitStudents,
+    parcelRateLimitConfig,
     openWeeklyWarningPopup,
     isSyncing,
     syncProgress,
@@ -192,7 +194,7 @@ export const StudentsImportView: React.FC = () => {
   const [selectedClassroom, setSelectedClassroom] = useState<string>('ALL');
   const [selectedDormitory, setSelectedDormitory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [onlyOverWeeklyLimit, setOnlyOverWeeklyLimit] = useState<boolean>(false);
+  const [onlyOverLimit, setOnlyOverLimit] = useState<boolean>(false);
 
   // ระบบติ๊กเลือกและเลือกล้างข้อมูลนักเรียน
   const [selectedStudentCodes, setSelectedStudentCodes] = useState<string[]>([]);
@@ -286,9 +288,9 @@ export const StudentsImportView: React.FC = () => {
     const q = searchQuery.trim().toLowerCase();
 
     const filtered = students.filter((s) => {
-      if (onlyOverWeeklyLimit) {
+      if (onlyOverLimit) {
         const stStats = getStudentParcelCounts(s.studentCode, undefined, s);
-        if (!stStats.isOverWeeklyLimit) return false;
+        if (!stStats.isOverLimit) return false;
       }
       if (viewMode === 'classroom' && selectedClassroom !== 'ALL') {
         if (getClassroomKey(s) !== selectedClassroom) return false;
@@ -343,7 +345,7 @@ export const StudentsImportView: React.FC = () => {
     selectedClassroom,
     selectedDormitory,
     searchQuery,
-    onlyOverWeeklyLimit,
+    onlyOverLimit,
     getStudentParcelCounts,
   ]);
 
@@ -1422,21 +1424,21 @@ export const StudentsImportView: React.FC = () => {
                   </select>
                 )}
 
-                {/* ปุ่มกรองเฉพาะนักเรียนที่รับพัสดุเกิน 3 ชิ้น/สัปดาห์ */}
+                {/* ปุ่มกรองเฉพาะนักเรียนในสถานะเฝ้าระวัง (เกินอัตราที่กำหนด วัน/สัปดาห์/เดือน) */}
                 <button
                   type="button"
-                  onClick={() => setOnlyOverWeeklyLimit((prev) => !prev)}
+                  onClick={() => setOnlyOverLimit((prev) => !prev)}
                   className={`min-h-[42px] px-3.5 py-2 text-xs font-bold rounded-xl border flex items-center gap-1.5 transition-colors cursor-pointer ${
-                    onlyOverWeeklyLimit
+                    onlyOverLimit
                       ? 'bg-red-600 text-white border-red-600'
-                      : overWeeklyLimitStudents.length > 0
+                      : overLimitStudents.length > 0
                       ? 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100'
                       : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
                   }`}
                 >
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                   <span>
-                    พัสดุเกิน {WEEKLY_PARCEL_WARNING_LIMIT} ชิ้น/สัปดาห์ ({overWeeklyLimitStudents.length} คน)
+                    สถานะเฝ้าระวัง (เกินเกณฑ์: {overLimitStudents.length} คน)
                   </span>
                 </button>
               </div>
@@ -1505,7 +1507,7 @@ export const StudentsImportView: React.FC = () => {
                 setSearchQuery('');
                 setSelectedClassroom('ALL');
                 setSelectedDormitory('ALL');
-                setOnlyOverWeeklyLimit(false);
+                setOnlyOverLimit(false);
               }}
               className="min-h-[38px] px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl cursor-pointer"
             >
@@ -1603,7 +1605,10 @@ export const StudentsImportView: React.FC = () => {
                           <th className="py-3 px-3">หอพัก</th>
                           <th className="py-3 px-3 text-right">ห้องพักหอ</th>
                           <th className="py-3 px-3 text-right">เตียง</th>
-                          <th className="py-3 px-3 text-center">จำนวนพัสดุ (วัน / สัปดาห์ / เดือน)</th>
+                          <th className="py-3 px-3 text-center">
+                            <div>จำนวนพัสดุ (วัน / สัปดาห์ / เดือน)</div>
+                            <div className="text-[10px] font-normal text-slate-500">สถานะเฝ้าระวังตามอัตรากำหนด</div>
+                          </th>
                           <th className="py-3 px-3 text-center">จัดการ</th>
                         </tr>
                       </thead>
@@ -1618,7 +1623,7 @@ export const StudentsImportView: React.FC = () => {
                             <tr
                               key={st.studentCode}
                               className={`transition-colors ${
-                                parcelStats.isOverWeeklyLimit
+                                parcelStats.isOverLimit
                                   ? 'bg-red-50/70 hover:bg-red-50'
                                   : isChecked
                                   ? 'bg-amber-50/70'
@@ -1669,34 +1674,63 @@ export const StudentsImportView: React.FC = () => {
                                 {st.bed}
                               </td>
                               <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                                <div className="inline-flex flex-col items-center gap-1">
-                                  <div className="font-mono text-xs tabular-nums text-slate-800">
-                                    <span>วัน </span>
-                                    <strong className="text-slate-900">{parcelStats.dayCount}</strong>
-                                    <span className="mx-1 text-slate-300">·</span>
-                                    <span>สัปดาห์ </span>
+                                <div className="inline-flex flex-col items-center gap-1.5">
+                                  {/* สรุปตัวเลข 3 ช่วงเวลา: วัน, สัปดาห์, เดือน */}
+                                  <div className="font-mono text-xs tabular-nums text-slate-800 flex items-center gap-1">
+                                    <span className="text-[11px] text-slate-500 font-sans">วัน</span>
                                     <strong
-                                      className={
-                                        parcelStats.isOverWeeklyLimit
-                                          ? 'text-red-600 font-extrabold'
+                                      className={`px-1.5 py-0.2 rounded ${
+                                        parcelStats.isOverDailyLimit
+                                          ? 'bg-red-100 text-red-700 font-extrabold ring-1 ring-red-300'
                                           : 'text-slate-900'
-                                      }
+                                      }`}
+                                    >
+                                      {parcelStats.dayCount}
+                                    </strong>
+                                    <span className="text-slate-300">·</span>
+                                    <span className="text-[11px] text-slate-500 font-sans">สัปดาห์</span>
+                                    <strong
+                                      className={`px-1.5 py-0.2 rounded ${
+                                        parcelStats.isOverWeeklyLimit
+                                          ? 'bg-red-100 text-red-700 font-extrabold ring-1 ring-red-300'
+                                          : 'text-slate-900'
+                                      }`}
                                     >
                                       {parcelStats.weekCount}
                                     </strong>
-                                    <span className="mx-1 text-slate-300">·</span>
-                                    <span>เดือน </span>
-                                    <strong className="text-slate-900">{parcelStats.monthCount}</strong>
+                                    <span className="text-slate-300">·</span>
+                                    <span className="text-[11px] text-slate-500 font-sans">เดือน</span>
+                                    <strong
+                                      className={`px-1.5 py-0.2 rounded ${
+                                        parcelStats.isOverMonthlyLimit
+                                          ? 'bg-red-100 text-red-700 font-extrabold ring-1 ring-red-300'
+                                          : 'text-slate-900'
+                                      }`}
+                                    >
+                                      {parcelStats.monthCount}
+                                    </strong>
                                   </div>
-                                  {parcelStats.isOverWeeklyLimit && (
+
+                                  {/* ป้ายกำกับสถานะเฝ้าระวัง ปรับตามอัตรา ต่อวัน / ต่อสัปดาห์ / ต่อเดือน */}
+                                  {parcelStats.isOverLimit ? (
                                     <button
                                       type="button"
                                       onClick={() => openWeeklyWarningPopup(parcelStats, 'manual')}
-                                      className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold rounded-md flex items-center gap-1 cursor-pointer"
+                                      className="px-2.5 py-0.5 bg-red-600 hover:bg-red-700 active:scale-98 text-white text-[10px] font-bold rounded-lg flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
+                                      title="คลิกเพื่อดูรายละเอียดและเปิดเตือน POPUP"
                                     >
-                                      <AlertTriangle className="w-3 h-3" />
-                                      <span>เกิน {WEEKLY_PARCEL_WARNING_LIMIT} ชิ้น/สัปดาห์</span>
+                                      <AlertTriangle className="w-3 h-3 shrink-0" />
+                                      <span>
+                                        สถานะเฝ้าระวัง{' '}
+                                        {parcelStats.isOverDailyLimit && `(วัน > ${parcelRateLimitConfig.daily.limit}) `}
+                                        {parcelStats.isOverWeeklyLimit && `(สัปดาห์ > ${parcelRateLimitConfig.weekly.limit}) `}
+                                        {parcelStats.isOverMonthlyLimit && `(เดือน > ${parcelRateLimitConfig.monthly.limit})`}
+                                      </span>
                                     </button>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 font-semibold">
+                                      <span>ปกติ (อยู่ในเกณฑ์)</span>
+                                    </span>
                                   )}
                                 </div>
                               </td>

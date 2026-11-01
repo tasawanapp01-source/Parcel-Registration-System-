@@ -22,6 +22,11 @@ import {
   AlertTriangle,
   Users,
   HeartHandshake,
+  Search,
+  CheckCircle2,
+  ShieldAlert,
+  Filter,
+  X,
 } from 'lucide-react';
 import { useParcelSystem } from '../context/ParcelSystemContext';
 import {
@@ -50,6 +55,8 @@ export const DashboardView: React.FC = () => {
     students,
     allStudentParcelStats,
     overWeeklyLimitStudents,
+    overLimitStudents,
+    parcelRateLimitConfig,
     openWeeklyWarningPopup,
     clearAllLocalData,
     currentMember,
@@ -57,17 +64,50 @@ export const DashboardView: React.FC = () => {
 
   const isAdmin = currentMember?.role === 'ผู้ดูแลระบบ';
 
+  const [studentSearchKeyword, setStudentSearchKeyword] = React.useState<string>('');
+  const [watchlistFilter, setWatchlistFilter] = React.useState<
+    'all' | 'over_limit' | 'daily' | 'weekly' | 'monthly' | 'normal'
+  >('all');
+
   const sortedStudentStats = useMemo(() => {
+    const q = studentSearchKeyword.trim().toLowerCase();
     return [...allStudentParcelStats]
-      .filter((s) => s.totalCount > 0 || students.length <= 50)
-      .sort(
-        (a, b) =>
+      .filter((s) => {
+        // กรองตามคำค้นหา
+        if (q) {
+          const matchCode = s.studentCode.toLowerCase().includes(q);
+          const matchFormatted = formatStudentCode(s.studentCode).toLowerCase().includes(q);
+          const matchName = s.studentFullName.toLowerCase().includes(q);
+          const matchNick = (s.nickname || '').toLowerCase().includes(q);
+          const matchDorm = (s.dormitory || '').toLowerCase().includes(q);
+          const matchGrade = (s.gradeRoom || '').toLowerCase().includes(q);
+          if (!matchCode && !matchFormatted && !matchName && !matchNick && !matchDorm && !matchGrade) {
+            return false;
+          }
+        }
+
+        // กรองตามสถานะเฝ้าระวัง
+        if (watchlistFilter === 'over_limit') return s.isOverLimit;
+        if (watchlistFilter === 'daily') return s.isOverDailyLimit;
+        if (watchlistFilter === 'weekly') return s.isOverWeeklyLimit;
+        if (watchlistFilter === 'monthly') return s.isOverMonthlyLimit;
+        if (watchlistFilter === 'normal') return !s.isOverLimit;
+
+        // ค่าเริ่มต้น: แสดงนักเรียนที่มีพัสดุ หรือกรณีนักเรียนน้อยกว่าหรือเท่ากับ 50 คนให้แสดงทั้งหมด
+        return s.totalCount > 0 || students.length <= 50;
+      })
+      .sort((a, b) => {
+        // เรียงลำดับนักเรียนที่เกินเกณฑ์ขึ้นก่อน
+        if (a.isOverLimit && !b.isOverLimit) return -1;
+        if (!a.isOverLimit && b.isOverLimit) return 1;
+        return (
           b.weekCount - a.weekCount ||
           b.dayCount - a.dayCount ||
           b.monthCount - a.monthCount ||
           a.studentCode.localeCompare(b.studentCode, 'th', { numeric: true })
-      );
-  }, [allStudentParcelStats, students.length]);
+        );
+      });
+  }, [allStudentParcelStats, students.length, studentSearchKeyword, watchlistFilter]);
 
   const todayStr = getRelativeDateString(0);
 
@@ -425,50 +465,239 @@ export const DashboardView: React.FC = () => {
 
       {/* ตารางสรุปการนับจำนวนพัสดุของนักเรียนแต่ละคน (วัน, สัปดาห์, เดือน) */}
       <section className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <div>
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Users className="w-4 h-4 text-slate-800" />
-              <span>
-                สรุปการนับจำนวนพัสดุของนักเรียนแต่ละคน (วัน / สัปดาห์ / เดือน)
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Users className="w-5 h-5 text-indigo-600" />
+                <span>
+                  สรุปการนับจำนวนพัสดุของนักเรียนแต่ละคน (วัน / สัปดาห์ / เดือน)
+                </span>
+              </h2>
+              <span className="text-[11px] px-2 py-0.5 rounded-full font-bold bg-indigo-50 border border-indigo-200 text-indigo-700">
+                สถานะเฝ้าระวังปรับตามอัตรากำหนด
               </span>
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              เรียงลำดับตามจำนวนพัสดุรายสัปดาห์ (เกณฑ์เฝ้าระวัง: เกิน {WEEKLY_PARCEL_WARNING_LIMIT} ชิ้นต่อสัปดาห์ แสดงแจ้งเตือน Popup)
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              นับยอดรับลงทะเบียน: รายวัน (วันนี้) · รายสัปดาห์ (จันทร์ - อาทิตย์) · รายเดือน (1 - สิ้นเดือน) และสถานะเฝ้าระวังที่ปรับตามการตั้งค่าอัตราพัสดุ
             </p>
           </div>
 
-          {overWeeklyLimitStudents.length > 0 && (
+          {overLimitStudents.length > 0 && (
             <button
               type="button"
-              onClick={() => openWeeklyWarningPopup(overWeeklyLimitStudents[0], 'manual')}
-              className="min-h-[40px] px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+              onClick={() => openWeeklyWarningPopup(overLimitStudents[0], 'manual')}
+              className="min-h-[40px] px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl flex items-center gap-2 self-start lg:self-auto cursor-pointer shadow-xs transition-colors"
             >
-              <AlertTriangle className="w-4 h-4" />
+              <AlertTriangle className="w-4 h-4 shrink-0" />
               <span>
-                เปิดดู Popup นักเรียนเกิน {WEEKLY_PARCEL_WARNING_LIMIT} ชิ้น/สัปดาห์ ({overWeeklyLimitStudents.length} คน)
+                เปิดดู POPUP นักเรียนเกินเกณฑ์เฝ้าระวัง ({overLimitStudents.length} คน)
               </span>
             </button>
           )}
         </div>
 
+        {/* แถบแสดงอัตราโควตาที่เปิดใช้งานอยู่ในระบบปัจจุบัน */}
+        <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+          <div className="flex items-center gap-2 font-bold text-slate-700">
+            <ShieldAlert className="w-4 h-4 text-indigo-600" />
+            <span>เกณฑ์อัตราพัสดุที่บังคับใช้อยู่:</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`px-2.5 py-1 rounded-lg border font-mono text-[11px] font-bold ${
+                parcelRateLimitConfig.daily.enabled
+                  ? 'bg-amber-50 text-amber-900 border-amber-300'
+                  : 'bg-white text-slate-500 border-slate-200'
+              }`}
+            >
+              รายวัน:{' '}
+              {parcelRateLimitConfig.daily.enabled
+                ? `ไม่เกิน ${parcelRateLimitConfig.daily.limit} ชิ้น/วัน`
+                : 'ไม่กำหนด'}
+            </span>
+
+            <span
+              className={`px-2.5 py-1 rounded-lg border font-mono text-[11px] font-bold ${
+                parcelRateLimitConfig.weekly.enabled
+                  ? 'bg-indigo-50 text-indigo-900 border-indigo-300'
+                  : 'bg-white text-slate-500 border-slate-200'
+              }`}
+            >
+              รายสัปดาห์:{' '}
+              {parcelRateLimitConfig.weekly.enabled
+                ? `ไม่เกิน ${parcelRateLimitConfig.weekly.limit} ชิ้น/สัปดาห์`
+                : 'ไม่กำหนด'}
+            </span>
+
+            <span
+              className={`px-2.5 py-1 rounded-lg border font-mono text-[11px] font-bold ${
+                parcelRateLimitConfig.monthly.enabled
+                  ? 'bg-purple-50 text-purple-900 border-purple-300'
+                  : 'bg-white text-slate-500 border-slate-200'
+              }`}
+            >
+              รายเดือน:{' '}
+              {parcelRateLimitConfig.monthly.enabled
+                ? `ไม่เกิน ${parcelRateLimitConfig.monthly.limit} ชิ้น/เดือน`
+                : 'ไม่กำหนด'}
+            </span>
+          </div>
+        </div>
+
+        {/* ตัวกรองสถานะเฝ้าระวัง และช่องค้นหานักเรียน */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
+          {/* แถบตัวกรอง */}
+          <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setWatchlistFilter('all')}
+              className={`px-3 py-1.5 rounded-xl border transition-colors cursor-pointer ${
+                watchlistFilter === 'all'
+                  ? 'bg-slate-900 text-white border-slate-900'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              ทั้งหมด ({allStudentParcelStats.filter((s) => s.totalCount > 0 || students.length <= 50).length})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setWatchlistFilter('over_limit')}
+              className={`px-3 py-1.5 rounded-xl border transition-colors flex items-center gap-1 cursor-pointer ${
+                watchlistFilter === 'over_limit'
+                  ? 'bg-red-600 text-white border-red-600 font-bold'
+                  : overLimitStudents.length > 0
+                  ? 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100 font-bold'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>สถานะเฝ้าระวัง (เกินเกณฑ์: {overLimitStudents.length})</span>
+            </button>
+
+            {parcelRateLimitConfig.daily.enabled && (
+              <button
+                type="button"
+                onClick={() => setWatchlistFilter('daily')}
+                className={`px-3 py-1.5 rounded-xl border transition-colors cursor-pointer ${
+                  watchlistFilter === 'daily'
+                    ? 'bg-amber-600 text-white border-amber-600 font-bold'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                เกินรายวัน ({allStudentParcelStats.filter((s) => s.isOverDailyLimit).length})
+              </button>
+            )}
+
+            {parcelRateLimitConfig.weekly.enabled && (
+              <button
+                type="button"
+                onClick={() => setWatchlistFilter('weekly')}
+                className={`px-3 py-1.5 rounded-xl border transition-colors cursor-pointer ${
+                  watchlistFilter === 'weekly'
+                    ? 'bg-indigo-600 text-white border-indigo-600 font-bold'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                เกินรายสัปดาห์ ({allStudentParcelStats.filter((s) => s.isOverWeeklyLimit).length})
+              </button>
+            )}
+
+            {parcelRateLimitConfig.monthly.enabled && (
+              <button
+                type="button"
+                onClick={() => setWatchlistFilter('monthly')}
+                className={`px-3 py-1.5 rounded-xl border transition-colors cursor-pointer ${
+                  watchlistFilter === 'monthly'
+                    ? 'bg-purple-600 text-white border-purple-600 font-bold'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                เกินรายเดือน ({allStudentParcelStats.filter((s) => s.isOverMonthlyLimit).length})
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setWatchlistFilter('normal')}
+              className={`px-3 py-1.5 rounded-xl border transition-colors flex items-center gap-1 cursor-pointer ${
+                watchlistFilter === 'normal'
+                  ? 'bg-emerald-700 text-white border-emerald-700 font-bold'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>ปกติ (ไม่เกินเกณฑ์)</span>
+            </button>
+          </div>
+
+          {/* ช่องค้นหานักเรียน */}
+          <div className="relative min-w-[220px] max-w-xs">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              aria-label="ค้นหานักเรียนในตารางสถิติ"
+              value={studentSearchKeyword}
+              onChange={(e) => setStudentSearchKeyword(e.target.value)}
+              placeholder="ค้นหารหัส, ชื่อ หรือหอพัก..."
+              className="w-full pl-9 pr-8 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-slate-900 focus:outline-none"
+            />
+            {studentSearchKeyword && (
+              <button
+                type="button"
+                aria-label="ล้างคำค้นหา"
+                onClick={() => setStudentSearchKeyword('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
         {sortedStudentStats.length === 0 ? (
           <div className="border border-dashed border-slate-300 rounded-xl p-8 text-center text-xs text-slate-500">
-            ยังไม่มีข้อมูลนักเรียนหรือรายการพัสดุในระบบ
+            {studentSearchKeyword || watchlistFilter !== 'all'
+              ? 'ไม่พบข้อมูลนักเรียนที่ตรงกับเงื่อนไขการค้นหา/ตัวกรอง'
+              : 'ยังไม่มีข้อมูลนักเรียนหรือรายการพัสดุในระบบ'}
           </div>
         ) : (
-          <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-96">
+          <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-[500px]">
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 text-slate-700 font-bold">
+              <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 text-slate-700 font-bold shadow-2xs z-10">
                 <tr>
                   <th className="py-3 px-4">รหัสนักเรียน</th>
                   <th className="py-3 px-4">ชื่อ-นามสกุล (ชื่อเล่น)</th>
                   <th className="py-3 px-4">ระดับชั้น/ห้อง</th>
                   <th className="py-3 px-4">หอพัก / ห้อง</th>
-                  <th className="py-3 px-4 text-right">รายวัน (วันนี้)</th>
-                  <th className="py-3 px-4 text-right">รายสัปดาห์ (7 วัน)</th>
-                  <th className="py-3 px-4 text-right">รายเดือน (เดือนนี้)</th>
-                  <th className="py-3 px-4 text-center">สถานะเฝ้าระวัง</th>
+                  <th className="py-3 px-4 text-center">
+                    <div>รายวัน (วันนี้)</div>
+                    <div className="text-[10px] font-normal text-slate-500">
+                      {parcelRateLimitConfig.daily.enabled
+                        ? `เกณฑ์: ≤ ${parcelRateLimitConfig.daily.limit}`
+                        : 'ไม่จำกัด'}
+                    </div>
+                  </th>
+                  <th className="py-3 px-4 text-center">
+                    <div>รายสัปดาห์ (จ.-อา.)</div>
+                    <div className="text-[10px] font-normal text-slate-500">
+                      {parcelRateLimitConfig.weekly.enabled
+                        ? `เกณฑ์: ≤ ${parcelRateLimitConfig.weekly.limit}`
+                        : 'ไม่จำกัด'}
+                    </div>
+                  </th>
+                  <th className="py-3 px-4 text-center">
+                    <div>รายเดือน (1-สิ้นเดือน)</div>
+                    <div className="text-[10px] font-normal text-slate-500">
+                      {parcelRateLimitConfig.monthly.enabled
+                        ? `เกณฑ์: ≤ ${parcelRateLimitConfig.monthly.limit}`
+                        : 'ไม่จำกัด'}
+                    </div>
+                  </th>
+                  <th className="py-3 px-4 text-center">ยอดรวมสะสม</th>
+                  <th className="py-3 px-4 text-center min-w-[200px]">สถานะเฝ้าระวัง</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -478,7 +707,7 @@ export const DashboardView: React.FC = () => {
                     <tr
                       key={st.studentKey}
                       className={`transition-colors ${
-                        st.isOverWeeklyLimit
+                        st.isOverLimit
                           ? 'bg-red-50/70 hover:bg-red-50'
                           : 'hover:bg-slate-50/80'
                       }`}
@@ -506,31 +735,90 @@ export const DashboardView: React.FC = () => {
                           </span>
                         </div>
                       </td>
-                      <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-900 tabular-nums">
-                        {st.dayCount} ชิ้น
-                      </td>
-                      <td
-                        className={`py-2.5 px-4 text-right font-mono font-extrabold tabular-nums ${
-                          st.isOverWeeklyLimit ? 'text-red-600' : 'text-slate-900'
-                        }`}
-                      >
-                        {st.weekCount} ชิ้น
-                      </td>
-                      <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-900 tabular-nums">
-                        {st.monthCount} ชิ้น
-                      </td>
+
+                      {/* 1. รายวัน (วันนี้) */}
                       <td className="py-2.5 px-4 text-center">
-                        {st.isOverWeeklyLimit ? (
+                        <span
+                          className={`inline-block px-2.5 py-0.5 rounded-lg font-mono font-bold tabular-nums ${
+                            st.isOverDailyLimit
+                              ? 'bg-red-100 text-red-700 font-extrabold ring-1 ring-red-300'
+                              : 'text-slate-900'
+                          }`}
+                        >
+                          {st.dayCount} ชิ้น
+                        </span>
+                        {st.isOverDailyLimit && (
+                          <div className="text-[10px] text-red-600 font-semibold mt-0.5">
+                            เกินเกณฑ์
+                          </div>
+                        )}
+                      </td>
+
+                      {/* 2. รายสัปดาห์ (จันทร์ - อาทิตย์) */}
+                      <td className="py-2.5 px-4 text-center">
+                        <span
+                          className={`inline-block px-2.5 py-0.5 rounded-lg font-mono font-bold tabular-nums ${
+                            st.isOverWeeklyLimit
+                              ? 'bg-red-100 text-red-700 font-extrabold ring-1 ring-red-300'
+                              : 'text-slate-900'
+                          }`}
+                        >
+                          {st.weekCount} ชิ้น
+                        </span>
+                        {st.isOverWeeklyLimit && (
+                          <div className="text-[10px] text-red-600 font-semibold mt-0.5">
+                            เกินเกณฑ์
+                          </div>
+                        )}
+                      </td>
+
+                      {/* 3. รายเดือน (1 ถึงวันสุดท้ายของเดือน) */}
+                      <td className="py-2.5 px-4 text-center">
+                        <span
+                          className={`inline-block px-2.5 py-0.5 rounded-lg font-mono font-bold tabular-nums ${
+                            st.isOverMonthlyLimit
+                              ? 'bg-red-100 text-red-700 font-extrabold ring-1 ring-red-300'
+                              : 'text-slate-900'
+                          }`}
+                        >
+                          {st.monthCount} ชิ้น
+                        </span>
+                        {st.isOverMonthlyLimit && (
+                          <div className="text-[10px] text-red-600 font-semibold mt-0.5">
+                            เกินเกณฑ์
+                          </div>
+                        )}
+                      </td>
+
+                      {/* ยอดรวมสะสม */}
+                      <td className="py-2.5 px-4 text-center font-mono font-bold text-slate-700 tabular-nums">
+                        {st.totalCount} ชิ้น
+                      </td>
+
+                      {/* สถานะเฝ้าระวัง ปรับตามอัตราการสั่งพัสดุ ต่อวัน / ต่อสัปดาห์ / ต่อเดือน */}
+                      <td className="py-2.5 px-4 text-center">
+                        {st.isOverLimit ? (
                           <button
                             type="button"
                             onClick={() => openWeeklyWarningPopup(st, 'manual')}
-                            className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold rounded-lg inline-flex items-center gap-1 cursor-pointer"
+                            className="w-full max-w-xs px-2.5 py-1.5 bg-red-600 hover:bg-red-700 active:scale-98 text-white rounded-xl shadow-xs transition-all cursor-pointer flex flex-col items-center gap-0.5"
+                            title="คลิกเพื่อดูรายละเอียดและหน้าต่างเตือน POPUP"
                           >
-                            <AlertTriangle className="w-3 h-3" />
-                            <span>เกิน {WEEKLY_PARCEL_WARNING_LIMIT} ชิ้น/สัปดาห์</span>
+                            <div className="flex items-center gap-1.5 text-xs font-bold">
+                              <AlertTriangle className="w-3.5 h-3.5 shrink-0 animate-pulse" />
+                              <span>สถานะเฝ้าระวัง (เกินเกณฑ์)</span>
+                            </div>
+                            <div className="text-[10px] opacity-90 font-mono">
+                              {st.isOverDailyLimit && `วัน ${st.dayCount}/${parcelRateLimitConfig.daily.limit} `}
+                              {st.isOverWeeklyLimit && `สัปดาห์ ${st.weekCount}/${parcelRateLimitConfig.weekly.limit} `}
+                              {st.isOverMonthlyLimit && `เดือน ${st.monthCount}/${parcelRateLimitConfig.monthly.limit}`}
+                            </div>
                           </button>
                         ) : (
-                          <span className="text-slate-500">ปกติ</span>
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>ปกติ (อยู่ในเกณฑ์)</span>
+                          </span>
                         )}
                       </td>
                     </tr>

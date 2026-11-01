@@ -19,6 +19,8 @@ import {
   Check,
   Hash,
   Calendar,
+  AlertTriangle,
+  Package,
 } from 'lucide-react';
 import { useParcelSystem } from '../context/ParcelSystemContext';
 import { BarcodeCameraScanner, decodeBarcodeFromImageFile } from './BarcodeCameraScanner';
@@ -463,9 +465,45 @@ export const InboundView: React.FC = () => {
     }
   }, []);
 
+  const handleSwitchTrackingMode = useCallback(
+    (newMode: 'six_digits' | 'full') => {
+      setTrackingInputMode(newMode);
+      setFormError(null);
+      if (newMode === 'six_digits') {
+        const raw = trackingNumber.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const targetSix = sixDigitsInput || raw.slice(-6);
+        setSixDigitsInput(targetSix);
+        const computed = computeTrackingFromSixDigits(targetSix, courier, includeCourierPrefix);
+        setTrackingNumber(computed);
+        setTimeout(() => {
+          if (sixDigitsInputRef.current) {
+            sixDigitsInputRef.current.focus();
+            sixDigitsInputRef.current.select();
+          }
+        }, 100);
+      } else {
+        setTimeout(() => {
+          if (trackingInputRef.current) {
+            trackingInputRef.current.focus();
+          }
+        }, 100);
+      }
+    },
+    [trackingNumber, sixDigitsInput, courier, includeCourierPrefix, computeTrackingFromSixDigits]
+  );
+
   const handleSixDigitsChange = useCallback(
     (val: string) => {
-      const filtered = val.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+      const cleaned = val.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+      // ถ้ายิงบาร์โค้ดผ่านเครื่องยิงหรือกรอกยาวเกิน 6 หลัก ให้สลับเป็นโหมดยิงบาร์โค้ด/เลขเต็มอัตโนมัติ
+      if (cleaned.length > 6) {
+        handleSwitchTrackingMode('full');
+        handleTrackingChange(cleaned);
+        playScanBeep();
+        return;
+      }
+
+      const filtered = cleaned.slice(0, 6);
       setSixDigitsInput(filtered);
       setFormError(null);
       const computed = computeTrackingFromSixDigits(filtered, courier, includeCourierPrefix);
@@ -481,7 +519,7 @@ export const InboundView: React.FC = () => {
         }, 120);
       }
     },
-    [courier, includeCourierPrefix, computeTrackingFromSixDigits]
+    [courier, includeCourierPrefix, computeTrackingFromSixDigits, handleSwitchTrackingMode, handleTrackingChange]
   );
 
   const handleToggleCourierPrefix = useCallback(
@@ -513,39 +551,14 @@ export const InboundView: React.FC = () => {
     [parcels, trackingNumber, trackingInputMode, sixDigitsInput, includeCourierPrefix, computeTrackingFromSixDigits]
   );
 
-  const handleSwitchTrackingMode = useCallback(
-    (newMode: 'six_digits' | 'full') => {
-      setTrackingInputMode(newMode);
-      setFormError(null);
-      if (newMode === 'six_digits') {
-        const raw = trackingNumber.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-        const targetSix = sixDigitsInput || raw.slice(-6);
-        setSixDigitsInput(targetSix);
-        const computed = computeTrackingFromSixDigits(targetSix, courier, includeCourierPrefix);
-        setTrackingNumber(computed);
-        setTimeout(() => {
-          if (sixDigitsInputRef.current) {
-            sixDigitsInputRef.current.focus();
-            sixDigitsInputRef.current.select();
-          }
-        }, 100);
-      } else {
-        setTimeout(() => {
-          if (trackingInputRef.current) {
-            trackingInputRef.current.focus();
-          }
-        }, 100);
-      }
-    },
-    [trackingNumber, sixDigitsInput, courier, includeCourierPrefix, computeTrackingFromSixDigits]
-  );
-
   // จัดการเมื่อสแกนบาร์โค้ดผ่านกล้องสำเร็จ
   const handleBarcodeDetected = useCallback(
     (decodedText: string) => {
       const cleaned = decodedText.trim();
       if (!cleaned) return;
       playScanBeep();
+      // เมื่อยิงหรือสแกนบาร์โค้ดสำเร็จ เปลี่ยนเป็นโหมดเลขเต็มอัตโนมัติ
+      setTrackingInputMode('full');
       handleTrackingChange(cleaned);
       setLastScannedCode(cleaned);
       setIsScannerOpen(false);
@@ -560,13 +573,22 @@ export const InboundView: React.FC = () => {
 
   const requestCameraPermissionAndOpenScanner = useCallback(() => {
     setFormError(null);
+    if (trackingInputMode !== 'full') {
+      handleSwitchTrackingMode('full');
+    }
     setIsScannerOpen(true);
-  }, []);
+  }, [trackingInputMode, handleSwitchTrackingMode]);
 
+  // เมื่อกดปุ่มสแกนโค้ด ให้เปลี่ยนเป็นโหมดยิงบาร์โค้ด/เลขเต็มอัตโนมัติ
   const handleToggleScanner = useCallback(() => {
     setFormError(null);
-    setIsScannerOpen((prev) => !prev);
-  }, []);
+    if (trackingInputMode !== 'full') {
+      handleSwitchTrackingMode('full');
+      setIsScannerOpen(true);
+    } else {
+      setIsScannerOpen((prev) => !prev);
+    }
+  }, [trackingInputMode, handleSwitchTrackingMode]);
 
   // สแกนบาร์โค้ดจากไฟล์ภาพถ่ายกล้องหลังมือถือ (Fallback / Mobile Camera Capture)
   const handleScanBarcodeFromImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -574,6 +596,11 @@ export const InboundView: React.FC = () => {
     if (!file) return;
     setIsScanningFile(true);
     setFormError(null);
+
+    // เมื่อกดเลือกรูป/ถ่ายรูปบาร์โค้ด ให้สลับเป็นโหมดยิงบาร์โค้ด/เลขเต็มอัตโนมัติ
+    if (trackingInputMode !== 'full') {
+      handleSwitchTrackingMode('full');
+    }
 
     try {
       const decodedText = await decodeBarcodeFromImageFile(file);
@@ -1117,9 +1144,17 @@ export const InboundView: React.FC = () => {
                         ref={sixDigitsInputRef}
                         id="six-digits-input"
                         type="text"
-                        maxLength={6}
                         value={sixDigitsInput}
                         onChange={(e) => handleSixDigitsChange(e.target.value)}
+                        onPaste={(e) => {
+                          const pasted = e.clipboardData.getData('text').trim();
+                          if (pasted.length > 6) {
+                            e.preventDefault();
+                            handleSwitchTrackingMode('full');
+                            handleTrackingChange(pasted);
+                            playScanBeep();
+                          }
+                        }}
                         placeholder="เช่น 123456"
                         className="w-full min-h-[52px] px-4 pr-10 py-3 text-lg font-mono font-black tracking-widest text-slate-900 bg-white border-2 border-amber-400 rounded-xl focus:border-amber-600 focus:ring-2 focus:ring-amber-400/40 focus:outline-none uppercase placeholder:text-slate-400 placeholder:font-normal placeholder:tracking-normal transition-all"
                       />
@@ -1165,8 +1200,8 @@ export const InboundView: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleToggleScanner}
-                      title="เปิดกล้องเพื่อสแกนบาร์โค้ด"
-                      className="min-h-[52px] px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
+                      title="กดปุ่มสแกนโค้ดเพื่อเปิดกล้อง (จะเปลี่ยนเป็นโหมดยิงบาร์โค้ด/เลขเต็มอัตโนมัติ)"
+                      className="min-h-[52px] px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer transition-colors shadow-2xs"
                     >
                       <Camera className="w-4 h-4 shrink-0" />
                       <span>สแกนโค้ด</span>
@@ -1382,8 +1417,8 @@ export const InboundView: React.FC = () => {
                           className={`min-h-[38px] px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
                             isSelected
                               ? 'bg-slate-900 text-white border-slate-900'
-                              : stStats.isOverWeeklyLimit
-                              ? 'bg-red-50 text-red-900 border-red-300 hover:bg-red-100'
+                              : stStats.isOverLimit
+                              ? 'bg-red-50 text-red-900 border-red-300 hover:bg-red-100 ring-1 ring-red-300'
                               : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
                           }`}
                         >
@@ -1392,9 +1427,14 @@ export const InboundView: React.FC = () => {
                           <span>
                             {st.firstName} {st.lastName && st.lastName !== '-' ? st.lastName : ''} {st.nickname && st.nickname !== '-' ? `(${st.nickname})` : ''}
                           </span>
-                          <span className="font-mono text-[11px] opacity-85 tabular-nums">
-                            (ส.{stStats.weekCount})
+                          <span className="font-mono text-[11px] opacity-90 tabular-nums">
+                            (ว.{stStats.dayCount} ส.{stStats.weekCount} ด.{stStats.monthCount})
                           </span>
+                          {stStats.isOverLimit && (
+                            <span className="text-[9px] px-1 bg-red-600 text-white font-bold rounded">
+                              เกิน
+                            </span>
+                          )}
                         </button>
                       );
                     })}
@@ -1567,6 +1607,104 @@ export const InboundView: React.FC = () => {
                           </span>
                         )}
                       </span>
+                    </div>
+
+                    {/* สรุปการนับจำนวนพัสดุของนักเรียน (วัน / สัปดาห์ / เดือน) และสถานะเฝ้าระวัง ปรับตามอัตราการสั่งพัสดุ */}
+                    <div
+                      className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs transition-colors ${
+                        activeStudentParcelStats.isOverLimit
+                          ? 'bg-red-50/90 border-red-300 ring-1 ring-red-400 text-red-950'
+                          : 'bg-indigo-50/50 border-indigo-200 text-slate-800'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex items-center gap-1.5 font-bold">
+                          {activeStudentParcelStats.isOverLimit ? (
+                            <AlertTriangle className="w-4 h-4 text-red-600 animate-pulse shrink-0" />
+                          ) : (
+                            <Package className="w-4 h-4 text-indigo-600 shrink-0" />
+                          )}
+                          <span>สรุปพัสดุของนักเรียน:</span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1.5 font-mono">
+                          {/* วัน */}
+                          <span
+                            className={`px-2 py-0.5 rounded-md font-bold ${
+                              activeStudentParcelStats.isOverDailyLimit
+                                ? 'bg-red-200/90 text-red-900 ring-1 ring-red-400'
+                                : 'bg-white text-slate-800 border border-slate-200'
+                            }`}
+                          >
+                            <span className="font-sans font-normal text-slate-500 mr-1">วัน</span>
+                            {activeStudentParcelStats.dayCount} ชิ้น
+                            {parcelRateLimitConfig.daily.enabled && (
+                              <span className="text-[10px] text-slate-400 font-normal">
+                                {' '}(โควตา: {parcelRateLimitConfig.daily.limit})
+                              </span>
+                            )}
+                          </span>
+
+                          <span className="text-slate-300">·</span>
+
+                          {/* สัปดาห์ */}
+                          <span
+                            className={`px-2 py-0.5 rounded-md font-bold ${
+                              activeStudentParcelStats.isOverWeeklyLimit
+                                ? 'bg-red-200/90 text-red-900 ring-1 ring-red-400'
+                                : 'bg-white text-slate-800 border border-slate-200'
+                            }`}
+                          >
+                            <span className="font-sans font-normal text-slate-500 mr-1">สัปดาห์</span>
+                            {activeStudentParcelStats.weekCount} ชิ้น
+                            {parcelRateLimitConfig.weekly.enabled && (
+                              <span className="text-[10px] text-slate-400 font-normal">
+                                {' '}(โควตา: {parcelRateLimitConfig.weekly.limit})
+                              </span>
+                            )}
+                          </span>
+
+                          <span className="text-slate-300">·</span>
+
+                          {/* เดือน */}
+                          <span
+                            className={`px-2 py-0.5 rounded-md font-bold ${
+                              activeStudentParcelStats.isOverMonthlyLimit
+                                ? 'bg-red-200/90 text-red-900 ring-1 ring-red-400'
+                                : 'bg-white text-slate-800 border border-slate-200'
+                            }`}
+                          >
+                            <span className="font-sans font-normal text-slate-500 mr-1">เดือน</span>
+                            {activeStudentParcelStats.monthCount} ชิ้น
+                            {parcelRateLimitConfig.monthly.enabled && (
+                              <span className="text-[10px] text-slate-400 font-normal">
+                                {' '}(โควตา: {parcelRateLimitConfig.monthly.limit})
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* สถานะเฝ้าระวัง */}
+                      <div>
+                        {activeStudentParcelStats.isOverLimit ? (
+                          <button
+                            type="button"
+                            onClick={() => openWeeklyWarningPopup(activeStudentParcelStats, 'manual')}
+                            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 active:scale-98 text-white text-[11px] font-bold rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                          >
+                            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                            <span>
+                              สถานะเฝ้าระวัง (เกินเกณฑ์: คลิกดู POPUP)
+                            </span>
+                          </button>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>สถานะเฝ้าระวัง: ปกติ (อยู่ในเกณฑ์)</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ) : (

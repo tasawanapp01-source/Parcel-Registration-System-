@@ -39,15 +39,17 @@ export const TrackingView: React.FC = () => {
     deleteParcel,
     getStudentParcelCounts,
     openWeeklyWarningPopup,
+    parcelRateLimitConfig,
     quotaMetrics,
     canCurrentMemberEdit,
     canCurrentMemberDelete,
   } = useParcelSystem();
 
+  const [searchInput, setSearchInput] = useState<string>('');
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [selectedDormitory, setSelectedDormitory] = useState<string>('ALL');
-  const [onlyOverWeeklyLimit, setOnlyOverWeeklyLimit] = useState<boolean>(false);
+  const [onlyOverLimit, setOnlyOverLimit] = useState<boolean>(false);
 
   // สถานะกล้องสแกนค้นหาพัสดุด้วยกล้องหลังมือถือ
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
@@ -66,14 +68,28 @@ export const TrackingView: React.FC = () => {
     [students, parcels]
   );
 
-  const handleKeywordChange = useCallback(
-    (val: string) => {
-      setSearchKeyword(val);
-      if (val.trim().length > 0) {
+  const handleExecuteSearch = useCallback(
+    (explicitKeyword?: string) => {
+      const target = explicitKeyword !== undefined ? explicitKeyword : searchInput;
+      const trimmed = target.trim();
+      setSearchKeyword(trimmed);
+      if (trimmed.length > 0) {
         recordLocalSearchSaving();
       }
     },
-    [recordLocalSearchSaving]
+    [searchInput, recordLocalSearchSaving]
+  );
+
+  const handleScanDetected = useCallback(
+    (decoded: string) => {
+      const trimmed = decoded.trim();
+      if (trimmed) {
+        setSearchInput(trimmed);
+        handleExecuteSearch(trimmed);
+        setIsScannerOpen(false);
+      }
+    },
+    [handleExecuteSearch]
   );
 
   const handleScanFromFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -83,8 +99,7 @@ export const TrackingView: React.FC = () => {
     try {
       const decoded = await decodeBarcodeFromImageFile(file);
       if (decoded.trim()) {
-        handleKeywordChange(decoded.trim());
-        setIsScannerOpen(false);
+        handleScanDetected(decoded.trim());
       }
     } catch {
       // ignore if not found
@@ -98,24 +113,24 @@ export const TrackingView: React.FC = () => {
     const trimmed = searchKeyword.trim();
     if (!trimmed) return [];
     const base = searchParcelsLocal(trimmed, selectedStatus, selectedDormitory);
-    if (!onlyOverWeeklyLimit) return base;
+    if (!onlyOverLimit) return base;
     return base.filter((p) => {
       if (isUnknownOwnerParcel(p)) return false;
-      return getStudentParcelCounts(p.studentCode, p.studentFullName).isOverWeeklyLimit;
+      return getStudentParcelCounts(p.studentCode, p.studentFullName).isOverLimit;
     });
   }, [
     searchParcelsLocal,
     searchKeyword,
     selectedStatus,
     selectedDormitory,
-    onlyOverWeeklyLimit,
+    onlyOverLimit,
     getStudentParcelCounts,
   ]);
 
   const overLimitParcelCount = useMemo(() => {
     return parcels.filter((p) => {
       if (isUnknownOwnerParcel(p)) return false;
-      return getStudentParcelCounts(p.studentCode, p.studentFullName).isOverWeeklyLimit;
+      return getStudentParcelCounts(p.studentCode, p.studentFullName).isOverLimit;
     }).length;
   }, [parcels, getStudentParcelCounts]);
 
@@ -202,7 +217,7 @@ export const TrackingView: React.FC = () => {
       {/* แถบค้นหาขนาดใหญ่ (Mobile-First) และตัวกรองหอพัก */}
       <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-          <div className="md:col-span-8 flex items-center gap-2">
+          <div className="md:col-span-8 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <div className="relative flex-1">
               <label htmlFor="tracking-search-input" className="sr-only">
                 ค้นหาเลขพัสดุ ชื่อนักเรียน หรือรหัสนักเรียน
@@ -211,31 +226,53 @@ export const TrackingView: React.FC = () => {
               <input
                 id="tracking-search-input"
                 type="text"
-                value={searchKeyword}
-                onChange={(e) => handleKeywordChange(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleExecuteSearch();
+                  }
+                }}
                 placeholder="ค้นหาด้วย เลข Tracking, รหัสนักเรียน, ชื่อจริง หรือ ชื่อเล่น..."
                 className="w-full min-h-[52px] pl-12 pr-10 py-3 text-base text-slate-900 bg-slate-50 border-2 border-slate-300 rounded-xl focus:bg-white focus:border-slate-900 focus:outline-none transition-colors"
               />
-              {searchKeyword && (
+              {searchInput && (
                 <button
                   type="button"
                   aria-label="ล้างคำค้นหา"
-                  onClick={() => setSearchKeyword('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 min-h-[38px] min-w-[38px] flex items-center justify-center text-slate-400 hover:text-slate-700"
+                  onClick={() => {
+                    setSearchInput('');
+                    setSearchKeyword('');
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 min-h-[38px] min-w-[38px] flex items-center justify-center text-slate-400 hover:text-slate-700 cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsScannerOpen((prev) => !prev)}
-              className="min-h-[52px] px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center gap-2 shrink-0 cursor-pointer transition-colors"
-            >
-              <Camera className="w-4 h-4 shrink-0" />
-              <span>{isScannerOpen ? 'ปิดกล้อง' : 'สแกนค้นหา'}</span>
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              {/* ปุ่มค้นหา แทรกหน้าปุ่มสแกนค้นหา เพื่อลดการกระตุกและค้าง */}
+              <button
+                type="button"
+                onClick={() => handleExecuteSearch()}
+                className="flex-1 sm:flex-none min-h-[52px] px-5 py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs sm:text-sm font-bold rounded-xl flex items-center justify-center gap-2 shrink-0 cursor-pointer transition-colors shadow-xs"
+              >
+                <Search className="w-4 h-4 shrink-0" />
+                <span>ค้นหา</span>
+              </button>
+
+              {/* ปุ่มสแกนค้นหา */}
+              <button
+                type="button"
+                onClick={() => setIsScannerOpen((prev) => !prev)}
+                className="flex-1 sm:flex-none min-h-[52px] px-4 py-3 bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white text-xs sm:text-sm font-bold rounded-xl flex items-center justify-center gap-2 shrink-0 cursor-pointer transition-colors"
+              >
+                <Camera className="w-4 h-4 shrink-0" />
+                <span>{isScannerOpen ? 'ปิดกล้อง' : 'สแกนค้นหา'}</span>
+              </button>
+            </div>
           </div>
 
           <div className="md:col-span-4">
@@ -261,12 +298,7 @@ export const TrackingView: React.FC = () => {
         <BarcodeCameraScanner
           isOpen={isScannerOpen}
           onClose={() => setIsScannerOpen(false)}
-          onDetected={(decoded) => {
-            if (decoded.trim()) {
-              handleKeywordChange(decoded.trim());
-              setIsScannerOpen(false);
-            }
-          }}
+          onDetected={handleScanDetected}
           onScanFromFile={handleScanFromFile}
           isScanningFile={isScanningFile}
         />
@@ -310,9 +342,9 @@ export const TrackingView: React.FC = () => {
           ))}
           <button
             type="button"
-            onClick={() => setOnlyOverWeeklyLimit((prev) => !prev)}
+            onClick={() => setOnlyOverLimit((prev) => !prev)}
             className={`min-h-[42px] px-3.5 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
-              onlyOverWeeklyLimit
+              onlyOverLimit
                 ? 'bg-red-600 text-white'
                 : overLimitParcelCount > 0
                 ? 'bg-red-50 text-red-800 border border-red-300 hover:bg-red-100'
@@ -321,7 +353,7 @@ export const TrackingView: React.FC = () => {
           >
             <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
             <span>
-              พัสดุนักเรียนเกิน {WEEKLY_PARCEL_WARNING_LIMIT} ชิ้น/สัปดาห์ ({overLimitParcelCount})
+              สถานะเฝ้าระวัง (เกินอัตรากำหนด: {overLimitParcelCount})
             </span>
           </button>
         </div>
@@ -440,10 +472,11 @@ export const TrackingView: React.FC = () => {
             <button
               type="button"
               onClick={() => {
+                setSearchInput('');
                 setSearchKeyword('');
                 setSelectedStatus('ALL');
                 setSelectedDormitory('ALL');
-                setOnlyOverWeeklyLimit(false);
+                setOnlyOverLimit(false);
               }}
               className="min-h-[44px] px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
             >
@@ -609,18 +642,34 @@ export const TrackingView: React.FC = () => {
                             จำนวนพัสดุของนักเรียน:
                           </span>
                           <div className="flex flex-wrap items-center gap-1.5 font-mono">
-                            {/* วัน 0 เน้นด้วยสีฟ้า/น้ำเงิน Blue */}
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-950 border border-blue-200 shadow-2xs">
-                              <span className="font-sans font-medium text-blue-700">วัน</span>
-                              <strong className="font-extrabold text-blue-950 text-xs tabular-nums">{studentStats.dayCount}</strong>
+                            {/* วัน เน้นสีแดงกรณีเกินเกณฑ์รายวัน */}
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border shadow-2xs ${
+                                studentStats.isOverDailyLimit
+                                  ? 'bg-red-50 text-red-950 border-red-300 ring-1 ring-red-300'
+                                  : 'bg-blue-50 text-blue-950 border-blue-200'
+                              }`}
+                            >
+                              <span className={`font-sans font-medium ${studentStats.isOverDailyLimit ? 'text-red-700 font-bold' : 'text-blue-700'}`}>
+                                วัน
+                              </span>
+                              <strong
+                                className={`text-xs tabular-nums ${
+                                  studentStats.isOverDailyLimit
+                                    ? 'font-black text-red-700'
+                                    : 'font-extrabold text-blue-950'
+                                }`}
+                              >
+                                {studentStats.dayCount}
+                              </strong>
                             </span>
                             <span className="text-slate-300">·</span>
 
-                            {/* สัปดาห์ 1 เน้นด้วยสีม่วง Purple หรือสีแดงสดกรณีเกินเกณฑ์ */}
+                            {/* สัปดาห์ เน้นสีแดงกรณีเกินเกณฑ์รายสัปดาห์ */}
                             <span
                               className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border shadow-2xs ${
                                 studentStats.isOverWeeklyLimit
-                                  ? 'bg-red-50 text-red-950 border-red-300'
+                                  ? 'bg-red-50 text-red-950 border-red-300 ring-1 ring-red-300'
                                   : 'bg-purple-50 text-purple-950 border-purple-200'
                               }`}
                             >
@@ -639,22 +688,45 @@ export const TrackingView: React.FC = () => {
                             </span>
                             <span className="text-slate-300">·</span>
 
-                            {/* เดือน 1 ชิ้น เน้นด้วยสีส้มอำพัน Amber */}
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-950 border border-amber-200 shadow-2xs">
-                              <span className="font-sans font-medium text-amber-800">เดือน</span>
-                              <strong className="font-extrabold text-amber-950 text-xs tabular-nums">{studentStats.monthCount}</strong>
-                              <span className="font-sans text-amber-800 text-[11px]">ชิ้น</span>
+                            {/* เดือน เน้นสีแดงกรณีเกินเกณฑ์รายเดือน */}
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border shadow-2xs ${
+                                studentStats.isOverMonthlyLimit
+                                  ? 'bg-red-50 text-red-950 border-red-300 ring-1 ring-red-300'
+                                  : 'bg-amber-50 text-amber-950 border-amber-200'
+                              }`}
+                            >
+                              <span className={`font-sans font-medium ${studentStats.isOverMonthlyLimit ? 'text-red-700 font-bold' : 'text-amber-800'}`}>
+                                เดือน
+                              </span>
+                              <strong
+                                className={`text-xs tabular-nums ${
+                                  studentStats.isOverMonthlyLimit
+                                    ? 'font-black text-red-700'
+                                    : 'font-extrabold text-amber-950'
+                                }`}
+                              >
+                                {studentStats.monthCount}
+                              </strong>
+                              <span className={`font-sans text-[11px] ${studentStats.isOverMonthlyLimit ? 'text-red-700 font-bold' : 'text-amber-800'}`}>
+                                ชิ้น
+                              </span>
                             </span>
                           </div>
 
-                          {studentStats.isOverWeeklyLimit && (
+                          {studentStats.isOverLimit && (
                             <button
                               type="button"
                               onClick={() => openWeeklyWarningPopup(studentStats, 'manual')}
-                              className="font-sans px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold rounded-lg flex items-center gap-1 cursor-pointer shadow-2xs"
+                              className="font-sans px-2.5 py-1 bg-red-600 hover:bg-red-700 active:scale-98 text-white text-[11px] font-bold rounded-lg flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all"
                             >
-                              <AlertTriangle className="w-3.5 h-3.5" />
-                              <span>เกิน {WEEKLY_PARCEL_WARNING_LIMIT} ชิ้น/สัปดาห์ (ดูแจ้งเตือน)</span>
+                              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                              <span>
+                                สถานะเฝ้าระวัง{' '}
+                                {studentStats.isOverDailyLimit && `(วัน > ${parcelRateLimitConfig.daily.limit}) `}
+                                {studentStats.isOverWeeklyLimit && `(สัปดาห์ > ${parcelRateLimitConfig.weekly.limit}) `}
+                                {studentStats.isOverMonthlyLimit && `(เดือน > ${parcelRateLimitConfig.monthly.limit})`}
+                              </span>
                             </button>
                           )}
                         </div>

@@ -46,6 +46,7 @@ export const ParcelRateLimitView: React.FC = () => {
 
   const [isSaving, setIsSaving] = useState(false);
   const [searchStudentQuery, setSearchStudentQuery] = useState('');
+  const [showScope, setShowScope] = useState<'over_limit' | 'all'>('over_limit');
   const [filterPeriod, setFilterPeriod] = useState<'all' | 'daily' | 'weekly' | 'monthly'>('all');
 
   const weekRange = useMemo(() => getWeekRangeYMD(new Date()), []);
@@ -125,10 +126,11 @@ export const ParcelRateLimitView: React.FC = () => {
     );
   };
 
-  // กรองรายชื่อนักเรียนที่เกินเกณฑ์
+  // กรองรายชื่อนักเรียนตามขอบเขตและช่วงเวลา
   const filteredOverLimitStudents = useMemo(() => {
     const q = searchStudentQuery.trim().toLowerCase();
-    return overLimitStudents.filter((st) => {
+    const sourceList = showScope === 'over_limit' ? overLimitStudents : allStudentParcelStats;
+    return sourceList.filter((st) => {
       // ตัวกรองตามช่วงเวลา
       if (filterPeriod === 'daily' && !st.isOverDailyLimit) return false;
       if (filterPeriod === 'weekly' && !st.isOverWeeklyLimit) return false;
@@ -144,7 +146,7 @@ export const ParcelRateLimitView: React.FC = () => {
         st.gradeRoom.toLowerCase().includes(q)
       );
     });
-  }, [overLimitStudents, searchStudentQuery, filterPeriod]);
+  }, [showScope, overLimitStudents, allStudentParcelStats, searchStudentQuery, filterPeriod]);
 
   return (
     <div className="space-y-6">
@@ -786,55 +788,79 @@ export const ParcelRateLimitView: React.FC = () => {
             </div>
             <div>
               <h2 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                <span>นักเรียนที่มียอดสั่งพัสดุเกินอัตรา ณ ปัจจุบัน</span>
+                <span>สรุปการนับจำนวนพัสดุและสถานะเฝ้าระวังของนักเรียน</span>
                 <span className="text-xs px-2 py-0.5 rounded-full font-mono font-bold bg-red-100 text-red-800">
-                  {overLimitStudents.length} คน
+                  เกินเกณฑ์ {overLimitStudents.length} คน
                 </span>
               </h2>
               <p className="text-[11px] text-slate-400">
-                รายการนักเรียนที่มีจำนวนพัสดุเกินเกณฑ์รายวัน รายสัปดาห์ หรือรายเดือนตามที่ตั้งไว้
+                สถิตินับตาม 3 ช่วงเวลา: วันนี้ (รายวัน), สัปดาห์นี้ (รายสัปดาห์), เดือนนี้ (รายเดือน) พร้อมตรวจจับสถานะเฝ้าระวังตามอัตรากำหนด
               </p>
             </div>
           </div>
 
-          {/* ฟิลเตอร์ช่วงเวลา */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
-            <button
-              type="button"
-              onClick={() => setFilterPeriod('all')}
-              className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                filterPeriod === 'all' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600'
-              }`}
-            >
-              ทั้งหมด ({overLimitStudents.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilterPeriod('daily')}
-              className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                filterPeriod === 'daily' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600'
-              }`}
-            >
-              เกินรายวัน ({overLimitStudents.filter((s) => s.isOverDailyLimit).length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilterPeriod('weekly')}
-              className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                filterPeriod === 'weekly' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600'
-              }`}
-            >
-              เกินรายสัปดาห์ ({overLimitStudents.filter((s) => s.isOverWeeklyLimit).length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilterPeriod('monthly')}
-              className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                filterPeriod === 'monthly' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600'
-              }`}
-            >
-              เกินรายเดือน ({overLimitStudents.filter((s) => s.isOverMonthlyLimit).length})
-            </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* สลับขอบเขตการดู: เฉพาะเกินเกณฑ์ vs ทั้งหมด */}
+            <div className="flex items-center gap-1 bg-slate-200/80 p-1 rounded-xl text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setShowScope('over_limit')}
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                  showScope === 'over_limit' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600'
+                }`}
+              >
+                เฉพาะเฝ้าระวัง ({overLimitStudents.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowScope('all')}
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                  showScope === 'all' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600'
+                }`}
+              >
+                สรุปทุกคน ({allStudentParcelStats.length})
+              </button>
+            </div>
+
+            {/* ฟิลเตอร์ช่วงเวลา */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setFilterPeriod('all')}
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                  filterPeriod === 'all' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600'
+                }`}
+              >
+                ทั้งหมด
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterPeriod('daily')}
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                  filterPeriod === 'daily' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600'
+                }`}
+              >
+                รายวัน ({allStudentParcelStats.filter((s) => s.isOverDailyLimit).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterPeriod('weekly')}
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                  filterPeriod === 'weekly' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600'
+                }`}
+              >
+                รายสัปดาห์ ({allStudentParcelStats.filter((s) => s.isOverWeeklyLimit).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterPeriod('monthly')}
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                  filterPeriod === 'monthly' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600'
+                }`}
+              >
+                รายเดือน ({allStudentParcelStats.filter((s) => s.isOverMonthlyLimit).length})
+              </button>
+            </div>
           </div>
         </div>
 
@@ -885,7 +911,14 @@ export const ParcelRateLimitView: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredOverLimitStudents.map((st) => (
-                  <tr key={st.studentKey} className="hover:bg-slate-50/80 transition-colors">
+                  <tr
+                    key={st.studentKey}
+                    className={`transition-colors ${
+                      st.isOverLimit
+                        ? 'bg-red-50/70 hover:bg-red-50'
+                        : 'hover:bg-slate-50/80'
+                    }`}
+                  >
                     <td className="py-2.5 px-3 font-mono font-bold text-slate-900">
                       {st.studentCode}
                     </td>
@@ -909,7 +942,7 @@ export const ParcelRateLimitView: React.FC = () => {
                       <span
                         className={`inline-block px-2 py-0.5 rounded font-mono font-bold ${
                           st.isOverDailyLimit
-                            ? 'bg-red-100 text-red-700'
+                            ? 'bg-red-100 text-red-700 font-extrabold ring-1 ring-red-300'
                             : 'text-slate-700'
                         }`}
                       >
@@ -927,7 +960,7 @@ export const ParcelRateLimitView: React.FC = () => {
                       <span
                         className={`inline-block px-2 py-0.5 rounded font-mono font-bold ${
                           st.isOverWeeklyLimit
-                            ? 'bg-red-100 text-red-700'
+                            ? 'bg-red-100 text-red-700 font-extrabold ring-1 ring-red-300'
                             : 'text-slate-700'
                         }`}
                       >
@@ -945,7 +978,7 @@ export const ParcelRateLimitView: React.FC = () => {
                       <span
                         className={`inline-block px-2 py-0.5 rounded font-mono font-bold ${
                           st.isOverMonthlyLimit
-                            ? 'bg-red-100 text-red-700'
+                            ? 'bg-red-100 text-red-700 font-extrabold ring-1 ring-red-300'
                             : 'text-slate-700'
                         }`}
                       >
@@ -963,15 +996,23 @@ export const ParcelRateLimitView: React.FC = () => {
                       {st.totalCount} ชิ้น
                     </td>
 
-                    {/* ปุ่มดู POPUP */}
+                    {/* ปุ่มดู POPUP หรือ สถานะปกติ */}
                     <td className="py-2.5 px-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => openWeeklyWarningPopup(st, 'manual')}
-                        className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 transition-colors cursor-pointer"
-                      >
-                        เปิดดูเตือน POPUP
-                      </button>
+                      {st.isOverLimit ? (
+                        <button
+                          type="button"
+                          onClick={() => openWeeklyWarningPopup(st, 'manual')}
+                          className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-red-600 hover:bg-red-700 active:scale-98 text-white transition-colors cursor-pointer shadow-2xs inline-flex items-center gap-1"
+                        >
+                          <AlertTriangle className="w-3 h-3 shrink-0" />
+                          <span>เปิดดูเตือน POPUP</span>
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>ปกติ</span>
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}

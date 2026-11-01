@@ -49,6 +49,7 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
     students,
     parcels,
     overWeeklyLimitStudents,
+    overLimitStudents,
     weeklyWarningPopup,
     closeWeeklyWarningPopup,
     pendingWrites,
@@ -104,7 +105,7 @@ const MainWorkspace: React.FC<MainWorkspaceProps> = ({ currentMember }) => {
 
   const activePopupStudent =
     weeklyWarningPopup.focusedStudent ||
-    (overWeeklyLimitStudents.length > 0 ? overWeeklyLimitStudents[0] : null);
+    (overLimitStudents.length > 0 ? overLimitStudents[0] : null);
 
   const isMenuAllowed = (key: AppMenuKey) => {
     // ผู้ดูแลระบบหลัก (Admin) มีสิทธิ์เข้าถึงทุกเมนู รวมถึงลบพัสดุจำนวนมากและการตั้งค่าทั้งหมดเสมอ
