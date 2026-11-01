@@ -43,6 +43,7 @@ import {
   formatThaiSlashDate,
   extractParcelLocalYMD,
   isStudentOverConfiguredLimit,
+  isRedHighlightTrackingNumber,
 } from '../types/parcel';
 
 const INBOUND_STATUS_OPTIONS: {
@@ -827,6 +828,7 @@ export const InboundView: React.FC = () => {
       status,
       courier,
       note,
+      isSixDigitsInput: trackingInputMode === 'six_digits',
       customStudent: {
         studentFullName:
           finalStudentName ||
@@ -2616,9 +2618,9 @@ export const InboundView: React.FC = () => {
                                 style={{ backgroundColor: pTheme.hexColor }}
                               />
                               <span
-                                style={p.trackingNumber?.toUpperCase().endsWith('-RD') ? { color: '#DC2626' } : undefined}
+                                style={isRedHighlightTrackingNumber(p.trackingNumber, p) ? { color: '#DC2626' } : undefined}
                                 className={`font-mono font-bold text-sm tabular-nums ${
-                                  p.trackingNumber?.toUpperCase().endsWith('-RD')
+                                  isRedHighlightTrackingNumber(p.trackingNumber, p)
                                     ? 'text-red-600 font-extrabold'
                                     : 'text-slate-900'
                                 }`}

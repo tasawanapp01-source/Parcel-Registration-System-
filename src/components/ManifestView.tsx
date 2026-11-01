@@ -21,6 +21,7 @@ import {
   compareStudentCodeAsc,
   compareDormitoryNatural,
   formatParcelRegistrationDateTime,
+  isRedHighlightTrackingNumber,
 } from '../types/parcel';
 import { ManifestPrintPreviewModal } from './ManifestPrintPreviewModal';
 
@@ -926,6 +927,9 @@ export const ManifestView: React.FC = () => {
             <p className="text-xs text-slate-600 font-mono tabular-nums">
               วันที่พิมพ์รายการ: {todayThaiDisplay} · เรียงตาม: {MANIFEST_SORT_OPTIONS.find((s) => s.value === selectedSort)?.label.split(' [')[0] || 'รหัสนักเรียน (มากไปน้อย)'} · รวมทั้งหมด {sortedManifestParcels.length} ชิ้น
             </p>
+            <p className="text-[11px] text-slate-500 font-sans">
+              * คอลัมน์เลขพัสดุ: <span className="font-bold text-slate-900">สีดำ</span> = บาร์โค้ดปกติ · <span className="font-bold text-red-600">สีแดง</span> = ลงท้าย &quot;-RD&quot; หรือผ่านการกรอกเลขพัสดุ 6 ตัวสุดท้าย
+            </p>
           </div>
 
           <div
@@ -1024,10 +1028,8 @@ export const ManifestView: React.FC = () => {
                     ? formatThaiSlashDate(p.deliveredDate || p.receivedDate || p.updatedAt)
                     : '';
 
-                  const isRdCode = Boolean(
-                    p.trackingNumber?.trim().toUpperCase().endsWith('-RD') ||
-                    p.category?.trim().toUpperCase().endsWith('-RD')
-                  );
+                  const isRedTracking = isRedHighlightTrackingNumber(p.trackingNumber, p);
+                  const isRdCategory = Boolean(p.category?.trim().toUpperCase().endsWith('-RD'));
 
                   return (
                     <tr
@@ -1067,8 +1069,14 @@ export const ManifestView: React.FC = () => {
                       </td>
                       <td className="py-2 px-2 border border-slate-300 leading-tight">
                         <div
-                          style={{ color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
-                          className="font-mono font-bold tabular-nums truncate text-red-600 font-extrabold"
+                          style={{
+                            color: isRedTracking ? '#DC2626' : '#000000',
+                            WebkitPrintColorAdjust: 'exact',
+                            printColorAdjust: 'exact',
+                          }}
+                          className={`font-mono font-bold tabular-nums truncate font-extrabold ${
+                            isRedTracking ? 'text-red-600' : 'text-slate-900'
+                          }`}
                         >
                           {p.trackingNumber}
                         </div>
@@ -1084,9 +1092,9 @@ export const ManifestView: React.FC = () => {
                       </td>
                       <td className="py-2 px-2 border border-slate-300 leading-tight">
                         <div
-                          style={isRdCode ? { color: '#DC2626' } : undefined}
+                          style={isRdCategory ? { color: '#DC2626' } : undefined}
                           className={`font-semibold truncate ${
-                            isRdCode ? 'text-red-600 font-bold' : 'text-slate-800'
+                            isRdCategory ? 'text-red-600 font-bold' : 'text-slate-800'
                           }`}
                         >
                           {p.category}

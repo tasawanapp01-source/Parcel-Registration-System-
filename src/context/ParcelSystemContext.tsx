@@ -25,6 +25,7 @@ import {
   getStudentParcelCountStats,
   buildAllStudentParcelStats,
   formatStudentCode,
+  isSixDigitsTrackingNumber,
 } from '../types/parcel';
 import {
   auth,
@@ -87,6 +88,7 @@ export interface NewParcelInput {
   status: ParcelStatus;
   courier: string;
   note: string;
+  isSixDigitsInput?: boolean;
   customStudent?: {
     studentFullName: string;
     nickname: string;
@@ -631,6 +633,10 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
         status: input.status,
         courier: input.courier,
         note: input.note.trim(),
+        isSixDigitsInput:
+          input.isSixDigitsInput !== undefined
+            ? input.isSixDigitsInput
+            : isSixDigitsTrackingNumber(trackingNumber),
         receivedDate: getRelativeDateString(0),
         receivedHour: now.getHours(),
         ownerId: AUTO_CLOUD_OWNER_ID,

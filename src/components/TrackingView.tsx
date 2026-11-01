@@ -26,6 +26,7 @@ import {
   isUnknownOwnerParcel,
   WEEKLY_PARCEL_WARNING_LIMIT,
   formatStudentCode,
+  isRedHighlightTrackingNumber,
 } from '../types/parcel';
 
 export const TrackingView: React.FC = () => {
@@ -535,9 +536,9 @@ export const TrackingView: React.FC = () => {
                           style={{ backgroundColor: dormTheme.hexColor }}
                         />
                         <span
-                          style={parcel.trackingNumber?.toUpperCase().endsWith('-RD') ? { color: '#DC2626' } : undefined}
+                          style={isRedHighlightTrackingNumber(parcel.trackingNumber, parcel) ? { color: '#DC2626' } : undefined}
                           className={`font-mono font-bold text-base tabular-nums ${
-                            parcel.trackingNumber?.toUpperCase().endsWith('-RD')
+                            isRedHighlightTrackingNumber(parcel.trackingNumber, parcel)
                               ? 'text-red-600 font-extrabold'
                               : 'text-slate-900'
                           }`}

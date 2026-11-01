@@ -6,7 +6,14 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { Parcel, DormitoryTheme, formatThaiSlashDate, formatStudentCode, formatParcelRegistrationDateTime } from '../types/parcel';
+import {
+  Parcel,
+  DormitoryTheme,
+  formatThaiSlashDate,
+  formatStudentCode,
+  formatParcelRegistrationDateTime,
+  isRedHighlightTrackingNumber,
+} from '../types/parcel';
 
 export type PrintOrientation = 'portrait' | 'landscape';
 export type RowDensity = 'normal' | 'compact';
@@ -217,7 +224,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             print-color-adjust: exact !important;
           }
 
-          /* 6. สีแดงสำหรับรหัสที่ลงท้ายด้วย -RD ในคอลัมน์ประเภทสิ่งของ และเลขพัสดุ */
+          /* 6. สีแดงสำหรับรหัสที่ลงท้ายด้วย -RD ในคอลัมน์ประเภทสิ่งของ และเลขพัสดุที่ลงท้ายด้วย -RD หรือกรอก 6 ตัวสุดท้าย */
           .print-rd-category,
           .print-rd-tracking,
           td.print-rd-tracking,
@@ -235,6 +242,18 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
           tbody tr td.print-rd-category,
           tbody tr td .print-rd-category {
             color: #DC2626 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          /* เลขพัสดุปกติใช้ตัวอักษรสีดำ */
+          .print-black-tracking,
+          td .print-black-tracking,
+          div.print-black-tracking,
+          span.print-black-tracking,
+          tbody tr td.print-black-tracking,
+          tbody tr td .print-black-tracking {
+            color: #000000 !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
@@ -507,10 +526,8 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                       const isSigned = p.status === 'ส่งมอบสำเร็จ';
                       const isLegalHold = p.status === 'ติดนิติการ';
                       const isInfirmary = p.status === 'ติดต่องานพยาบาล';
-                      const isRdCode = Boolean(
-                        p.trackingNumber?.trim().toUpperCase().endsWith('-RD') ||
-                        p.category?.trim().toUpperCase().endsWith('-RD')
-                      );
+                      const isRedTracking = isRedHighlightTrackingNumber(p.trackingNumber, p);
+                      const isRdCategory = Boolean(p.category?.trim().toUpperCase().endsWith('-RD'));
                       const cellPy = density === 'compact' ? 'py-1' : 'py-1.5';
                       const recordedDate = isSigned
                         ? formatThaiSlashDate(p.deliveredDate || p.receivedDate || p.updatedAt)
@@ -541,8 +558,16 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                             className={`${cellPy} px-2 border border-slate-300 font-mono font-bold tabular-nums truncate`}
                           >
                             <div
-                              style={{ color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
-                              className="font-mono font-bold tabular-nums truncate text-red-600 print-rd-tracking font-extrabold"
+                              style={{
+                                color: isRedTracking ? '#DC2626' : '#000000',
+                                WebkitPrintColorAdjust: 'exact',
+                                printColorAdjust: 'exact',
+                              }}
+                              className={`font-mono font-bold tabular-nums truncate font-extrabold ${
+                                isRedTracking
+                                  ? 'text-red-600 print-rd-tracking'
+                                  : 'text-slate-900 print-black-tracking'
+                              }`}
                             >
                               {p.trackingNumber}
                             </div>
@@ -562,9 +587,9 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                           {/* ประเภทสิ่งของ พร้อมวันเวลาลงทะเบียนทุกประเภท และสถานะติดนิติการ/งานพยาบาล */}
                           <td className={`${cellPy} px-2 border border-slate-300 leading-tight`}>
                             <div
-                              style={isRdCode ? { color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : undefined}
+                              style={isRdCategory ? { color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : undefined}
                               className={`font-semibold truncate ${
-                                isRdCode ? 'text-red-600 print-rd-category font-bold' : 'text-slate-800'
+                                isRdCategory ? 'text-red-600 print-rd-category font-bold' : 'text-slate-800'
                               }`}
                             >
                               {p.category}
@@ -653,10 +678,8 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                       const isSigned = p.status === 'ส่งมอบสำเร็จ';
                       const isLegalHold = p.status === 'ติดนิติการ';
                       const isInfirmary = p.status === 'ติดต่องานพยาบาล';
-                      const isRdCode = Boolean(
-                        p.trackingNumber?.trim().toUpperCase().endsWith('-RD') ||
-                        p.category?.trim().toUpperCase().endsWith('-RD')
-                      );
+                      const isRedTracking = isRedHighlightTrackingNumber(p.trackingNumber, p);
+                      const isRdCategory = Boolean(p.category?.trim().toUpperCase().endsWith('-RD'));
                       const cellPy = density === 'compact' ? 'py-1' : 'py-1.5';
                       const recordedDate = isSigned
                         ? formatThaiSlashDate(p.deliveredDate || p.receivedDate || p.updatedAt)
@@ -685,8 +708,16 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                           </td>
                           <td className={`${cellPy} px-2 border border-slate-300 leading-tight`}>
                             <div
-                              style={{ color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
-                              className="font-mono font-bold tabular-nums truncate text-red-600 print-rd-tracking font-extrabold"
+                              style={{
+                                color: isRedTracking ? '#DC2626' : '#000000',
+                                WebkitPrintColorAdjust: 'exact',
+                                printColorAdjust: 'exact',
+                              }}
+                              className={`font-mono font-bold tabular-nums truncate font-extrabold ${
+                                isRedTracking
+                                  ? 'text-red-600 print-rd-tracking'
+                                  : 'text-slate-900 print-black-tracking'
+                              }`}
                             >
                               {p.trackingNumber}
                             </div>
@@ -704,9 +735,9 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                           {/* ประเภทสิ่งของ พร้อมวันเวลาลงทะเบียนทุกประเภท และสถานะติดนิติการ/งานพยาบาล */}
                           <td className={`${cellPy} px-2 border border-slate-300 leading-tight`}>
                             <div
-                              style={isRdCode ? { color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : undefined}
+                              style={isRdCategory ? { color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : undefined}
                               className={`font-semibold truncate ${
-                                isRdCode ? 'text-red-600 print-rd-category font-bold' : 'text-slate-800'
+                                isRdCategory ? 'text-red-600 print-rd-category font-bold' : 'text-slate-800'
                               }`}
                             >
                               {p.category}
@@ -767,9 +798,12 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
           </div>
 
           {/* สรุปข้อมูลยอดรวมท้ายตาราง (กะทัดรัด ประหยัดเนื้อที่ ไม่ล้นหน้า) */}
-          <div className="mt-2 pt-1.5 border-t border-slate-300 flex items-center justify-between text-[10px] text-slate-600 font-mono">
+          <div className="mt-2 pt-1.5 border-t border-slate-300 flex flex-wrap items-center justify-between text-[10px] text-slate-600 font-mono gap-2">
             <div>
               รวมทั้งสิ้น <strong>{parcels.length}</strong> รายการ (ส่งมอบแล้ว {signedCount} / รอส่งมอบ {unsignedCount}{legalHoldCount > 0 ? ` / ติดนิติการ ${legalHoldCount}` : ''})
+            </div>
+            <div className="text-[9.5px] text-slate-500 font-sans">
+              * เลขพัสดุ: <span className="font-bold text-slate-900">สีดำ</span> = บาร์โค้ดปกติ · <span className="font-bold text-red-600">สีแดง</span> = ลงท้าย &quot;-RD&quot; หรือกรอก 6 ตัวท้าย
             </div>
           </div>
         </div>

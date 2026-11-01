@@ -57,6 +57,7 @@ export interface Parcel {
   receivedDate: string;    // YYYY-MM-DD
   receivedHour: number;    // 0 - 23 สำหรับวิเคราะห์ Peak Hours
   deliveredDate?: string;  // YYYY-MM-DD วันที่นักเรียนเซ็นรับพัสดุ
+  isSixDigitsInput?: boolean; // ระบุว่าผ่านการกรอกเลขพัสดุ 6 ตัวสุดท้ายหรือไม่
   ownerId: string;         // UID เจ้าหน้าที่ผู้สแกนรับ
   createdAt: string;       // ISO timestamp
   updatedAt: string;       // ISO timestamp
@@ -691,6 +692,53 @@ export function generateUniqueTrackingNumberForCourier(
   } while (existingIds.has(candidate.toUpperCase()));
 
   return candidate;
+}
+
+/**
+ * ตรวจสอบว่าเลขพัสดุลงท้ายด้วย "-RD" หรือไม่
+ */
+export function isRdTrackingNumber(tracking?: string): boolean {
+  if (!tracking) return false;
+  return tracking.trim().toUpperCase().endsWith('-RD');
+}
+
+/**
+ * ตรวจสอบว่าเลขพัสดุผ่านการกรอกเลขพัสดุ 6 ตัวสุดท้ายหรือไม่
+ * รองรับทั้ง:
+ * 1. กรณีที่มี flag isSixDigitsInput = true
+ * 2. กรณีที่มีรหัสขนส่งนำหน้าตามด้วยขีดและ 1-6 ตัวอักษร/ตัวเลข (เช่น TH-123456, KER-123456, ED-123456, SPX-123456, JT-123456, LEX-123456, PRT-123456, PKG-123456) และกรณีมีตัวนับซ้ำ (เช่น TH-123456-2)
+ * 3. กรณีกรอกเฉพาะตัวเลข/ตัวอักษร 6 ตัวท้าย (เช่น 123456 หรือ 123456-2)
+ */
+export function isSixDigitsTrackingNumber(tracking?: string, isSixDigitsFlag?: boolean): boolean {
+  if (isSixDigitsFlag === true) return true;
+  if (!tracking) return false;
+  const upper = tracking.trim().toUpperCase();
+  // รูปแบบมีรหัสขนส่งนำหน้าตามด้วยขีดและ 1-6 หลัก (เช่น TH-123456 หรือ TH-123456-2)
+  if (/^[A-Z]{2,4}-[A-Z0-9]{1,6}(?:-\d+)?$/.test(upper)) {
+    return true;
+  }
+  // รูปแบบเฉพาะตัวเลขหรือตัวอักษร 6 ตัวท้าย (เช่น 123456 หรือ 123456-2)
+  if (/^[A-Z0-9]{6}(?:-\d+)?$/.test(upper)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * ตรวจสอบว่าเลขพัสดุต้องแสดงเป็นสีแดงหรือไม่
+ * ตามเงื่อนไข:
+ * 1. เลขพัสดุที่ลงท้ายด้วย "-RD" ให้ใช้ตัวอักษรสีแดง
+ * 2. เลขพัสดุที่ผ่านการกรอกเลขพัสดุ 6 ตัวสุดท้าย ให้ใช้ตัวอักษรสีแดง
+ * ส่วนเลขพัสดุปกติอื่นๆ ให้ใช้ตัวอักษรสีดำ
+ */
+export function isRedHighlightTrackingNumber(
+  tracking?: string,
+  parcel?: { isSixDigitsInput?: boolean }
+): boolean {
+  if (!tracking) return false;
+  if (isRdTrackingNumber(tracking)) return true;
+  if (isSixDigitsTrackingNumber(tracking, parcel?.isSixDigitsInput)) return true;
+  return false;
 }
 
 // ฟังก์ชันคืนค่าวันที่ย้อนหลัง N วัน ในรูปแบบ YYYY-MM-DD (ตามเวลาท้องถิ่น)
