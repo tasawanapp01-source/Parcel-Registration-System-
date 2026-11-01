@@ -306,7 +306,30 @@ export const InboundView: React.FC = () => {
     return () => clearTimeout(timer);
   }, [studentFetchFeedback]);
 
-  // ฟังก์ชันเติมข้อมูลนักเรียนลงในฟอร์มเมื่อดึงข้อมูลสำเร็จ พร้อมแจ้งเตือนเฉพาะชื่อ หอพัก และจำนวนชิ้นรวมปัจจุบัน
+  // ฟังก์ชันปรับสถานะการคัดแยกพัสดุในขั้นตอนที่ 4 อัตโนมัติ:
+  // - หากสั่งพัสดุเกินเกณฑ์ที่กำหนดไว้ในระบบ -> กำหนดสถานะเป็น "พัสดุติดนิติการ" อัตโนมัติ
+  // - หากไม่เกินเกณฑ์ -> กำหนดสถานะเป็น "ลงทะเบียนรับพัสดุ" อัตโนมัติ
+  // - ส่วน "ติดต่องานพยาบาล" และ "พัสดุไม่ทราบเจ้าของ" ให้ผู้ใช้เลือกเอง (ไม่เขียนทับหากผู้ใช้เลือกไว้แล้ว)
+  const applyAutoStatusForStudent = useCallback(
+    (targetStudentCode: string, targetStudentName: string, targetStudent?: Student | null) => {
+      const stats = getStudentParcelCounts(targetStudentCode, targetStudentName, targetStudent || undefined);
+      const limitCheck = isStudentOverConfiguredLimit(stats, parcelRateLimitConfig, 1);
+      const isOver = limitCheck.isOver || stats.isOverLimit;
+
+      setStatus((prevStatus) => {
+        // ส่วน "ติดต่องานพยาบาล" และ "พัสดุไม่ทราบเจ้าของ" ให้ผู้ใช้เลือกเอง (ไม่เปลี่ยนทับ)
+        if (prevStatus === 'ติดต่องานพยาบาล' || prevStatus === 'พัสดุไม่ทราบเจ้าของ') {
+          return prevStatus;
+        }
+        return isOver ? 'ติดนิติการ' : 'ลงทะเบียนรับพัสดุ';
+      });
+
+      return { isOver, stats, limitCheck };
+    },
+    [getStudentParcelCounts, parcelRateLimitConfig]
+  );
+
+  // ฟังก์ชันเติมข้อมูลนักเรียนลงในฟอร์มเมื่อดึงข้อมูลสำเร็จ พร้อมแจ้งเตือนและเลือกสถานะคัดแยกอัตโนมัติ
   const populateStudentFields = useCallback(
     (st: Student) => {
       setStudentCodeInput(st.studentCode);
@@ -326,19 +349,22 @@ export const InboundView: React.FC = () => {
       setStudentDormitory(dormName);
       setStudentDormRoom(st.dormRoom && st.dormRoom !== '-' ? st.dormRoom : '');
 
-      const stStats = getStudentParcelCounts(st.studentCode, fullName, st);
-      const limitCheck = isStudentOverConfiguredLimit(stStats, parcelRateLimitConfig, 1);
+      const { isOver, stats: stStats, limitCheck } = applyAutoStatusForStudent(st.studentCode, fullName, st);
 
       setStudentFetchFeedback({
-        type: limitCheck.isOver || stStats.isOverLimit ? 'warning' : 'success',
-        message: `ชื่อ: ${fullName} · หอพัก: ${dormName || '-'} · วันนี้: ${stStats.dayCount} ชิ้น · สัปดาห์นี้: ${stStats.weekCount} ชิ้น · เดือนนี้: ${stStats.monthCount} ชิ้น`,
+        type: isOver ? 'warning' : 'success',
+        message: `ชื่อ: ${fullName} · หอพัก: ${dormName || '-'} · วันนี้: ${stStats.dayCount} ชิ้น · สัปดาห์นี้: ${stStats.weekCount} ชิ้น · เดือนนี้: ${stStats.monthCount} ชิ้น${
+          isOver
+            ? ' · ขั้นตอนที่ 4: เลือก "พัสดุติดนิติการ" อัตโนมัติ (สั่งพัสดุเกินเกณฑ์)'
+            : ' · ขั้นตอนที่ 4: เลือก "ลงทะเบียนรับพัสดุ" อัตโนมัติ (อยู่ในเกณฑ์)'
+        }`,
       });
 
-      if (limitCheck.isOver || stStats.isOverLimit) {
+      if (isOver) {
         openWeeklyWarningPopup(stStats, 'student_lookup', undefined, limitCheck.reasons);
       }
     },
-    [getStudentParcelCounts, openWeeklyWarningPopup, parcelRateLimitConfig]
+    [applyAutoStatusForStudent, openWeeklyWarningPopup]
   );
 
   // เมื่อพิมพ์หรือสแกนรหัสนักเรียนตรงกับในระบบ ให้ดึงข้อมูลและแจ้งเตือนครั้งเดียวต่อการสแกน
@@ -1749,6 +1775,11 @@ export const InboundView: React.FC = () => {
                         onChange={(e) => {
                           setStudentCodeInput(e.target.value);
                         }}
+                        onBlur={() => {
+                          if (studentCodeInput.trim() || studentFullName.trim()) {
+                            applyAutoStatusForStudent(studentCodeInput, studentFullName, matchedStudent);
+                          }
+                        }}
                         placeholder="เช่น 00123 หรือ 123"
                         className="w-full min-h-[44px] px-3.5 py-2 text-sm font-mono font-bold text-slate-900 bg-white border border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none"
                       />
@@ -1776,7 +1807,14 @@ export const InboundView: React.FC = () => {
                       <input
                         type="text"
                         value={studentFullName}
-                        onChange={(e) => setStudentFullName(e.target.value)}
+                        onChange={(e) => {
+                          setStudentFullName(e.target.value);
+                        }}
+                        onBlur={() => {
+                          if (studentCodeInput.trim() || studentFullName.trim()) {
+                            applyAutoStatusForStudent(studentCodeInput, studentFullName, matchedStudent);
+                          }
+                        }}
                         placeholder="กรอกชื่อ-นามสกุลผู้รับ..."
                         className="w-full min-h-[44px] px-3.5 py-2 text-sm font-semibold text-slate-900 bg-white border border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none"
                       />
@@ -1964,13 +2002,43 @@ export const InboundView: React.FC = () => {
 
           {/* ขั้นตอนที่ 4: เลือกสถานะการคัดแยกพัสดุ */}
           <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 space-y-4">
-            <div>
-              <span className="block text-base font-bold text-slate-900">
-                4. เลือกสถานะการคัดแยกพัสดุ
-              </span>
-              <span className="block text-xs text-slate-500 mt-0.5">
-                เลือกสถานะพัสดุ: ลงทะเบียนรับพัสดุ, ติดต่องานพยาบาล, พัสดุติดนิติการ หรือ พัสดุไม่ทราบเจ้าของ
-              </span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <span className="block text-base font-bold text-slate-900">
+                  4. เลือกสถานะการคัดแยกพัสดุ
+                </span>
+                <span className="block text-xs text-slate-500 mt-0.5">
+                  เลือกสถานะ: พัสดุติดนิติการ (อัตโนมัติเมื่อสั่งเกินเกณฑ์) หรือ ลงทะเบียนรับพัสดุ (อัตโนมัติเมื่อไม่เกิน) · ติดต่องานพยาบาล และ พัสดุไม่ทราบเจ้าของ ให้ผู้ใช้เลือกเอง
+                </span>
+              </div>
+
+              {/* ป้ายแสดงสถานะการเลือกอัตโนมัติหรือผู้ใช้เลือกเอง */}
+              {status && (
+                <div className="shrink-0">
+                  {status === 'ติดนิติการ' && activeStudentParcelStats.isOverLimit && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-red-100 text-red-800 border border-red-300 shadow-2xs">
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                      <span>เลือกอัตโนมัติ: พัสดุติดนิติการ (เกินเกณฑ์)</span>
+                    </span>
+                  )}
+                  {status === 'ลงทะเบียนรับพัสดุ' && (studentFullName.trim() || matchedStudent) && !activeStudentParcelStats.isOverLimit && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>เลือกอัตโนมัติ: ลงทะเบียนรับพัสดุ (อยู่ในเกณฑ์)</span>
+                    </span>
+                  )}
+                  {status === 'ติดต่องานพยาบาล' && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
+                      <span>ผู้ใช้เลือกเอง: ติดต่องานพยาบาล</span>
+                    </span>
+                  )}
+                  {status === 'พัสดุไม่ทราบเจ้าของ' && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-200 text-slate-800 border border-slate-300 shadow-2xs">
+                      <span>ผู้ใช้เลือกเอง: พัสดุไม่ทราบเจ้าของ</span>
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* ลดขนาดปุ่มสถานะ วาง 4 ปุ่มใน 1 แถวบนจอใหญ่ หรือ 1 แถว 2 ปุ่ม จำนวน 2 แถวบนจอมือถือ/แท็บเล็ต */}
