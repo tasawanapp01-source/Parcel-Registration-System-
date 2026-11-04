@@ -13,6 +13,7 @@ import {
   formatStudentCode,
   formatParcelRegistrationDateTime,
   isRedHighlightTrackingNumber,
+  buildStudentParcelSummaryMap,
 } from '../types/parcel';
 
 export type PrintOrientation = 'portrait' | 'landscape';
@@ -22,6 +23,7 @@ interface ManifestPrintPreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
   parcels: Parcel[];
+  allParcels?: Parcel[];
   dormitory: string;
   activeTheme: DormitoryTheme;
   printDateDisplay: string;
@@ -34,6 +36,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
   isOpen,
   onClose,
   parcels,
+  allParcels,
   dormitory,
   activeTheme,
   printDateDisplay,
@@ -44,6 +47,10 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
   const [orientation, setOrientation] = useState<PrintOrientation>('portrait');
   const [density, setDensity] = useState<RowDensity>('compact');
   const [zoomLevel, setZoomLevel] = useState<number>(100);
+
+  const studentParcelSummaryMap = React.useMemo(() => {
+    return buildStudentParcelSummaryMap(allParcels || parcels, selectedDate);
+  }, [allParcels, parcels, selectedDate]);
 
   // ปิดด้วยปุ่ม Escape
   useEffect(() => {
@@ -258,8 +265,9 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
             print-color-adjust: exact !important;
           }
 
-          /* 7. สีเขียวเข้มสำหรับ วันที่ลงทะเบียนพัสดุ เวลา และสีแดงสำหรับป้าย [ติดนิติการ] */
-          .print-reg-date-time {
+          /* 7. สีเขียวเข้มสำหรับ วันที่ลงทะเบียนพัสดุ เวลา สรุปพัสดุนักเรียน และสีแดงสำหรับป้าย [ติดนิติการ] */
+          .print-reg-date-time,
+          .print-student-parcel-summary {
             color: #166534 !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
@@ -578,11 +586,21 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                           <td className={`${cellPy} px-1 border border-slate-300 text-center font-mono font-semibold text-slate-900 tabular-nums`}>
                             {formatStudentCode(p.studentCode)}
                           </td>
-                          {/* ชื่อ-นามสกุลนักเรียนใน 1 บรรทัด ไม่ล้นขอบ */}
-                          <td className={`${cellPy} px-2 border border-slate-300 font-bold text-slate-900 truncate`}>
-                            <span>{p.studentFullName}</span>
-                            {p.nickname && <span className="text-slate-600 font-normal ml-1">({p.nickname})</span>}
-                            {p.gradeRoom && <span className="text-slate-500 font-normal text-[10px] ml-1.5">ชั้น {p.gradeRoom}</span>}
+                          {/* ชื่อ-นามสกุลนักเรียน พร้อมบรรทัดที่ 2 แสดงจำนวนพัสดุ วันนี้ ชิ้น ,สัปดาห์นี้ ชิ้น ,เดือนนี้ ชิ้น ,ทั้งหมด ชิ้น */}
+                          <td className={`${cellPy} px-2 border border-slate-300 leading-tight`}>
+                            <div className="font-bold text-slate-900 truncate">
+                              <span>{p.studentFullName}</span>
+                              {p.nickname && <span className="text-slate-600 font-normal ml-1">({p.nickname})</span>}
+                              {p.gradeRoom && <span className="text-slate-500 font-normal text-[10px] ml-1.5">ชั้น {p.gradeRoom}</span>}
+                            </div>
+                            {studentParcelSummaryMap.get(p.id) && (
+                              <div
+                                style={{ color: '#166534', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+                                className="text-[8.5px] font-mono text-emerald-800 font-semibold leading-tight mt-0.5 truncate print-student-parcel-summary"
+                              >
+                                {studentParcelSummaryMap.get(p.id)!.displayText}
+                              </div>
+                            )}
                           </td>
                           {/* ประเภทสิ่งของ พร้อมวันเวลาลงทะเบียนทุกประเภท และสถานะติดนิติการ/งานพยาบาล */}
                           <td className={`${cellPy} px-2 border border-slate-300 leading-tight`}>
@@ -726,11 +744,21 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                           <td className={`${cellPy} px-1 border border-slate-300 text-center font-mono font-semibold text-slate-900 tabular-nums`}>
                             {formatStudentCode(p.studentCode)}
                           </td>
-                          {/* ชื่อ-นามสกุลนักเรียนใน 1 บรรทัด กำหนด truncate เพื่อไม่ให้ดันตารางล้นขอบกระดาษ A4 */}
-                          <td className={`${cellPy} px-2 border border-slate-300 font-bold text-slate-900 truncate`} title={`${p.studentFullName} ${p.nickname ? `(${p.nickname})` : ''} ชั้น ${p.gradeRoom}`}>
-                            <span>{p.studentFullName}</span>
-                            {p.nickname && <span className="text-slate-600 font-normal ml-1">({p.nickname})</span>}
-                            {p.gradeRoom && <span className="text-slate-500 font-normal text-[9.5px] ml-1">ชั้น {p.gradeRoom}</span>}
+                          {/* ชื่อ-นามสกุลนักเรียน พร้อมบรรทัดที่ 2 แสดงจำนวนพัสดุ วันนี้ ชิ้น ,สัปดาห์นี้ ชิ้น ,เดือนนี้ ชิ้น ,ทั้งหมด ชิ้น */}
+                          <td className={`${cellPy} px-2 border border-slate-300 leading-tight`} title={`${p.studentFullName} ${p.nickname ? `(${p.nickname})` : ''} ชั้น ${p.gradeRoom}`}>
+                            <div className="font-bold text-slate-900 truncate">
+                              <span>{p.studentFullName}</span>
+                              {p.nickname && <span className="text-slate-600 font-normal ml-1">({p.nickname})</span>}
+                              {p.gradeRoom && <span className="text-slate-500 font-normal text-[9.5px] ml-1">ชั้น {p.gradeRoom}</span>}
+                            </div>
+                            {studentParcelSummaryMap.get(p.id) && (
+                              <div
+                                style={{ color: '#166534', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+                                className="text-[8px] sm:text-[8.5px] font-mono text-emerald-800 font-semibold leading-tight mt-0.5 truncate print-student-parcel-summary"
+                              >
+                                {studentParcelSummaryMap.get(p.id)!.displayText}
+                              </div>
+                            )}
                           </td>
                           {/* ประเภทสิ่งของ พร้อมวันเวลาลงทะเบียนทุกประเภท และสถานะติดนิติการ/งานพยาบาล */}
                           <td className={`${cellPy} px-2 border border-slate-300 leading-tight`}>

@@ -22,6 +22,7 @@ import {
   compareDormitoryNatural,
   formatParcelRegistrationDateTime,
   isRedHighlightTrackingNumber,
+  buildStudentParcelSummaryMap,
 } from '../types/parcel';
 import { ManifestPrintPreviewModal } from './ManifestPrintPreviewModal';
 
@@ -295,6 +296,10 @@ export const ManifestView: React.FC = () => {
         : getDormitoryTheme(selectedDormitory),
     [selectedDormitory]
   );
+
+  const studentParcelSummaryMap = useMemo(() => {
+    return buildStudentParcelSummaryMap(parcels, selectedDate);
+  }, [parcels, selectedDate]);
 
   const isAllVisibleChecked =
     sortedManifestParcels.length > 0 &&
@@ -1085,10 +1090,17 @@ export const ManifestView: React.FC = () => {
                       <td className="py-2 px-1 border border-slate-300 text-center font-mono font-semibold text-slate-900 tabular-nums">
                         {formatStudentCode(p.studentCode)}
                       </td>
-                      <td className="py-2 px-2 border border-slate-300 font-bold text-slate-900 truncate" title={`${p.studentFullName} ${p.nickname ? `(${p.nickname})` : ''} ชั้น ${p.gradeRoom}`}>
-                        <span>{p.studentFullName}</span>
-                        {p.nickname && <span className="text-slate-600 font-normal ml-1">({p.nickname})</span>}
-                        {p.gradeRoom && <span className="text-slate-500 font-normal text-[10px] ml-1">ชั้น {p.gradeRoom}</span>}
+                      <td className="py-2 px-2 border border-slate-300 leading-tight" title={`${p.studentFullName} ${p.nickname ? `(${p.nickname})` : ''} ชั้น ${p.gradeRoom}`}>
+                        <div className="font-bold text-slate-900 truncate">
+                          <span>{p.studentFullName}</span>
+                          {p.nickname && <span className="text-slate-600 font-normal ml-1">({p.nickname})</span>}
+                          {p.gradeRoom && <span className="text-slate-500 font-normal text-[10px] ml-1">ชั้น {p.gradeRoom}</span>}
+                        </div>
+                        {studentParcelSummaryMap.get(p.id) && (
+                          <div className="text-[9.5px] font-mono text-emerald-800 font-semibold leading-tight mt-0.5 truncate">
+                            {studentParcelSummaryMap.get(p.id)!.displayText}
+                          </div>
+                        )}
                       </td>
                       <td className="py-2 px-2 border border-slate-300 leading-tight">
                         <div
@@ -1279,6 +1291,7 @@ export const ManifestView: React.FC = () => {
         isOpen={isPrintPreviewOpen}
         onClose={() => setIsPrintPreviewOpen(false)}
         parcels={sortedManifestParcels}
+        allParcels={parcels}
         dormitory={selectedDormitory}
         activeTheme={activeTheme}
         printDateDisplay={todayThaiDisplay}

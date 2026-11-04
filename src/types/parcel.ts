@@ -1075,13 +1075,23 @@ export function extractParcelLocalYMD(parcel: Parcel, fallbackTodayStr?: string)
   if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
     return rawDate;
   }
+  if (/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/.test(rawDate)) {
+    const m = rawDate.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+    if (m) {
+      return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+    }
+  }
   if (parcel.createdAt) {
-    const parsed = new Date(parcel.createdAt);
+    const rawCreated = parcel.createdAt.trim();
+    const parsed = new Date(rawCreated);
     if (!isNaN(parsed.getTime())) {
       const y = parsed.getFullYear();
       const m = String(parsed.getMonth() + 1).padStart(2, '0');
       const d = String(parsed.getDate()).padStart(2, '0');
       return `${y}-${m}-${d}`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}/.test(rawCreated)) {
+      return rawCreated.slice(0, 10);
     }
   }
   return todayStr;
@@ -1346,6 +1356,107 @@ export function buildAllStudentParcelStats(
     overWeeklyLimitList,
     overLimitList,
   };
+}
+
+/**
+ * ข้อมูลสรุปจำนวนพัสดุของนักเรียนสำหรับแสดงผลในบรรทัดที่ 2 คอลัมน์ชื่อ-นามสกุลนักเรียน
+ * แสดง: "วันนี้ ชิ้น ,สัปดาห์นี้ ชิ้น ,เดือนนี้ ชิ้น ,ทั้งหมด ชิ้น"
+ */
+export interface StudentParcelSummaryInfo {
+  itemSeq?: number;
+  dayCount: number;
+  weekCount: number;
+  monthCount: number;
+  totalCount: number;
+  displayText: string;
+}
+
+/**
+ * สร้าง Map สรุปข้อมูลจำนวนพัสดุ (วันนี้, สัปดาห์นี้, เดือนนี้, ทั้งหมด)
+ * สำหรับทุกพัสดุ โดยใช้รหัสพัสดุ (parcel.id) เป็น Key ในการดึงข้อมูลแบบ O(1)
+ * หากมีการเลือกวันที่ในปฏิทิน (calendarDate) ยอด "วันนี้" จะนับตามวันที่เลือกในปฏิทินนั้น
+ */
+export function buildStudentParcelSummaryMap(
+  allParcels: Parcel[],
+  calendarDate?: string
+): Map<string, StudentParcelSummaryInfo> {
+  const summaryMap = new Map<string, StudentParcelSummaryInfo>();
+  const todayStr = getRelativeDateString(0);
+
+  // กำหนดวันที่อ้างอิง: หากมีการเลือกวันที่ในปฏิทิน ให้นับตามวันที่เลือกในปฏิทิน
+  const effectiveDateStr =
+    calendarDate && /^\d{4}-\d{2}-\d{2}$/.test(calendarDate.trim())
+      ? calendarDate.trim()
+      : todayStr;
+
+  let refDateObj = new Date();
+  if (effectiveDateStr) {
+    const parts = effectiveDateStr.split('-');
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+        refDateObj = new Date(y, m, d);
+      }
+    }
+  }
+
+  const weekRange = getWeekRangeYMD(refDateObj);
+  const monthRange = getMonthRangeYMD(refDateObj);
+
+  // จัดกลุ่มพัสดุตามนักเรียน
+  const studentParcelsGroup = new Map<string, Parcel[]>();
+
+  for (const p of allParcels) {
+    if (isUnknownOwnerParcel(p)) continue;
+    const cleanCode = (p.studentCode || '').trim().toLowerCase();
+    const hasValidCode = Boolean(cleanCode && cleanCode !== 'unknown' && cleanCode !== '-');
+    const normName = normalizeStudentNameForMatch(p.studentFullName);
+    const groupKey = hasValidCode
+      ? `code:${formatStudentCode(cleanCode).toLowerCase()}`
+      : `name:${normName || 'unknown'}`;
+
+    let list = studentParcelsGroup.get(groupKey);
+    if (!list) {
+      list = [];
+      studentParcelsGroup.set(groupKey, list);
+    }
+    list.push(p);
+  }
+
+  // สำหรับแต่ละกลุ่มนักเรียน คำนวณยอดการรับพัสดุ: วันนี้ (ตามวันที่เลือกในปฏิทิน), สัปดาห์นี้, เดือนนี้, และทั้งหมด
+  for (const [, pList] of studentParcelsGroup) {
+    let dayCount = 0;
+    let weekCount = 0;
+    let monthCount = 0;
+    const totalCount = pList.length;
+
+    for (const p of pList) {
+      const pYMD = extractParcelLocalYMD(p, todayStr);
+      // วันนี้ ให้นับจำนวนการรับพัสดุตามวันที่เลือกในปฏิทิน (หรือวันนี้หากเว้นว่าง)
+      if (pYMD === effectiveDateStr) dayCount++;
+      // สัปดาห์นี้ ให้นับจำนวนการรับพัสดุทั้งหมดของสัปดาห์นี้
+      if (pYMD >= weekRange.startYMD && pYMD <= weekRange.endYMD) weekCount++;
+      // เดือนนี้ ให้นับจำนวนการรับพัสดุทั้งหมดของเดือนนี้
+      if (pYMD >= monthRange.startYMD && pYMD <= monthRange.endYMD) monthCount++;
+    }
+
+    const displayText = `วันนี้ ${dayCount} ชิ้น ,สัปดาห์นี้ ${weekCount} ชิ้น ,เดือนนี้ ${monthCount} ชิ้น ,ทั้งหมด ${totalCount} ชิ้น`;
+
+    pList.forEach((p, idx) => {
+      summaryMap.set(p.id, {
+        itemSeq: idx + 1,
+        dayCount,
+        weekCount,
+        monthCount,
+        totalCount,
+        displayText,
+      });
+    });
+  }
+
+  return summaryMap;
 }
 
 
