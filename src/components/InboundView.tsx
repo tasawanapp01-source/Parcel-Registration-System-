@@ -555,6 +555,10 @@ export const InboundView: React.FC = () => {
 
   const handleSwitchTrackingMode = useCallback(
     (newMode: 'six_digits' | 'full') => {
+      if (newMode === 'six_digits' && courier === 'ผู้ปกครองฝากส่ง') {
+        setFormError('กรณีเลือก "ผู้ปกครองฝากส่ง" ระบบจะใช้เลขพัสดุที่จะบันทึกแบบเต็ม (PRT-...) หากต้องการกรอก 6 ตัวท้าย กรุณาเลือกบริษัทขนส่งอื่น');
+        return;
+      }
       setTrackingInputMode(newMode);
       setFormError(null);
       if (newMode === 'six_digits') {
@@ -625,12 +629,29 @@ export const InboundView: React.FC = () => {
     (selectedCourier: string) => {
       setCourier(selectedCourier);
       setFormError(null);
-      if (selectedCourier === 'ผู้ปกครองฝากส่ง' && !trackingNumber.trim().toUpperCase().startsWith('PRT-')) {
-        const autoTracking = generateUniqueParentTrackingNumber(parcels);
-        setTrackingNumber(autoTracking);
+      if (selectedCourier === 'ผู้ปกครองฝากส่ง') {
+        // กรณีเลือก ผู้ปกครองฝากส่ง ให้สลับเป็นโหมดเลขพัสดุแบบเต็ม และใช้เลขพัสดุที่จะบันทึก แบบเต็ม เสมอ
+        setTrackingInputMode('full');
+        setSixDigitsInput('');
+        const currentTrk = trackingNumber.trim().toUpperCase();
+        if (!currentTrk.startsWith('PRT-') || currentTrk.length < 15) {
+          const autoTracking = generateUniqueParentTrackingNumber(parcels);
+          setTrackingNumber(autoTracking);
+        }
         setLastScannedCode(null);
+        setTimeout(() => {
+          if (studentSearchInputRef.current) {
+            studentSearchInputRef.current.focus();
+          }
+        }, 100);
         return;
       }
+
+      // หากสลับจาก ผู้ปกครองฝากส่ง เป็นขนส่งอื่น แล้วเลขพัสดุขึ้นต้นด้วย PRT- ให้ล้างออก
+      if (trackingNumber.trim().toUpperCase().startsWith('PRT-')) {
+        setTrackingNumber('');
+      }
+
       if (trackingInputMode === 'six_digits' && sixDigitsInput) {
         const computed = computeTrackingFromSixDigits(sixDigitsInput, selectedCourier, includeCourierPrefix);
         setTrackingNumber(computed);
@@ -796,7 +817,19 @@ export const InboundView: React.FC = () => {
 
     let finalTracking = trackingNumber.trim();
 
-    if (trackingInputMode === 'six_digits') {
+    if (courier === 'ผู้ปกครองฝากส่ง') {
+      // กรณีเลือก ผู้ปกครองฝากส่ง ให้ใช้เลขพัสดุที่จะบันทึก แบบเต็ม เสมอ
+      const isDuplicateInDb = parcels.some(
+        (p) =>
+          p.id.toUpperCase() === finalTracking.toUpperCase() ||
+          p.trackingNumber.toUpperCase() === finalTracking.toUpperCase()
+      );
+
+      if (!finalTracking || finalTracking.length < 12 || isDuplicateInDb) {
+        finalTracking = generateUniqueParentTrackingNumber(parcels);
+        setTrackingNumber(finalTracking);
+      }
+    } else if (trackingInputMode === 'six_digits') {
       if (!sixDigitsInput.trim()) {
         setFormError('กรุณากรอกเลขพัสดุ 6 ตัวสุดท้ายในขั้นตอนที่ 1');
         if (sixDigitsInputRef.current) sixDigitsInputRef.current.focus();
@@ -826,37 +859,30 @@ export const InboundView: React.FC = () => {
           p.trackingNumber.toUpperCase() === finalTracking.toUpperCase()
       );
 
-      if (courier === 'ผู้ปกครองฝากส่ง') {
-        if (!finalTracking || isDuplicateInDb) {
-          finalTracking = generateUniqueParentTrackingNumber(parcels);
-          setTrackingNumber(finalTracking);
-        }
-      } else {
-        if (!finalTracking) {
-          setFormError('กรุณายิงบาร์โค้ดผ่านกล้อง หรือกรอกเลขพัสดุในขั้นตอนที่ 1');
+      if (!finalTracking) {
+        setFormError('กรุณายิงบาร์โค้ดผ่านกล้อง หรือกรอกเลขพัสดุในขั้นตอนที่ 1');
+        if (trackingInputRef.current) trackingInputRef.current.focus();
+        return;
+      }
+      if (isDuplicateInDb) {
+        if (/^[A-Za-z0-9]{1,8}$/.test(finalTracking) || /^[A-Z]{2,4}-[A-Za-z0-9]{1,8}$/.test(finalTracking)) {
+          let uniqueCandidate = finalTracking;
+          let counter = 2;
+          while (
+            parcels.some(
+              (p) =>
+                p.id.toUpperCase() === uniqueCandidate.toUpperCase() ||
+                p.trackingNumber.toUpperCase() === uniqueCandidate.toUpperCase()
+            )
+          ) {
+            uniqueCandidate = `${finalTracking}-${counter}`;
+            counter++;
+          }
+          finalTracking = uniqueCandidate;
+        } else {
+          setFormError(`เลขพัสดุ "${finalTracking}" มีอยู่ในฐานข้อมูลแล้ว ไม่สามารถบันทึกซ้ำได้`);
           if (trackingInputRef.current) trackingInputRef.current.focus();
           return;
-        }
-        if (isDuplicateInDb) {
-          if (/^[A-Za-z0-9]{1,8}$/.test(finalTracking) || /^[A-Z]{2,4}-[A-Za-z0-9]{1,8}$/.test(finalTracking)) {
-            let uniqueCandidate = finalTracking;
-            let counter = 2;
-            while (
-              parcels.some(
-                (p) =>
-                  p.id.toUpperCase() === uniqueCandidate.toUpperCase() ||
-                  p.trackingNumber.toUpperCase() === uniqueCandidate.toUpperCase()
-              )
-            ) {
-              uniqueCandidate = `${finalTracking}-${counter}`;
-              counter++;
-            }
-            finalTracking = uniqueCandidate;
-          } else {
-            setFormError(`เลขพัสดุ "${finalTracking}" มีอยู่ในฐานข้อมูลแล้ว ไม่สามารถบันทึกซ้ำได้`);
-            if (trackingInputRef.current) trackingInputRef.current.focus();
-            return;
-          }
         }
       }
     }
@@ -916,7 +942,7 @@ export const InboundView: React.FC = () => {
       status,
       courier,
       note: finalNote,
-      isSixDigitsInput: trackingInputMode === 'six_digits',
+      isSixDigitsInput: courier === 'ผู้ปกครองฝากส่ง' ? false : (trackingInputMode === 'six_digits'),
       customStudent: {
         studentFullName:
           finalStudentName ||
@@ -1217,8 +1243,8 @@ export const InboundView: React.FC = () => {
               </div>
             )}
 
-            {/* ส่วนกรอกข้อมูล: สลับระหว่าง "กรอกเลขพัสดุ 6 ตัวสุดท้าย" กับ "ยิงบาร์โค้ด / เลขเต็ม" (ปุ่มสลับอยู่หน้าปุ่มสแกนโค้ดเท่านั้น) */}
-            {trackingInputMode === 'six_digits' ? (
+            {/* ส่วนกรอกข้อมูล: สลับระหว่าง "กรอกเลขพัสดุ 6 ตัวสุดท้าย" กับ "ยิงบาร์โค้ด / เลขเต็ม" (กรณีผู้ปกครองฝากส่งจะใช้เลขพัสดุแบบเต็มเสมอ) */}
+            {trackingInputMode === 'six_digits' && courier !== 'ผู้ปกครองฝากส่ง' ? (
               <div className="space-y-3 bg-amber-50/70 border-2 border-amber-300 rounded-2xl p-4 sm:p-5 animate-in fade-in duration-150">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/80 pb-2.5">
                   <div className="flex items-center gap-2">
@@ -1341,53 +1367,123 @@ export const InboundView: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="relative flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                <div className="relative flex-1">
-                  <input
-                    ref={trackingInputRef}
-                    id="tracking-number-input"
-                    type="text"
-                    value={trackingNumber}
-                    onChange={(e) => handleTrackingChange(e.target.value)}
-                    placeholder="ยิงบาร์โค้ดผ่านกล้อง / เครื่องสแกน หรือพิมพ์เลขพัสดุ..."
-                    className="w-full min-h-[52px] px-4 pr-10 py-3 text-base font-mono font-semibold text-slate-900 bg-slate-50 border-2 border-slate-300 rounded-xl focus:bg-white focus:border-slate-900 focus:outline-none transition-colors"
-                  />
-                  {trackingNumber && (
+              <div className="space-y-3">
+                <div className="relative flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      ref={trackingInputRef}
+                      id="tracking-number-input"
+                      type="text"
+                      value={trackingNumber}
+                      onChange={(e) => handleTrackingChange(e.target.value)}
+                      placeholder={
+                        courier === 'ผู้ปกครองฝากส่ง'
+                          ? 'เลขพัสดุผู้ปกครองฝากส่งแบบเต็ม (สร้างอัตโนมัติ)...'
+                          : 'ยิงบาร์โค้ดผ่านกล้อง / เครื่องสแกน หรือพิมพ์เลขพัสดุ...'
+                      }
+                      className={`w-full min-h-[52px] px-4 pr-10 py-3 text-base font-mono font-semibold rounded-xl border-2 focus:outline-none transition-colors ${
+                        courier === 'ผู้ปกครองฝากส่ง'
+                          ? 'text-indigo-950 bg-indigo-50/70 border-indigo-400 focus:bg-white focus:border-indigo-600'
+                          : 'text-slate-900 bg-slate-50 border-slate-300 focus:bg-white focus:border-slate-900'
+                      }`}
+                    />
+                    {trackingNumber && (
+                      <button
+                        type="button"
+                        aria-label="ล้างเลขพัสดุ"
+                        onClick={() => {
+                          if (courier === 'ผู้ปกครองฝากส่ง') {
+                            const newAuto = generateUniqueParentTrackingNumber(parcels);
+                            setTrackingNumber(newAuto);
+                          } else {
+                            setTrackingNumber('');
+                            setLastScannedCode(null);
+                          }
+                        }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-700 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* ปุ่มสลับโหมดและปุ่มสแกนโค้ด (ปุ่มสลับอยู่หน้าปุ่มสแกนโค้ดเท่านั้น) */}
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
-                      aria-label="ล้างเลขพัสดุ"
-                      onClick={() => {
-                        setTrackingNumber('');
-                        setLastScannedCode(null);
-                      }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-700 cursor-pointer"
+                      onClick={() => handleSwitchTrackingMode('six_digits')}
+                      disabled={courier === 'ผู้ปกครองฝากส่ง'}
+                      title={
+                        courier === 'ผู้ปกครองฝากส่ง'
+                          ? 'ผู้ปกครองฝากส่ง ใช้เลขพัสดุที่จะบันทึกแบบเต็มเท่านั้น'
+                          : 'สลับไปกรอกเลขพัสดุ 6 ตัวท้าย'
+                      }
+                      className={`min-h-[52px] px-3.5 sm:px-4 py-3 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors shadow-2xs ${
+                        courier === 'ผู้ปกครองฝากส่ง'
+                          ? 'bg-slate-100 text-slate-400 border-2 border-slate-200 cursor-not-allowed opacity-60'
+                          : 'bg-amber-500 hover:bg-amber-600 text-white cursor-pointer'
+                      }`}
                     >
-                      <X className="w-4 h-4" />
+                      <Hash className="w-4 h-4 shrink-0" />
+                      <span>กรอก 6 ตัวท้าย</span>
                     </button>
-                  )}
+
+                    <button
+                      type="button"
+                      onClick={handleToggleScanner}
+                      title="เปิดกล้องเพื่อสแกนบาร์โค้ด"
+                      className="min-h-[52px] px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer transition-colors shadow-2xs"
+                    >
+                      <Camera className="w-4 h-4 shrink-0" />
+                      <span>สแกนโค้ด</span>
+                    </button>
+                  </div>
                 </div>
 
-                {/* ปุ่มสลับโหมดและปุ่มสแกนโค้ด (ปุ่มสลับอยู่หน้าปุ่มสแกนโค้ดเท่านั้น) */}
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleSwitchTrackingMode('six_digits')}
-                    title="สลับไปกรอกเลขพัสดุ 6 ตัวท้าย"
-                    className="min-h-[52px] px-3.5 sm:px-4 py-3 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
-                  >
-                    <Hash className="w-4 h-4 shrink-0" />
-                    <span>กรอก 6 ตัวท้าย</span>
-                  </button>
+                {/* ตัวอย่างเลขพัสดุที่จะบันทึกลงระบบจริง (แบบเต็ม) */}
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1 px-1 font-medium">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-slate-700">เลขพัสดุที่จะบันทึก:</span>
+                    <strong
+                      className={`font-mono text-sm font-black px-2.5 py-1 rounded-lg border shadow-2xs ${
+                        courier === 'ผู้ปกครองฝากส่ง'
+                          ? 'text-indigo-950 bg-indigo-50 border-indigo-300'
+                          : 'text-slate-900 bg-white border-slate-300'
+                      }`}
+                    >
+                      {trackingNumber || '____________________'}
+                    </strong>
+                    {courier === 'ผู้ปกครองฝากส่ง' ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-emerald-100 text-emerald-900 text-[11px] font-bold border border-emerald-300">
+                        <Check className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                        <span>บันทึกด้วยเลขพัสดุแบบเต็ม (Full Tracking)</span>
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-slate-500">
+                        (โหมดยิงบาร์โค้ด / เลขเต็ม)
+                      </span>
+                    )}
+                  </div>
 
-                  <button
-                    type="button"
-                    onClick={handleToggleScanner}
-                    title="เปิดกล้องเพื่อสแกนบาร์โค้ด"
-                    className="min-h-[52px] px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
-                  >
-                    <Camera className="w-4 h-4 shrink-0" />
-                    <span>สแกนโค้ด</span>
-                  </button>
+                  <div className="flex items-center gap-2.5">
+                    {courier === 'ผู้ปกครองฝากส่ง' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const refreshed = generateUniqueParentTrackingNumber(parcels);
+                          setTrackingNumber(refreshed);
+                        }}
+                        className="text-xs font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-1 cursor-pointer bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg transition-colors"
+                        title="สร้างเลขพัสดุผู้ปกครองฝากส่งแบบเต็มใหม่"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 shrink-0" />
+                        <span>สุ่มสร้างเลขเต็มใหม่</span>
+                      </button>
+                    )}
+                    <span className="text-[11px] text-slate-500">
+                      ขนส่ง: <strong className="text-slate-800">{courier}</strong>
+                    </span>
+                  </div>
                 </div>
               </div>
             )}
@@ -1408,13 +1504,28 @@ export const InboundView: React.FC = () => {
                     key={c}
                     type="button"
                     onClick={() => handleSelectCourier(c)}
-                    className={`min-h-[40px] px-3.5 py-2 text-xs font-semibold rounded-xl border transition-colors whitespace-nowrap cursor-pointer ${
+                    className={`min-h-[40px] px-3.5 py-2 text-xs font-semibold rounded-xl border transition-colors whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
                       courier === c
-                        ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                        ? c === 'ผู้ปกครองฝากส่ง'
+                          ? 'bg-indigo-700 text-white border-indigo-700 shadow-sm font-bold ring-2 ring-indigo-500/30'
+                          : 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                        : c === 'ผู้ปกครองฝากส่ง'
+                        ? 'bg-indigo-50/70 text-indigo-900 border-indigo-200 hover:bg-indigo-100 font-medium'
                         : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                     }`}
                   >
-                    {c}
+                    <span>{c}</span>
+                    {c === 'ผู้ปกครองฝากส่ง' && (
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${
+                          courier === c
+                            ? 'bg-indigo-900/60 text-indigo-100'
+                            : 'bg-indigo-100 text-indigo-800'
+                        }`}
+                      >
+                        เลขเต็ม
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
