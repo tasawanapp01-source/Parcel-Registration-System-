@@ -21,6 +21,8 @@ import {
   Calendar,
   AlertTriangle,
   Package,
+  Delete,
+  RotateCcw,
 } from 'lucide-react';
 import { useParcelSystem } from '../context/ParcelSystemContext';
 import { BarcodeCameraScanner, decodeBarcodeFromImageFile } from './BarcodeCameraScanner';
@@ -192,6 +194,9 @@ export const InboundView: React.FC = () => {
   // 4. สถานะการคัดแยกพัสดุ (ตั้งค่าเริ่มต้นเป็น null สีเทาสไตล์ disable เมื่อผู้ใช้คลิกเลือกจึงแสดงสีสรรของปุ่ม)
   const [status, setStatus] = useState<ParcelStatus | null>(null);
   const [note, setNote] = useState<string>('');
+  // หมายเหตุสาเหตุพัสดุติดนิติการ: สั่งของเกินกำหนด, ของผิดระเบียบ, อื่นๆ (กรณีไม่ได้แจ้งสาเหตุสามารถเป็น null ได้)
+  const [legalHoldReasonType, setLegalHoldReasonType] = useState<'สั่งของเกินกำหนด' | 'ของผิดระเบียบ' | 'อื่นๆ' | null>(null);
+  const [customLegalNote, setCustomLegalNote] = useState<string>('');
   const [formError, setFormError] = useState<string | null>(null);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
 
@@ -322,6 +327,9 @@ export const InboundView: React.FC = () => {
         if (prevStatus === 'ติดต่องานพยาบาล' || prevStatus === 'พัสดุไม่ทราบเจ้าของ') {
           return prevStatus;
         }
+        if (isOver) {
+          setLegalHoldReasonType('สั่งของเกินกำหนด');
+        }
         return isOver ? 'ติดนิติการ' : 'ลงทะเบียนรับพัสดุ';
       });
 
@@ -442,6 +450,59 @@ export const InboundView: React.FC = () => {
           : `ไม่พบข้อมูลนักเรียนจากคำค้น "${query}" สามารถกด "แก้ไข / กรอกข้อมูลเอง" ด้านล่างได้`,
     });
   };
+
+  // ป้อนตัวเลข 0 - 9 สำหรับกรอกรหัสนักเรียน พร้อมตรวจสอบผลลัพธ์อัตโนมัติ
+  const handleAppendStudentDigit = useCallback((digit: string) => {
+    setFormError(null);
+    setStudentSearchInput((prev) => {
+      // หากเลือกนักเรียนไปแล้ว แล้วกดตัวเลขใหม่ ให้เริ่มพิมพ์รหัสใหม่
+      const base = isStudentSelected ? '' : prev;
+      const nextVal = base + digit;
+      setIsStudentSelected(false);
+
+      // ค้นหาอัตโนมัติหากรหัสตรงเป๊ะกับนักเรียนในระบบ (เช่น รหัส 4-6 หลัก)
+      const clean = nextVal.trim();
+      if (clean.length >= 4) {
+        const exact = students.find(
+          (s) =>
+            s.studentCode === clean ||
+            formatStudentCode(s.studentCode) === formatStudentCode(clean)
+        );
+        if (exact) {
+          lastAutoPopulatedCodeRef.current = exact.studentCode;
+          populateStudentFields(exact);
+          setIsStudentSelected(true);
+        }
+      }
+
+      return nextVal;
+    });
+
+    if (studentSearchInputRef.current) {
+      studentSearchInputRef.current.focus();
+    }
+  }, [isStudentSelected, students, populateStudentFields]);
+
+  // ลบตัวเลขทีละ 1 ตัว (Backspace)
+  const handleBackspaceStudentInput = useCallback(() => {
+    setFormError(null);
+    setIsStudentSelected(false);
+    setStudentSearchInput((prev) => prev.slice(0, -1));
+    if (studentSearchInputRef.current) {
+      studentSearchInputRef.current.focus();
+    }
+  }, []);
+
+  // ล้างค่าในช่องค้นหารหัสนักเรียนทั้งหมด
+  const handleClearStudentInput = useCallback(() => {
+    setFormError(null);
+    setStudentSearchInput('');
+    setStudentCodeInput('');
+    setIsStudentSelected(false);
+    if (studentSearchInputRef.current) {
+      studentSearchInputRef.current.focus();
+    }
+  }, []);
 
   // กรองรายชื่อนักเรียนจากข้อมูลจริงที่นำเข้าแล้ว (ค้นหาด้วย รหัส, ชื่อ, นามสกุล, ชื่อเล่น, หอพัก)
   // ไม่ต้องแสดงจนกว่าจะมีการค้นหาข้อมูลนักเรียน ตามคำสั่งผู้ใช้
@@ -715,7 +776,16 @@ export const InboundView: React.FC = () => {
     return true;
   }, [category, customCategoryDetail]);
 
-  const isStatusValid = status !== null;
+  const isStatusValid = useMemo(() => {
+    if (status === null) return false;
+    if (status === 'ติดนิติการ') {
+      if (legalHoldReasonType === 'อื่นๆ') {
+        return customLegalNote.trim().length > 0;
+      }
+      return true; // กรณีไม่ได้แจ้งสาเหตุ สามารถบันทึกได้โดยไม่ต้องระบุข้อความ
+    }
+    return true;
+  }, [status, legalHoldReasonType, customLegalNote]);
 
   const isFormComplete =
     isTrackingValid && !isDuplicateTracking && isStudentValid && isCategoryValid && isStatusValid;
@@ -794,7 +864,7 @@ export const InboundView: React.FC = () => {
     const finalStudentCode = formatStudentCode(studentCodeInput.trim() || studentSearchInput.trim());
     const finalStudentName = studentFullName.trim();
     if (!finalStudentCode && !finalStudentName && status !== 'พัสดุไม่ทราบเจ้าของ') {
-      setFormError('กรุณากรอกข้อมูลนักเรียน หรือดึงข้อมูลนักเรียนในขั้นตอนที่ 2 (หรือเลือกสถานะ "พัสดุไม่ทราบเจ้าของ")');
+      setFormError('กรุณากรอกข้อมูลนักเรียน หรือป้อนรหัสนักเรียนในขั้นตอนที่ 2 (หรือเลือกสถานะ "พัสดุไม่ทราบเจ้าของ")');
       if (studentSearchInputRef.current) studentSearchInputRef.current.focus();
       return;
     }
@@ -821,13 +891,31 @@ export const InboundView: React.FC = () => {
       return;
     }
 
+    let finalNote = note.trim();
+    if (status === 'ติดนิติการ') {
+      if (legalHoldReasonType === 'สั่งของเกินกำหนด') {
+        finalNote = 'สั่งของเกินกำหนด';
+      } else if (legalHoldReasonType === 'ของผิดระเบียบ') {
+        finalNote = 'ของผิดระเบียบ';
+      } else if (legalHoldReasonType === 'อื่นๆ') {
+        const customReason = customLegalNote.trim();
+        if (!customReason) {
+          setFormError('กรุณาระบุรายละเอียดหมายเหตุสำหรับพัสดุติดนิติการ (เลือก "อื่นๆ")');
+          return;
+        }
+        finalNote = customReason;
+      } else {
+        finalNote = ''; // กรณีไม่ได้แจ้งสาเหตุ
+      }
+    }
+
     const savedParcel = await addInboundParcel({
       trackingNumber: finalTracking,
       studentCode: finalStudentCode || 'UNKNOWN',
       category: formattedCategory,
       status,
       courier,
-      note,
+      note: finalNote,
       isSixDigitsInput: trackingInputMode === 'six_digits',
       customStudent: {
         studentFullName:
@@ -863,6 +951,8 @@ export const InboundView: React.FC = () => {
     setCategory(null);
     setCustomCategoryDetail('');
     setNote('');
+    setLegalHoldReasonType(null);
+    setCustomLegalNote('');
     setStatus(null); // รีเซ็ตสถานะกลับเป็น null เพื่อให้ปุ่มบันทึก disable ทันที
 
     // เคลียร์กล่องรับข้อมูล ค้นหาข้อมูลนักเรียน และข้อมูลผู้รับทั้งหมด
@@ -1357,7 +1447,7 @@ export const InboundView: React.FC = () => {
               </div>
             </div>
 
-            {/* แถบค้นหาและปุ่มกดดึงข้อมูลนักเรียน (รวมเป็น 1 ช่องค้นหา) */}
+            {/* แถบค้นหาและปุ่มป้อนตัวเลขรหัสนักเรียน 0 - 9 */}
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-1 mb-1.5">
@@ -1368,58 +1458,123 @@ export const InboundView: React.FC = () => {
                     ช่องค้นหาและดึงข้อมูลนักเรียน
                   </label>
                   <span className="text-[11px] text-slate-500 font-medium">
-                    (ค้นหาด้วยรหัสนักเรียน, ชื่อ, นามสกุล, ชื่อเล่น หรือหอพัก)
+                    (ป้อนรหัสนักเรียนด้วยปุ่มตัวเลข 0 - 9 ด้านล่าง หรือค้นหาด้วยชื่อ, นามสกุล, ชื่อเล่น, หอพัก)
                   </span>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-2.5">
-                  <div className="relative flex-1">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <input
-                      ref={studentSearchInputRef}
-                      id="student-unified-search-input"
-                      type="text"
-                      value={studentSearchInput}
-                      onChange={(e) => {
-                        setStudentSearchInput(e.target.value);
+                <div className="relative w-full">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    ref={studentSearchInputRef}
+                    id="student-unified-search-input"
+                    type="text"
+                    value={studentSearchInput}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setStudentSearchInput(val);
+                      setIsStudentSelected(false);
+                      setFormError(null);
+
+                      const clean = val.trim();
+                      if (clean.length >= 4) {
+                        const exact = students.find(
+                          (s) =>
+                            s.studentCode === clean ||
+                            formatStudentCode(s.studentCode) === formatStudentCode(clean)
+                        );
+                        if (exact) {
+                          lastAutoPopulatedCodeRef.current = exact.studentCode;
+                          populateStudentFields(exact);
+                          setIsStudentSelected(true);
+                        }
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleFetchStudentData();
+                      }
+                    }}
+                    placeholder="ค้นหาด้วยรหัสนักเรียน (กดปุ่มตัวเลข 0 - 9 ด้านล่างได้สะดวกรวดเร็ว), ชื่อ, นามสกุล หรือหอพัก..."
+                    className="w-full min-h-[46px] pl-10 pr-9 py-2 text-sm font-medium text-slate-900 bg-white border-2 border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none transition-colors shadow-xs"
+                  />
+                  {studentSearchInput && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStudentSearchInput('');
+                        setStudentCodeInput('');
                         setIsStudentSelected(false);
-                        setFormError(null);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleFetchStudentData();
+                        if (studentSearchInputRef.current) {
+                          studentSearchInputRef.current.focus();
                         }
                       }}
-                      placeholder="ค้นหาด้วยรหัสนักเรียน (เช่น 123 หรือบางส่วนของรหัส), ชื่อ, นามสกุล, ชื่อเล่น หรือหอพัก..."
-                      className="w-full min-h-[46px] pl-10 pr-9 py-2 text-sm font-medium text-slate-900 bg-white border-2 border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none transition-colors"
-                    />
-                    {studentSearchInput && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setStudentSearchInput('');
-                          setStudentCodeInput('');
-                          setIsStudentSelected(false);
-                          if (studentSearchInputRef.current) {
-                            studentSearchInputRef.current.focus();
-                          }
-                        }}
-                        aria-label="ล้างช่องค้นหา"
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
+                      aria-label="ล้างช่องค้นหา"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* ปุ่มป้อนตัวเลข 0 - 9 ใต้ช่องค้นหา เพิ่มความสะดวกในการกรอกรหัสนักเรียน */}
+                <div className="mt-2.5 pt-2.5 border-t border-slate-200">
+                  <div className="flex flex-wrap items-center justify-between gap-1 mb-1.5">
+                    <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Hash className="w-3.5 h-3.5 text-slate-500" />
+                      <span>ปุ่มป้อนตัวเลข 0 - 9 (กรอกรหัสนักเรียน)</span>
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      แตะตัวเลขเพื่อกรอกรหัส ระบบจะแสดงและดึงข้อมูลอัตโนมัติ
+                    </span>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleFetchStudentData}
-                    className="sm:w-auto min-h-[46px] px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shadow-sm shrink-0"
-                  >
-                    <Search className="w-4 h-4 shrink-0" />
-                    <span>ดึงข้อมูลนักเรียน</span>
-                  </button>
+                  <div className="grid grid-cols-6 sm:grid-cols-12 gap-1.5 sm:gap-2">
+                    {['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+                      <button
+                        key={digit}
+                        type="button"
+                        onClick={() => handleAppendStudentDigit(digit)}
+                        className="min-h-[44px] px-2 py-1.5 text-base sm:text-lg font-bold font-mono text-slate-900 bg-white hover:bg-slate-100 active:bg-slate-200 border-2 border-slate-300 hover:border-slate-500 active:border-slate-800 rounded-xl shadow-xs transition-all flex items-center justify-center cursor-pointer select-none active:scale-95"
+                        title={`ป้อนเลข ${digit}`}
+                      >
+                        {digit}
+                      </button>
+                    ))}
+
+                    {/* ปุ่มลบทีละหลัก (Backspace) */}
+                    <button
+                      type="button"
+                      onClick={handleBackspaceStudentInput}
+                      disabled={!studentSearchInput}
+                      className={`min-h-[44px] px-2.5 py-1.5 text-xs font-bold rounded-xl border-2 transition-all flex items-center justify-center gap-1 cursor-pointer select-none active:scale-95 ${
+                        studentSearchInput
+                          ? 'bg-amber-50 hover:bg-amber-100 active:bg-amber-200 border-amber-300 text-amber-900 shadow-xs'
+                          : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60'
+                      }`}
+                      title="ลบตัวเลขทีละหลัก (Backspace)"
+                      aria-label="ลบตัวเลขตัวสุดท้าย"
+                    >
+                      <Delete className="w-4 h-4 shrink-0" />
+                      <span className="text-[11px]">ลบ</span>
+                    </button>
+
+                    {/* ปุ่มล้างค่าทั้งหมด (Clear) */}
+                    <button
+                      type="button"
+                      onClick={handleClearStudentInput}
+                      disabled={!studentSearchInput}
+                      className={`min-h-[44px] px-2.5 py-1.5 text-xs font-bold rounded-xl border-2 transition-all flex items-center justify-center gap-1 cursor-pointer select-none active:scale-95 ${
+                        studentSearchInput
+                          ? 'bg-slate-100 hover:bg-slate-200 active:bg-slate-300 border-slate-300 text-slate-700 shadow-xs'
+                          : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60'
+                      }`}
+                      title="ล้างค่าทั้งหมด"
+                      aria-label="ล้างค่าทั้งหมด"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+                      <span className="text-[11px]">ล้าง</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1738,7 +1893,7 @@ export const InboundView: React.FC = () => {
                 ) : (
                   <div className="text-xs text-slate-500 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <span>
-                      ยังไม่มีข้อมูลนักเรียนผู้รับพัสดุ (กรุณากรอกรหัสนักเรียน หรือค้นหาด้วยชื่อ / นามสกุล / ชื่อเล่น / หอพัก ด้านบนแล้วกดดึงข้อมูล)
+                      ยังไม่มีข้อมูลนักเรียนผู้รับพัสดุ (กรุณาป้อนรหัสนักเรียนด้วยปุ่มตัวเลข 0 - 9 หรือค้นหาด้วยชื่อ / นามสกุล / ชื่อเล่น / หอพัก ด้านบน)
                     </span>
                     {!isManualEditStudentOpen && (
                       <button
@@ -2067,7 +2222,104 @@ export const InboundView: React.FC = () => {
               })}
             </div>
 
-            {/* ซ่อนกล่องข้อความหมายเหตุตามคำสั่งผู้ใช้ */}
+            {/* แสดงช่องหมายเหตุเฉพาะเมื่อเลือกสถานะ "พัสดุติดนิติการ" ตามคำสั่งผู้ใช้ */}
+            {status === 'ติดนิติการ' && (
+              <div className="p-4 bg-red-50/90 border-2 border-red-300 rounded-xl space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                  <label className="text-xs font-bold text-red-950 flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                    <span>ระบุหมายเหตุ / สาเหตุที่พัสดุติดนิติการ:</span>
+                  </label>
+                  <span className="text-[11px] font-medium text-red-700">
+                    (คลิกเลือกสาเหตุ หรือหากไม่ได้แจ้งสาเหตุสามารถเว้นว่างได้)
+                  </span>
+                </div>
+
+                {/* 3 ตัวเลือก: สั่งของเกินกำหนด, ของผิดระเบียบ, อื่นๆ (ผู้ใช้กรอกเอง) */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {/* ตัวเลือก: สั่งของเกินกำหนด */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLegalHoldReasonType((prev) => (prev === 'สั่งของเกินกำหนด' ? null : 'สั่งของเกินกำหนด'));
+                      setFormError(null);
+                    }}
+                    className={`min-h-[46px] px-3.5 py-2.5 rounded-xl border-2 text-left transition-all flex items-center justify-between gap-2 cursor-pointer select-none ${
+                      legalHoldReasonType === 'สั่งของเกินกำหนด'
+                        ? 'bg-red-600 text-white border-red-700 ring-2 ring-red-500/40 font-bold shadow-sm'
+                        : 'bg-white hover:bg-red-100 text-slate-800 border-red-200 hover:border-red-300'
+                    }`}
+                  >
+                    <span className="text-xs sm:text-sm font-semibold">สั่งของเกินกำหนด</span>
+                    {legalHoldReasonType === 'สั่งของเกินกำหนด' && (
+                      <Check className="w-4 h-4 text-white shrink-0" />
+                    )}
+                  </button>
+
+                  {/* ตัวเลือก: ของผิดระเบียบ */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLegalHoldReasonType((prev) => (prev === 'ของผิดระเบียบ' ? null : 'ของผิดระเบียบ'));
+                      setFormError(null);
+                    }}
+                    className={`min-h-[46px] px-3.5 py-2.5 rounded-xl border-2 text-left transition-all flex items-center justify-between gap-2 cursor-pointer select-none ${
+                      legalHoldReasonType === 'ของผิดระเบียบ'
+                        ? 'bg-red-600 text-white border-red-700 ring-2 ring-red-500/40 font-bold shadow-sm'
+                        : 'bg-white hover:bg-red-100 text-slate-800 border-red-200 hover:border-red-300'
+                    }`}
+                  >
+                    <span className="text-xs sm:text-sm font-semibold">ของผิดระเบียบ</span>
+                    {legalHoldReasonType === 'ของผิดระเบียบ' && (
+                      <Check className="w-4 h-4 text-white shrink-0" />
+                    )}
+                  </button>
+
+                  {/* ตัวเลือก: อื่นๆ (ผู้ใช้กรอกเอง) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLegalHoldReasonType((prev) => (prev === 'อื่นๆ' ? null : 'อื่นๆ'));
+                      setFormError(null);
+                    }}
+                    className={`min-h-[46px] px-3.5 py-2.5 rounded-xl border-2 text-left transition-all flex items-center justify-between gap-2 cursor-pointer select-none ${
+                      legalHoldReasonType === 'อื่นๆ'
+                        ? 'bg-red-600 text-white border-red-700 ring-2 ring-red-500/40 font-bold shadow-sm'
+                        : 'bg-white hover:bg-red-100 text-slate-800 border-red-200 hover:border-red-300'
+                    }`}
+                  >
+                    <span className="text-xs sm:text-sm font-semibold">อื่นๆ (ผู้ใช้กรอกเอง)</span>
+                    {legalHoldReasonType === 'อื่นๆ' && (
+                      <Check className="w-4 h-4 text-white shrink-0" />
+                    )}
+                  </button>
+                </div>
+
+                {/* ช่องกรอกข้อความเมื่อเลือก "3. อื่นๆ (ผู้ใช้กรอกเอง)" */}
+                {legalHoldReasonType === 'อื่นๆ' && (
+                  <div className="pt-1.5">
+                    <label
+                      htmlFor="custom-legal-note-input"
+                      className="block text-xs font-bold text-red-950 mb-1"
+                    >
+                      ระบุหมายเหตุ / เหตุผลเพิ่มเติม (ผู้ใช้กรอกเอง): <span className="text-red-600">*</span>
+                    </label>
+                    <input
+                      id="custom-legal-note-input"
+                      type="text"
+                      value={customLegalNote}
+                      onChange={(e) => {
+                        setCustomLegalNote(e.target.value);
+                        setFormError(null);
+                      }}
+                      placeholder="เช่น อุปกรณ์ต้องห้าม, บรรจุภัณฑ์ต้องสงสัย, พัสดุไม่ได้รับอนุญาตนำเข้าหอพัก..."
+                      className="w-full min-h-[44px] px-3.5 py-2 text-sm font-medium text-slate-900 bg-white border-2 border-red-300 rounded-xl focus:border-red-700 focus:outline-none transition-colors shadow-xs"
+                      autoFocus
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ปุ่มบันทึกลงทะเบียนพัสดุ: ปิดใช้งาน (disable) ก่อน จนกว่าจะกรอกและเลือกข้อมูลครบทุกช่องจึงแสดงปุ่มที่เปิดใช้งาน */}
             {isFormComplete ? (
@@ -2159,11 +2411,15 @@ export const InboundView: React.FC = () => {
                           : 'bg-slate-200/80 text-slate-500'
                       }`}
                     >
-                      <span>4. สถานะพัสดุ</span>
+                      <span>4. สถานะพัสดุ{status === 'ติดนิติการ' ? ' (และหมายเหตุ)' : ''}</span>
                       {isStatusValid ? (
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                       ) : (
-                        <span className="text-[10px] text-slate-400">(ยังไม่ได้เลือก)</span>
+                        <span className="text-[10px] text-slate-400">
+                          {status === 'ติดนิติการ' && legalHoldReasonType === 'อื่นๆ' && !customLegalNote.trim()
+                            ? '(รอระบุหมายเหตุ)'
+                            : '(ยังไม่ได้เลือก)'}
+                        </span>
                       )}
                     </span>
                   </div>
@@ -2243,10 +2499,10 @@ export const InboundView: React.FC = () => {
             ) : (
               <div className="space-y-2 py-2">
                 <p className="text-sm font-semibold text-slate-800">
-                  ผู้รับ: กรุณากรอกข้อมูลนักเรียน หรือกดดึงข้อมูลนักเรียนในขั้นตอนที่ 2
+                  ผู้รับ: กรุณากรอกหรือป้อนรหัสนักเรียนในขั้นตอนที่ 2
                 </p>
                 <p className="text-xs text-slate-600 font-mono">
-                  เมื่อดึงหรือกรอกข้อมูลนักเรียน ระบบจะแสดงชื่อ หอพัก ห้อง และสีตะกร้าที่นี่ทันที
+                  เมื่อป้อนรหัสหรือเลือกนักเรียน ระบบจะแสดงชื่อ หอพัก ห้อง และสีตะกร้าที่นี่ทันที
                 </p>
               </div>
             )}
@@ -2654,7 +2910,7 @@ export const InboundView: React.FC = () => {
                               <span className="text-slate-300">·</span>
                               {isLegalHold ? (
                                 <span className="font-bold text-xs text-white bg-red-600 px-2 py-0.5 rounded shadow-xs inline-flex items-center gap-1">
-                                  <span>พัสดุติดนิติการ</span>
+                                  <span>พัสดุติดนิติการ{p.note && p.note.trim() && p.note !== 'ส่งตรวจห้องนิติการ/ครูหอพักตามระเบียบ' ? `: ${p.note.trim()}` : ''}</span>
                                 </span>
                               ) : isMedicalHold ? (
                                 <span className="font-bold text-xs text-slate-950 bg-amber-400 px-2 py-0.5 rounded shadow-xs inline-flex items-center gap-1">
@@ -2670,9 +2926,9 @@ export const InboundView: React.FC = () => {
                                 </span>
                               )}
                             </div>
-                            {p.note && p.note !== 'ส่งตรวจห้องนิติการ/ครูหอพักตามระเบียบ' && isLegalHold && (
-                              <div className="text-xs font-medium px-2.5 py-1 rounded-lg mt-1 border bg-red-100/90 text-red-900 border-red-200">
-                                สาเหตุติดนิติการ: {p.note}
+                            {p.note && p.note.trim() && p.note !== 'ส่งตรวจห้องนิติการ/ครูหอพักตามระเบียบ' && isLegalHold && (
+                              <div className="text-xs font-semibold px-2.5 py-1 rounded-lg mt-1 border bg-red-100/90 text-red-950 border-red-200">
+                                สาเหตุติดนิติการ: {p.note.trim()}
                               </div>
                             )}
                             {p.note && p.note !== 'ส่งตรวจห้องนิติการ/ครูหอพักตามระเบียบ' && p.note !== 'ส่งต่องานพยาบาล' && isMedicalHold && (

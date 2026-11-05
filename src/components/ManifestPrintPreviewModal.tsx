@@ -624,7 +624,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                                   style={{ color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
                                   className="font-bold text-red-700 print-legal-tag ml-1"
                                 >
-                                  [ติดนิติการ]
+                                  [ติดนิติการ{p.note && p.note.trim() && p.note !== 'ส่งตรวจห้องนิติการ/ครูหอพักตามระเบียบ' ? `: ${p.note.trim()}` : ''}]
                                 </span>
                               )}
                               {isInfirmary && (
@@ -782,7 +782,7 @@ export const ManifestPrintPreviewModal: React.FC<ManifestPrintPreviewModalProps>
                                   style={{ color: '#DC2626', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
                                   className="font-bold text-red-700 print-legal-tag ml-1"
                                 >
-                                  [ติดนิติการ]
+                                  [ติดนิติการ{p.note && p.note.trim() && p.note !== 'ส่งตรวจห้องนิติการ/ครูหอพักตามระเบียบ' ? `: ${p.note.trim()}` : ''}]
                                 </span>
                               )}
                               {isInfirmary && (

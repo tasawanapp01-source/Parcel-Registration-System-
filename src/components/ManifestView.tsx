@@ -1120,7 +1120,7 @@ export const ManifestView: React.FC = () => {
                           </span>
                           {p.status === 'ติดนิติการ' && (
                             <span className="font-bold text-red-700 ml-1">
-                              [ติดนิติการ]
+                              [ติดนิติการ{p.note && p.note.trim() && p.note !== 'ส่งตรวจห้องนิติการ/ครูหอพักตามระเบียบ' ? `: ${p.note.trim()}` : ''}]
                             </span>
                           )}
                           {p.status === 'ติดต่องานพยาบาล' && (
