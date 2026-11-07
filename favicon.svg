@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4F46E5" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+    <linearGradient id="checkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.25" />
+    </filter>
+  </defs>
+  
+  <!-- Rounded square background -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#bgGrad)" />
+  
+  <!-- Package icon outline -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M50 24v-4a3.5 3.5 0 0 0-1.75-3.03l-14-8.08a3.5 3.5 0 0 0-3.5 0l-14 8.08A3.5 3.5 0 0 0 15 20v22a3.5 3.5 0 0 0 1.75 3.03l11 6.35" />
+    <polyline points="15.5 18.5 32 28 48.5 18.5" />
+    <line x1="32" y1="28" x2="32" y2="53" />
+  </g>
+  
+  <!-- Emerald checkmark badge in lower-right -->
+  <g filter="url(#shadow)">
+    <circle cx="45" cy="45" r="12" fill="url(#checkGrad)" stroke="#FFFFFF" stroke-width="2.5" />
+    <polyline points="39.5 45 43.5 49 50.5 41" fill="none" stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+</svg>
