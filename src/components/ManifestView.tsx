@@ -71,9 +71,7 @@ function formatThaiDateDisplay(isoDateStr: string): string {
     return isoDateStr;
   }
   const yearBE = yearAD + 543;
-  const dd = String(day).padStart(2, '0');
-  const mm = String(monthIdx + 1).padStart(2, '0');
-  return `${day} ${THAI_MONTHS[monthIdx]} ${yearBE} (${dd}/${mm}/${yearBE})`;
+  return `${day} ${THAI_MONTHS[monthIdx]} ${yearBE}`;
 }
 
 export const ManifestView: React.FC = () => {
@@ -567,7 +565,7 @@ export const ManifestView: React.FC = () => {
                 className="w-full min-h-[44px] px-3.5 py-2 pr-10 text-left text-sm font-semibold bg-slate-50 border border-slate-300 rounded-xl hover:bg-white focus:bg-white focus:border-slate-900 focus:outline-none flex items-center justify-between gap-2 cursor-pointer"
               >
                 <span className={selectedDate ? 'text-slate-900' : 'text-slate-500 font-normal'}>
-                  {selectedDate ? formatThaiDateDisplay(selectedDate) : 'ทุกวัน (คลิกเลือกวันที่จากปฏิทินไทย)'}
+                  {selectedDate ? formatThaiDateDisplay(selectedDate) : 'เลือกวันที่รับเข้า'}
                 </span>
                 <CalendarIcon className="w-4 h-4 text-slate-500 shrink-0" />
               </button>

@@ -592,8 +592,8 @@ export function compareStudentCodeAsc(
 }
 
 /**
- * สร้างรหัสพัสดุอัตโนมัติสำหรับกรณี "ผู้ปกครองฝากส่ง" โดยตรวจสอบไม่ให้ซ้ำกับข้อมูลที่มีอยู่ในระบบและฐานข้อมูล
- * มีการเพิ่มข้อความ "-RD" ต่อท้ายเลขบาร์โค้ดที่สุ่ม
+ * สร้างรหัสพัสดุอัตโนมัติสำหรับกรณี "ผู้ปกครองฝากส่ง"
+ * ความยาว 13 ตัวอักษร ไม่ซ้ำในฐานข้อมูล และลงท้ายด้วย "RD" เสมอ (เช่น PRT12345678RD)
  */
 export function generateUniqueParentTrackingNumber(existingParcels: Parcel[]): string {
   const existingIds = new Set<string>();
@@ -602,29 +602,17 @@ export function generateUniqueParentTrackingNumber(existingParcels: Parcel[]): s
     if (p.trackingNumber) existingIds.add(p.trackingNumber.trim().toUpperCase());
   }
 
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const datePart = `${year}${month}${day}`;
-  const prefix = `PRT-${datePart}-`;
-
-  let seq =
-    existingParcels.filter((p) =>
-      p.trackingNumber.toUpperCase().startsWith(prefix)
-    ).length + 1;
-
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  // ตัวอักษรและตัวเลขสำหรับสุ่มช่วงกลาง 8 ตัว (ตัดตัวอักษรที่สับสนง่าย เช่น O, I)
+  const chars = '0123456789ABCDEFGHJKLMNPQRSTUVWXYZ';
   let candidate = '';
 
+  // โครงสร้าง: 'PRT' (3 ตัว) + สุ่ม 8 ตัว + 'RD' (2 ตัว) รวมเป็น 13 ตัวอักษร และลงท้ายด้วย RD
   do {
-    const seqStr = String(seq).padStart(3, '0');
-    let randomSuffix = '';
-    for (let i = 0; i < 3; i++) {
-      randomSuffix += chars.charAt(Math.floor(Math.random() * chars.length));
+    let middle = '';
+    for (let i = 0; i < 8; i++) {
+      middle += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    candidate = `${prefix}${seqStr}-${randomSuffix}-RD`;
-    seq += 1;
+    candidate = `PRT${middle}RD`;
   } while (existingIds.has(candidate.toUpperCase()));
 
   return candidate;

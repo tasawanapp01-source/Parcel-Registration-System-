@@ -23,10 +23,13 @@ import {
   Package,
   Delete,
   RotateCcw,
+  Edit3,
 } from 'lucide-react';
 import { useParcelSystem } from '../context/ParcelSystemContext';
 import { BarcodeCameraScanner, decodeBarcodeFromImageFile } from './BarcodeCameraScanner';
 import { DeliveryDateModal } from './DeliveryDateModal';
+import { EditInboundParcelModal } from './EditInboundParcelModal';
+import { DuplicateParcelModal } from './DuplicateParcelModal';
 import {
   Parcel,
   ParcelCategory,
@@ -157,6 +160,8 @@ export const InboundView: React.FC = () => {
     openWeeklyWarningPopup,
     parcelRateLimitConfig,
     user,
+    currentMember,
+    updateParcelDetails,
     isSyncing,
   } = useParcelSystem();
 
@@ -262,6 +267,22 @@ export const InboundView: React.FC = () => {
   // สถานะ Modal สำหรับเลือกวันที่รับพัสดุ (กรณีเซ็นรับสำเร็จจากรายการล่าสุด)
   const [deliveryModalParcel, setDeliveryModalParcel] = useState<Parcel | null>(null);
   const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState<boolean>(false);
+
+  // สถานะ Modal สำหรับแก้ไขการรับพัสดุ (แก้ไขข้อมูลผู้รับพัสดุ, สถานะพัสดุ)
+  const [editingParcel, setEditingParcel] = useState<Parcel | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+
+  // สถานะ Modal สำหรับแจ้งเตือนเลขพัสดุซ้ำ "เลขพัสดุได้ถูกใช้งานแล้ว"
+  const [duplicateParcel, setDuplicateParcel] = useState<Parcel | null>(null);
+  const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState<boolean>(false);
+
+  const step1SectionRef = useRef<HTMLElement | null>(null);
+  const dismissedDuplicateTrackingRef = useRef<string>('');
+
+  const handleOpenEditModal = (p: Parcel) => {
+    setEditingParcel(p);
+    setIsEditModalOpen(true);
+  };
 
   const handleOpenDeliveryModal = (p: Parcel) => {
     setDeliveryModalParcel(p);
@@ -390,14 +411,44 @@ export const InboundView: React.FC = () => {
     populateStudentFields(matchedStudent);
   }, [matchedStudent, recordLocalSearchSaving, populateStudentFields]);
 
-  // ปุ่มกด "ดึงข้อมูลนักเรียน" จากช่องค้นหารวม (ค้นหาแบบ LIKE ส่วนหนึ่งของรหัสนักเรียน เหมือน ชื่อ, นามสกุล, ชื่อเล่น โดยไม่เติมเลข 0 นำหน้า)
+  // ปุ่มกด "ดึงข้อมูลนักเรียน" จากช่องค้นหารวม (ช่องค้นหาและดึงข้อมูลนักเรียนให้กรอกรหัสครบ 5 ตัวจึงค่อยทำการค้นหา)
   const handleFetchStudentData = () => {
     setFormError(null);
     const query = studentSearchInput.trim();
     if (!query) {
       setStudentFetchFeedback({
         type: 'warning',
-        message: 'กรุณากรอกรหัสนักเรียน, ชื่อ, นามสกุล, ชื่อเล่น หรือหอพัก เพื่อดึงข้อมูล',
+        message: 'กรุณากรอกรหัสนักเรียนครบ 5 ตัว หรือค้นหาด้วยชื่อ, นามสกุล, ชื่อเล่น หรือหอพัก เพื่อดึงข้อมูล',
+      });
+      return;
+    }
+
+    const isNumericOnly = /^\d+$/.test(query);
+    if (isNumericOnly && query.length < 5) {
+      const paddedQuery = query.padStart(5, '0');
+      const directMatch = students.find((s) => {
+        const rawCode = s.studentCode.toLowerCase().trim();
+        const fsc = formatStudentCode(rawCode).toLowerCase().trim();
+        return (
+          rawCode === query.toLowerCase() ||
+          rawCode === paddedQuery.toLowerCase() ||
+          fsc === query.toLowerCase() ||
+          fsc === paddedQuery.toLowerCase() ||
+          rawCode.replace(/^0+/, '') === query.replace(/^0+/, '')
+        );
+      });
+
+      if (directMatch) {
+        lastAutoPopulatedCodeRef.current = directMatch.studentCode;
+        recordLocalSearchSaving();
+        populateStudentFields(directMatch);
+        setIsStudentSelected(true);
+        return;
+      }
+
+      setStudentFetchFeedback({
+        type: 'warning',
+        message: `กรุณากรอกรหัสนักเรียนให้ครบ 5 ตัวจึงค่อยทำการค้นหา (ปัจจุบันกรอก ${query.length}/5 ตัว)`,
       });
       return;
     }
@@ -410,6 +461,18 @@ export const InboundView: React.FC = () => {
       const nameWithoutPrefix = `${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
       const rawCode = s.studentCode.toLowerCase();
       const formattedCode = formatStudentCode(s.studentCode).toLowerCase();
+
+      if (isNumericOnly) {
+        return (
+          rawCode === qLower ||
+          formattedCode === qLower ||
+          rawCode.padStart(5, '0') === qLower ||
+          rawCode.endsWith(qLower) ||
+          qLower.endsWith(rawCode) ||
+          rawCode.replace(/^0+/, '') === qLower.replace(/^0+/, '')
+        );
+      }
+
       return (
         rawCode.includes(qLower) ||
         formattedCode.includes(qLower) ||
@@ -422,16 +485,27 @@ export const InboundView: React.FC = () => {
       );
     };
 
-    // 1. ตรวจสอบกรณีตรงเป๊ะ (Exact Match) ทั้งรหัส, ชื่อ, ชื่อเล่น
-    const exactMatch = students.find(
-      (s) =>
-        s.studentCode.toLowerCase() === qLower ||
-        formatStudentCode(s.studentCode).toLowerCase() === qLower ||
+    // 1. ตรวจสอบกรณีตรงเป๊ะ (Exact Match)
+    const exactMatch = students.find((s) => {
+      const rawCode = s.studentCode.toLowerCase();
+      const formattedCode = formatStudentCode(s.studentCode).toLowerCase();
+      if (isNumericOnly) {
+        return (
+          rawCode === qLower ||
+          formattedCode === qLower ||
+          rawCode.padStart(5, '0') === qLower ||
+          rawCode.replace(/^0+/, '') === qLower.replace(/^0+/, '')
+        );
+      }
+      return (
+        rawCode === qLower ||
+        formattedCode === qLower ||
         s.firstName.toLowerCase() === qLower ||
         s.nickname.toLowerCase() === qLower
-    );
+      );
+    });
 
-    // 2. หากไม่ตรงเป๊ะ ให้ค้นหาแบบ LIKE (ส่วนหนึ่งของรหัสนักเรียน หรือชื่อ-สกุล)
+    // 2. หากไม่ตรงเป๊ะ ให้ค้นหาด้วย matcher
     const matched = exactMatch || students.find(matchStudent);
 
     if (matched) {
@@ -451,7 +525,7 @@ export const InboundView: React.FC = () => {
     });
   };
 
-  // ป้อนตัวเลข 0 - 9 สำหรับกรอกรหัสนักเรียน พร้อมตรวจสอบผลลัพธ์อัตโนมัติ
+  // ป้อนตัวเลข 0 - 9 สำหรับกรอกรหัสนักเรียน (ให้กรอกรหัสครบ 5 ตัวจึงค่อยทำการค้นหาอัตโนมัติ)
   const handleAppendStudentDigit = useCallback((digit: string) => {
     setFormError(null);
     setStudentSearchInput((prev) => {
@@ -460,18 +534,26 @@ export const InboundView: React.FC = () => {
       const nextVal = base + digit;
       setIsStudentSelected(false);
 
-      // ค้นหาอัตโนมัติหากรหัสตรงเป๊ะกับนักเรียนในระบบ (เช่น รหัส 4-6 หลัก)
       const clean = nextVal.trim();
-      if (clean.length >= 4) {
-        const exact = students.find(
-          (s) =>
-            s.studentCode === clean ||
-            formatStudentCode(s.studentCode) === formatStudentCode(clean)
-        );
-        if (exact) {
-          lastAutoPopulatedCodeRef.current = exact.studentCode;
-          populateStudentFields(exact);
-          setIsStudentSelected(true);
+      // ช่องค้นหาและดึงข้อมูลนักเรียนให้กรอกรหัสครบ 5 ตัวจึงค่อยทำการค้นหา
+      if (/^\d+$/.test(clean)) {
+        if (clean.length >= 5) {
+          const exact = students.find((s) => {
+            const sc = s.studentCode.trim();
+            const fsc = formatStudentCode(sc);
+            return (
+              sc === clean ||
+              fsc === clean ||
+              sc.padStart(5, '0') === clean ||
+              clean.endsWith(sc) ||
+              sc.replace(/^0+/, '') === clean.replace(/^0+/, '')
+            );
+          });
+          if (exact) {
+            lastAutoPopulatedCodeRef.current = exact.studentCode;
+            populateStudentFields(exact);
+            setIsStudentSelected(true);
+          }
         }
       }
 
@@ -505,19 +587,39 @@ export const InboundView: React.FC = () => {
   }, []);
 
   // กรองรายชื่อนักเรียนจากข้อมูลจริงที่นำเข้าแล้ว (ค้นหาด้วย รหัส, ชื่อ, นามสกุล, ชื่อเล่น, หอพัก)
-  // ไม่ต้องแสดงจนกว่าจะมีการค้นหาข้อมูลนักเรียน ตามคำสั่งผู้ใช้
+  // เงื่อนไข: ถ้าเป็นตัวเลขรหัสนักเรียน ให้กรอกรหัสครบ 5 ตัวจึงค่อยทำการค้นหา
   const isStudentSearchActive = Boolean(studentSearchInput.trim());
 
   const filteredStudentSuggestions = useMemo(() => {
     const q = studentSearchInput.trim().toLowerCase();
     if (!q) return [];
+
+    const isNumericOnly = /^\d+$/.test(q);
+    // ช่องค้นหาและดึงข้อมูลนักเรียนให้กรอกรหัสครบ 5 ตัวจึงค่อยทำการค้นหา
+    if (isNumericOnly && q.length < 5) {
+      return [];
+    }
+
     return students
       .filter((s) => {
         const cleanFullName = `${s.prefix || ''}${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
         const nameWithoutPrefix = `${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
         const formattedCode = formatStudentCode(s.studentCode).toLowerCase();
+        const rawCode = s.studentCode.toLowerCase();
+
+        if (isNumericOnly) {
+          return (
+            rawCode === q ||
+            formattedCode === q ||
+            rawCode.padStart(5, '0') === q ||
+            rawCode.endsWith(q) ||
+            q.endsWith(rawCode) ||
+            rawCode.replace(/^0+/, '') === q.replace(/^0+/, '')
+          );
+        }
+
         return (
-          s.studentCode.toLowerCase().includes(q) ||
+          rawCode.includes(q) ||
           formattedCode.includes(q) ||
           s.firstName.toLowerCase().includes(q) ||
           s.lastName.toLowerCase().includes(q) ||
@@ -548,6 +650,7 @@ export const InboundView: React.FC = () => {
   const handleTrackingChange = useCallback((val: string) => {
     setTrackingNumber(val);
     setFormError(null);
+    dismissedDuplicateTrackingRef.current = '';
     if (val.trim().length >= 2) {
       setCourier(detectCourierFromTracking(val));
     }
@@ -555,12 +658,9 @@ export const InboundView: React.FC = () => {
 
   const handleSwitchTrackingMode = useCallback(
     (newMode: 'six_digits' | 'full') => {
-      if (newMode === 'six_digits' && courier === 'ผู้ปกครองฝากส่ง') {
-        setFormError('กรณีเลือก "ผู้ปกครองฝากส่ง" ระบบจะใช้เลขพัสดุที่จะบันทึกแบบเต็ม (PRT-...) หากต้องการกรอก 6 ตัวท้าย กรุณาเลือกบริษัทขนส่งอื่น');
-        return;
-      }
       setTrackingInputMode(newMode);
       setFormError(null);
+      dismissedDuplicateTrackingRef.current = '';
       if (newMode === 'six_digits') {
         const raw = trackingNumber.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
         const targetSix = sixDigitsInput || raw.slice(-6);
@@ -584,14 +684,94 @@ export const InboundView: React.FC = () => {
     [trackingNumber, sixDigitsInput, courier, includeCourierPrefix, computeTrackingFromSixDigits]
   );
 
+  // ฟังก์ชันค้นหาพัสดุซ้ำในฐานข้อมูลอย่างละเอียด
+  const findDuplicateParcel = useCallback(
+    (candidate: string, sixDigits?: string): Parcel | null => {
+      const cleaned = (candidate || '').trim().toUpperCase();
+      if (!cleaned || courier === 'ผู้ปกครองฝากส่ง') return null;
+
+      // 1. ตรวจสอบตรงตัว (Exact Match) กับ id หรือ trackingNumber
+      const direct = parcels.find((p) => {
+        const pId = (p.id || '').trim().toUpperCase();
+        const pTn = (p.trackingNumber || '').trim().toUpperCase();
+        return pId === cleaned || pTn === cleaned;
+      });
+      if (direct) return direct;
+
+      // 2. ตรวจสอบเฉพาะตัวอักษรและตัวเลข (ตัดขีดช่องว่าง)
+      const cleanedAlphaNum = cleaned.replace(/[^A-Z0-9]/g, '');
+      if (cleanedAlphaNum.length >= 6) {
+        const matchAlphaNum = parcels.find((p) => {
+          const pIdAlphaNum = (p.id || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+          const pTnAlphaNum = (p.trackingNumber || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+          return (
+            pIdAlphaNum === cleanedAlphaNum ||
+            pTnAlphaNum === cleanedAlphaNum ||
+            pTnAlphaNum.endsWith(cleanedAlphaNum) ||
+            pIdAlphaNum.endsWith(cleanedAlphaNum)
+          );
+        });
+        if (matchAlphaNum) return matchAlphaNum;
+      }
+
+      // 3. ตรวจสอบกรณีเลข 6 ตัวท้าย
+      const rawSix = (
+        sixDigits ||
+        (cleaned.length === 6 && /^[A-Z0-9]{6}$/.test(cleaned) ? cleaned : '')
+      )
+        .replace(/[^A-Z0-9]/g, '')
+        .slice(-6);
+
+      if (rawSix && rawSix.length === 6) {
+        const prefix = getCourierTrackingPrefix(courier);
+        const withPrefix = `${prefix}-${rawSix}`.toUpperCase();
+        const sixMatch = parcels.find((p) => {
+          const pId = (p.id || '').trim().toUpperCase();
+          const pTn = (p.trackingNumber || '').trim().toUpperCase();
+          const pTnAlphaNum = pTn.replace(/[^A-Z0-9]/g, '');
+          const pIdAlphaNum = pId.replace(/[^A-Z0-9]/g, '');
+          return (
+            pTn === withPrefix ||
+            pId === withPrefix ||
+            pTn === rawSix ||
+            pId === rawSix ||
+            pTnAlphaNum.endsWith(rawSix) ||
+            pIdAlphaNum.endsWith(rawSix)
+          );
+        });
+        if (sixMatch) return sixMatch;
+      }
+
+      return null;
+    },
+    [parcels, courier]
+  );
+
+  // ตรวจสอบและแสดง popup ทันทีเมื่อพบเลขพัสดุซ้ำในฐานข้อมูล
+  const checkAndNotifyDuplicate = useCallback(
+    (trackingCandidate: string): Parcel | null => {
+      const found = findDuplicateParcel(trackingCandidate, sixDigitsInput);
+      if (found) {
+        setDuplicateParcel(found);
+        setIsDuplicateModalOpen(true);
+        return found;
+      }
+      return null;
+    },
+    [findDuplicateParcel, sixDigitsInput]
+  );
+
   const handleSixDigitsChange = useCallback(
     (val: string) => {
       const cleaned = val.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+      dismissedDuplicateTrackingRef.current = '';
+
       // ถ้ายิงบาร์โค้ดผ่านเครื่องยิงหรือกรอกยาวเกิน 6 หลัก ให้สลับเป็นโหมดยิงบาร์โค้ด/เลขเต็มอัตโนมัติ
       if (cleaned.length > 6) {
         handleSwitchTrackingMode('full');
         handleTrackingChange(cleaned);
         playScanBeep();
+        checkAndNotifyDuplicate(cleaned);
         return;
       }
 
@@ -604,6 +784,11 @@ export const InboundView: React.FC = () => {
 
       if (filtered.length === 6) {
         playScanBeep();
+        // ตรวจสอบเลขพัสดุซ้ำทันทีเมื่อกรอกครบ 6 ตัว แล้วแสดง popup ขึ้นมาเลย
+        const dup = checkAndNotifyDuplicate(computed);
+        if (dup) {
+          return;
+        }
         setTimeout(() => {
           if (studentSearchInputRef.current) {
             studentSearchInputRef.current.focus();
@@ -611,7 +796,7 @@ export const InboundView: React.FC = () => {
         }, 120);
       }
     },
-    [courier, includeCourierPrefix, computeTrackingFromSixDigits, handleSwitchTrackingMode, handleTrackingChange]
+    [courier, includeCourierPrefix, computeTrackingFromSixDigits, handleSwitchTrackingMode, handleTrackingChange, checkAndNotifyDuplicate]
   );
 
   const handleToggleCourierPrefix = useCallback(
@@ -629,35 +814,48 @@ export const InboundView: React.FC = () => {
     (selectedCourier: string) => {
       setCourier(selectedCourier);
       setFormError(null);
+
       if (selectedCourier === 'ผู้ปกครองฝากส่ง') {
-        // กรณีเลือก ผู้ปกครองฝากส่ง ให้สลับเป็นโหมดเลขพัสดุแบบเต็ม และใช้เลขพัสดุที่จะบันทึก แบบเต็ม เสมอ
+        // เมื่อกดปุ่มผู้ปกครองส่ง ให้สร้างรหัสพัสดุ 13 ตัวไม่ซ้ำในฐานข้อมูลและลงท้ายด้วย RD
+        const uniqueParentCode = generateUniqueParentTrackingNumber(parcels);
+        setTrackingNumber(uniqueParentCode);
         setTrackingInputMode('full');
         setSixDigitsInput('');
-        const currentTrk = trackingNumber.trim().toUpperCase();
-        if (!currentTrk.startsWith('PRT-') || currentTrk.length < 15) {
-          const autoTracking = generateUniqueParentTrackingNumber(parcels);
-          setTrackingNumber(autoTracking);
-        }
         setLastScannedCode(null);
         setTimeout(() => {
           if (studentSearchInputRef.current) {
             studentSearchInputRef.current.focus();
           }
-        }, 100);
+        }, 80);
         return;
       }
 
-      // หากสลับจาก ผู้ปกครองฝากส่ง เป็นขนส่งอื่น แล้วเลขพัสดุขึ้นต้นด้วย PRT- ให้ล้างออก
-      if (trackingNumber.trim().toUpperCase().startsWith('PRT-')) {
+      // เมื่อกดปุ่ม เลือกบริษัทขนส่งได้ ให้แสดงในรูปแบบของ กรอกเลขพัสดุ 6 ตัวสุดท้าย
+      setTrackingInputMode('six_digits');
+
+      // หากสลับจาก ผู้ปกครองฝากส่ง เป็นขนส่งอื่น แล้วเลขพัสดุขึ้นต้นด้วย PRT ให้ล้างออก
+      if (trackingNumber.trim().toUpperCase().startsWith('PRT') && selectedCourier !== 'ผู้ปกครองฝากส่ง') {
         setTrackingNumber('');
       }
 
-      if (trackingInputMode === 'six_digits' && sixDigitsInput) {
-        const computed = computeTrackingFromSixDigits(sixDigitsInput, selectedCourier, includeCourierPrefix);
+      const currentSix = sixDigitsInput || trackingNumber.trim().replace(/[^A-Z0-9]/gi, '').slice(-6);
+      if (currentSix) {
+        setSixDigitsInput(currentSix);
+        const computed = computeTrackingFromSixDigits(currentSix, selectedCourier, includeCourierPrefix);
+        setTrackingNumber(computed);
+      } else {
+        const computed = computeTrackingFromSixDigits('', selectedCourier, includeCourierPrefix);
         setTrackingNumber(computed);
       }
+
+      setTimeout(() => {
+        if (sixDigitsInputRef.current) {
+          sixDigitsInputRef.current.focus();
+          sixDigitsInputRef.current.select();
+        }
+      }, 80);
     },
-    [parcels, trackingNumber, trackingInputMode, sixDigitsInput, includeCourierPrefix, computeTrackingFromSixDigits]
+    [parcels, sixDigitsInput, trackingNumber, includeCourierPrefix, computeTrackingFromSixDigits]
   );
 
   // จัดการเมื่อสแกนบาร์โค้ดผ่านกล้องสำเร็จ
@@ -671,33 +869,39 @@ export const InboundView: React.FC = () => {
       handleTrackingChange(cleaned);
       setLastScannedCode(cleaned);
       setIsScannerOpen(false);
+
+      // ตรวจสอบเลขพัสดุซ้ำ หากพบให้แสดง popup
+      const dup = checkAndNotifyDuplicate(cleaned);
+      if (dup) {
+        return;
+      }
+
       setTimeout(() => {
         if (studentSearchInputRef.current) {
           studentSearchInputRef.current.focus();
         }
       }, 150);
     },
-    [handleTrackingChange]
+    [handleTrackingChange, checkAndNotifyDuplicate]
   );
 
   const requestCameraPermissionAndOpenScanner = useCallback(() => {
     setFormError(null);
-    if (trackingInputMode !== 'full') {
-      handleSwitchTrackingMode('full');
-    }
+    setTrackingInputMode('full');
     setIsScannerOpen(true);
-  }, [trackingInputMode, handleSwitchTrackingMode]);
+  }, []);
 
-  // เมื่อกดปุ่มสแกนโค้ด ให้เปลี่ยนเป็นโหมดยิงบาร์โค้ด/เลขเต็มอัตโนมัติ
+  // เมื่อกดปุ่มสแกนโค้ด ให้แสดงในรูปแบบรับข้อมูลเลขพัสดุยิงบาร์โค้ดผ่านกล้อง
   const handleToggleScanner = useCallback(() => {
     setFormError(null);
-    if (trackingInputMode !== 'full') {
-      handleSwitchTrackingMode('full');
-      setIsScannerOpen(true);
-    } else {
-      setIsScannerOpen((prev) => !prev);
-    }
-  }, [trackingInputMode, handleSwitchTrackingMode]);
+    setTrackingInputMode('full');
+    setIsScannerOpen(true);
+    setTimeout(() => {
+      if (trackingInputRef.current) {
+        trackingInputRef.current.focus();
+      }
+    }, 100);
+  }, []);
 
   // สแกนบาร์โค้ดจากไฟล์ภาพถ่ายกล้องหลังมือถือ (Fallback / Mobile Camera Capture)
   const handleScanBarcodeFromImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -768,11 +972,29 @@ export const InboundView: React.FC = () => {
   // ตรวจสอบความถูกต้องและครบถ้วนของข้อมูลในฟอร์มลงทะเบียนพัสดุทุกขั้นตอน
   const isTrackingValid = trackingNumber.trim().length > 0;
 
-  const isDuplicateTracking = useMemo(() => {
-    if (!trackingNumber.trim() || courier === 'ผู้ปกครองฝากส่ง') return false;
-    const tn = trackingNumber.trim().toUpperCase();
-    return parcels.some((p) => p.id.toUpperCase() === tn || p.trackingNumber.toUpperCase() === tn);
-  }, [trackingNumber, courier, parcels]);
+  // ตรวจหาพัสดุซ้ำในฐานข้อมูล
+  const detectedDuplicateParcel = useMemo(() => {
+    return findDuplicateParcel(trackingNumber, sixDigitsInput);
+  }, [findDuplicateParcel, trackingNumber, sixDigitsInput]);
+
+  const isDuplicateTracking = Boolean(detectedDuplicateParcel);
+
+  // เมื่อเลขพัสดุที่รับเข้ามาซ้ำ ให้แสดงเป็น popup แสดงขึ้นมาเลยอัตโนมัติ
+  useEffect(() => {
+    if (!detectedDuplicateParcel) {
+      dismissedDuplicateTrackingRef.current = '';
+      return;
+    }
+
+    const currentKey = `${detectedDuplicateParcel.id || ''}_${detectedDuplicateParcel.trackingNumber || ''}`.toUpperCase();
+    if (dismissedDuplicateTrackingRef.current === currentKey) {
+      return;
+    }
+
+    // เลขพัสดุที่ซ้ำ ให้แสดงเป็น popup แสดงขึ้นมาเลย
+    setDuplicateParcel(detectedDuplicateParcel);
+    setIsDuplicateModalOpen(true);
+  }, [detectedDuplicateParcel]);
 
   const isStudentValid = useMemo(() => {
     // กรณีเลือกสถานะ 'พัสดุไม่ทราบเจ้าของ' ไม่จำเป็นต้องระบุข้อมูลนักเรียน
@@ -818,14 +1040,14 @@ export const InboundView: React.FC = () => {
     let finalTracking = trackingNumber.trim();
 
     if (courier === 'ผู้ปกครองฝากส่ง') {
-      // กรณีเลือก ผู้ปกครองฝากส่ง ให้ใช้เลขพัสดุที่จะบันทึก แบบเต็ม เสมอ
+      // กรณีเลือก ผู้ปกครองฝากส่ง ให้ใช้เลขพัสดุความยาว 13 ตัวอักษรลงท้ายด้วย RD เสมอ
       const isDuplicateInDb = parcels.some(
         (p) =>
           p.id.toUpperCase() === finalTracking.toUpperCase() ||
           p.trackingNumber.toUpperCase() === finalTracking.toUpperCase()
       );
 
-      if (!finalTracking || finalTracking.length < 12 || isDuplicateInDb) {
+      if (!finalTracking || finalTracking.length !== 13 || !finalTracking.endsWith('RD') || isDuplicateInDb) {
         finalTracking = generateUniqueParentTrackingNumber(parcels);
         setTrackingNumber(finalTracking);
       }
@@ -838,52 +1060,24 @@ export const InboundView: React.FC = () => {
       finalTracking = computeTrackingFromSixDigits(sixDigitsInput, courier, includeCourierPrefix);
       setTrackingNumber(finalTracking);
 
-      // ตรวจสอบความซ้ำซ้อน หากเคยมีเลขพัสดุ 6 ตัวท้ายนี้บันทึกไว้แล้ว ให้ต่อท้ายลำดับอัตโนมัติ (-2, -3)
-      let uniqueCandidate = finalTracking;
-      let counter = 2;
-      while (
-        parcels.some(
-          (p) =>
-            p.id.toUpperCase() === uniqueCandidate.toUpperCase() ||
-            p.trackingNumber.toUpperCase() === uniqueCandidate.toUpperCase()
-        )
-      ) {
-        uniqueCandidate = `${finalTracking}-${counter}`;
-        counter++;
+      // ตรวจสอบความซ้ำซ้อน หากพบเลขพัสดุซ้ำ ให้แสดง popup "เลขพัสดุได้ถูกใช้งานแล้ว" พร้อมข้อมูลเดิม
+      const dup = checkAndNotifyDuplicate(finalTracking);
+      if (dup) {
+        setFormError(`เลขพัสดุ "${finalTracking}" ได้ถูกใช้งานแล้ว`);
+        return;
       }
-      finalTracking = uniqueCandidate;
     } else {
-      const isDuplicateInDb = parcels.some(
-        (p) =>
-          p.id.toUpperCase() === finalTracking.toUpperCase() ||
-          p.trackingNumber.toUpperCase() === finalTracking.toUpperCase()
-      );
-
       if (!finalTracking) {
         setFormError('กรุณายิงบาร์โค้ดผ่านกล้อง หรือกรอกเลขพัสดุในขั้นตอนที่ 1');
         if (trackingInputRef.current) trackingInputRef.current.focus();
         return;
       }
-      if (isDuplicateInDb) {
-        if (/^[A-Za-z0-9]{1,8}$/.test(finalTracking) || /^[A-Z]{2,4}-[A-Za-z0-9]{1,8}$/.test(finalTracking)) {
-          let uniqueCandidate = finalTracking;
-          let counter = 2;
-          while (
-            parcels.some(
-              (p) =>
-                p.id.toUpperCase() === uniqueCandidate.toUpperCase() ||
-                p.trackingNumber.toUpperCase() === uniqueCandidate.toUpperCase()
-            )
-          ) {
-            uniqueCandidate = `${finalTracking}-${counter}`;
-            counter++;
-          }
-          finalTracking = uniqueCandidate;
-        } else {
-          setFormError(`เลขพัสดุ "${finalTracking}" มีอยู่ในฐานข้อมูลแล้ว ไม่สามารถบันทึกซ้ำได้`);
-          if (trackingInputRef.current) trackingInputRef.current.focus();
-          return;
-        }
+
+      // ตรวจสอบความซ้ำซ้อน หากพบเลขพัสดุซ้ำ ให้แสดง popup "เลขพัสดุได้ถูกใช้งานแล้ว" พร้อมข้อมูลเดิม
+      const dup = checkAndNotifyDuplicate(finalTracking);
+      if (dup) {
+        setFormError(`เลขพัสดุ "${finalTracking}" ได้ถูกใช้งานแล้ว`);
+        return;
       }
     }
 
@@ -995,13 +1189,22 @@ export const InboundView: React.FC = () => {
     setStudentFetchFeedback(null);
     setFormError(null);
 
-    if (trackingInputMode === 'six_digits') {
-      if (sixDigitsInputRef.current) {
-        sixDigitsInputRef.current.focus();
-      }
-    } else if (trackingInputRef.current) {
-      trackingInputRef.current.focus();
+    // เมื่อบันทึกลงทะเบียนพัสดุ เรียบร้อย ให้กลับขึ้นไปยัง ช่อง ยิงบาร์โค้ด หรือกรอกเลขพัสดุ อัตโนมัติ
+    if (step1SectionRef.current) {
+      step1SectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+
+    setTimeout(() => {
+      if (trackingInputMode === 'six_digits' && courier !== 'ผู้ปกครองฝากส่ง') {
+        if (sixDigitsInputRef.current) {
+          sixDigitsInputRef.current.focus();
+          sixDigitsInputRef.current.select();
+        }
+      } else if (trackingInputRef.current) {
+        trackingInputRef.current.focus();
+        trackingInputRef.current.select();
+      }
+    }, 150);
   };
 
   const todayIsoStr = useMemo(() => getRelativeDateString(0), []);
@@ -1186,19 +1389,18 @@ export const InboundView: React.FC = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* คอลัมน์ซ้าย: ฟอร์ม 5 ขั้นตอนตามความต้องการของผู้ใช้ */}
-        <form onSubmit={handleSubmitInbound} className="lg:col-span-7 space-y-6">
-          {/* ขั้นตอนที่ 1: ยิงบาร์โค้ดผ่านกล้องอุปกรณ์ หรือสแกน/กรอกเลข Tracking */}
-          <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <label
-                htmlFor={trackingInputMode === 'six_digits' ? 'six-digits-input' : 'tracking-number-input'}
-                className="text-base font-bold text-slate-900 flex items-center gap-2"
-              >
-                <Barcode className="w-5 h-5 text-slate-700" />
-                <span>1. ยิงบาร์โค้ด หรือกรอกเลขพัสดุ</span>
-              </label>
+      {/* ฟอร์มลงทะเบียนรับเข้าพัสดุ: 1 แถว 1 กรอบข้อมูล */}
+      <form onSubmit={handleSubmitInbound} className="space-y-6">
+        {/* ยิงบาร์โค้ด หรือกรอกเลขพัสดุ */}
+        <section ref={step1SectionRef} className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <label
+              htmlFor={trackingInputMode === 'six_digits' ? 'six-digits-input' : 'tracking-number-input'}
+              className="text-base font-bold text-slate-900 flex items-center gap-2"
+            >
+              <Barcode className="w-5 h-5 text-slate-700" />
+              <span>ยิงบาร์โค้ด หรือกรอกเลขพัสดุ</span>
+            </label>
 
               <div className="flex flex-wrap items-center gap-2">
                 <label className="min-h-[38px] px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer">
@@ -1352,19 +1554,6 @@ export const InboundView: React.FC = () => {
                     </button>
                   </div>
                 </div>
-
-                {/* ตัวอย่างเลขพัสดุที่จะบันทึกลงระบบจริง */}
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1 px-1 text-amber-950 font-medium">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span>เลขพัสดุที่จะบันทึก:</span>
-                    <strong className="font-mono text-sm font-black text-slate-900 bg-white px-2.5 py-1 rounded-lg border border-amber-300 shadow-2xs">
-                      {trackingNumber || `${includeCourierPrefix ? `${getCourierTrackingPrefix(courier)}-` : ''}______`}
-                    </strong>
-                  </div>
-                  <span className="text-[11px] text-slate-500">
-                    ขนส่ง: <strong className="text-slate-800">{courier}</strong>
-                  </span>
-                </div>
               </div>
             ) : (
               <div className="space-y-3">
@@ -1378,7 +1567,7 @@ export const InboundView: React.FC = () => {
                       onChange={(e) => handleTrackingChange(e.target.value)}
                       placeholder={
                         courier === 'ผู้ปกครองฝากส่ง'
-                          ? 'เลขพัสดุผู้ปกครองฝากส่งแบบเต็ม (สร้างอัตโนมัติ)...'
+                          ? 'เลขพัสดุผู้ปกครองฝากส่ง...'
                           : 'ยิงบาร์โค้ดผ่านกล้อง / เครื่องสแกน หรือพิมพ์เลขพัสดุ...'
                       }
                       className={`w-full min-h-[52px] px-4 pr-10 py-3 text-base font-mono font-semibold rounded-xl border-2 focus:outline-none transition-colors ${
@@ -1412,17 +1601,8 @@ export const InboundView: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => handleSwitchTrackingMode('six_digits')}
-                      disabled={courier === 'ผู้ปกครองฝากส่ง'}
-                      title={
-                        courier === 'ผู้ปกครองฝากส่ง'
-                          ? 'ผู้ปกครองฝากส่ง ใช้เลขพัสดุที่จะบันทึกแบบเต็มเท่านั้น'
-                          : 'สลับไปกรอกเลขพัสดุ 6 ตัวท้าย'
-                      }
-                      className={`min-h-[52px] px-3.5 sm:px-4 py-3 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors shadow-2xs ${
-                        courier === 'ผู้ปกครองฝากส่ง'
-                          ? 'bg-slate-100 text-slate-400 border-2 border-slate-200 cursor-not-allowed opacity-60'
-                          : 'bg-amber-500 hover:bg-amber-600 text-white cursor-pointer'
-                      }`}
+                      title="สลับไปกรอกเลขพัสดุ 6 ตัวท้าย"
+                      className="min-h-[52px] px-3.5 sm:px-4 py-3 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
                     >
                       <Hash className="w-4 h-4 shrink-0" />
                       <span>กรอก 6 ตัวท้าย</span>
@@ -1439,52 +1619,23 @@ export const InboundView: React.FC = () => {
                     </button>
                   </div>
                 </div>
+              </div>
+            )}
 
-                {/* ตัวอย่างเลขพัสดุที่จะบันทึกลงระบบจริง (แบบเต็ม) */}
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1 px-1 font-medium">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-slate-700">เลขพัสดุที่จะบันทึก:</span>
-                    <strong
-                      className={`font-mono text-sm font-black px-2.5 py-1 rounded-lg border shadow-2xs ${
-                        courier === 'ผู้ปกครองฝากส่ง'
-                          ? 'text-indigo-950 bg-indigo-50 border-indigo-300'
-                          : 'text-slate-900 bg-white border-slate-300'
-                      }`}
-                    >
-                      {trackingNumber || '____________________'}
-                    </strong>
-                    {courier === 'ผู้ปกครองฝากส่ง' ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-emerald-100 text-emerald-900 text-[11px] font-bold border border-emerald-300">
-                        <Check className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                        <span>บันทึกด้วยเลขพัสดุแบบเต็ม (Full Tracking)</span>
-                      </span>
-                    ) : (
-                      <span className="text-[11px] text-slate-500">
-                        (โหมดยิงบาร์โค้ด / เลขเต็ม)
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2.5">
-                    {courier === 'ผู้ปกครองฝากส่ง' && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const refreshed = generateUniqueParentTrackingNumber(parcels);
-                          setTrackingNumber(refreshed);
-                        }}
-                        className="text-xs font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-1 cursor-pointer bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg transition-colors"
-                        title="สร้างเลขพัสดุผู้ปกครองฝากส่งแบบเต็มใหม่"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5 shrink-0" />
-                        <span>สุ่มสร้างเลขเต็มใหม่</span>
-                      </button>
-                    )}
-                    <span className="text-[11px] text-slate-500">
-                      ขนส่ง: <strong className="text-slate-800">{courier}</strong>
-                    </span>
-                  </div>
+            {/* แสดงการแจ้งเตือนเมื่อเลขพัสดุซ้ำในฐานข้อมูล พร้อมปุ่มเปิดดูข้อมูล */}
+            {isDuplicateTracking && (
+              <div className="px-3.5 py-2.5 bg-red-50 border-2 border-red-300 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs text-red-900 animate-in fade-in duration-150 shadow-xs">
+                <div className="flex items-center gap-2 font-bold">
+                  <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 animate-pulse" />
+                  <span>เลขพัสดุนี้ได้ถูกใช้งานแล้วในระบบ</span>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => checkAndNotifyDuplicate(trackingNumber)}
+                  className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg cursor-pointer transition-colors shadow-2xs"
+                >
+                  ดูข้อมูลพัสดุที่ซ้ำ
+                </button>
               </div>
             )}
 
@@ -1515,32 +1666,21 @@ export const InboundView: React.FC = () => {
                     }`}
                   >
                     <span>{c}</span>
-                    {c === 'ผู้ปกครองฝากส่ง' && (
-                      <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${
-                          courier === c
-                            ? 'bg-indigo-900/60 text-indigo-100'
-                            : 'bg-indigo-100 text-indigo-800'
-                        }`}
-                      >
-                        เลขเต็ม
-                      </span>
-                    )}
                   </button>
                 ))}
               </div>
             </div>
           </section>
 
-          {/* ขั้นตอนที่ 2: กรอกข้อมูลนักเรียน และดึงข้อมูลนักเรียน */}
+          {/* กรอกข้อมูลนักเรียน และดึงข้อมูล */}
           <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <label
-                htmlFor="student-code-input"
+                htmlFor="student-unified-search-input"
                 className="text-base font-bold text-slate-900 flex items-center gap-2"
               >
                 <UserCheck className="w-5 h-5 text-slate-700" />
-                <span>2. กรอกข้อมูลนักเรียน และดึงข้อมูลนักเรียน</span>
+                <span>กรอกข้อมูลนักเรียน และดึงข้อมูล</span>
               </label>
 
               <div className="flex items-center gap-2">
@@ -1566,63 +1706,100 @@ export const InboundView: React.FC = () => {
                     htmlFor="student-unified-search-input"
                     className="block text-xs font-bold text-slate-800"
                   >
-                    ช่องค้นหาและดึงข้อมูลนักเรียน
+                    ช่องค้นหาและดึงข้อมูลนักเรียน (กรอกรหัสครบ 5 ตัว)
                   </label>
-                  <span className="text-[11px] text-slate-500 font-medium">
-                    (ป้อนรหัสนักเรียนด้วยปุ่มตัวเลข 0 - 9 ด้านล่าง หรือค้นหาด้วยชื่อ, นามสกุล, ชื่อเล่น, หอพัก)
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {/^\d+$/.test(studentSearchInput.trim()) && (
+                      <span
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded font-mono ${
+                          studentSearchInput.trim().length >= 5
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            : 'bg-amber-100 text-amber-900 border border-amber-300'
+                        }`}
+                      >
+                        {studentSearchInput.trim().length >= 5
+                          ? `กรอกครบ 5 ตัวแล้ว (${studentSearchInput.trim().length} ตัว)`
+                          : `กรอกครบ 5 ตัวจึงค้นหา (${studentSearchInput.trim().length}/5 ตัว)`}
+                      </span>
+                    )}
+                    <span className="text-[11px] text-slate-500 font-medium hidden sm:inline">
+                      (ป้อนรหัส 5 ตัว หรือค้นหาด้วยชื่อ/หอพัก)
+                    </span>
+                  </div>
                 </div>
-                <div className="relative w-full">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input
-                    ref={studentSearchInputRef}
-                    id="student-unified-search-input"
-                    type="text"
-                    value={studentSearchInput}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setStudentSearchInput(val);
-                      setIsStudentSelected(false);
-                      setFormError(null);
-
-                      const clean = val.trim();
-                      if (clean.length >= 4) {
-                        const exact = students.find(
-                          (s) =>
-                            s.studentCode === clean ||
-                            formatStudentCode(s.studentCode) === formatStudentCode(clean)
-                        );
-                        if (exact) {
-                          lastAutoPopulatedCodeRef.current = exact.studentCode;
-                          populateStudentFields(exact);
-                          setIsStudentSelected(true);
-                        }
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleFetchStudentData();
-                      }
-                    }}
-                    placeholder="ค้นหาด้วยรหัสนักเรียน (กดปุ่มตัวเลข 0 - 9 ด้านล่างได้สะดวกรวดเร็ว), ชื่อ, นามสกุล หรือหอพัก..."
-                    className="w-full min-h-[46px] pl-10 pr-9 py-2 text-sm font-medium text-slate-900 bg-white border-2 border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none transition-colors shadow-xs"
-                  />
-                  {studentSearchInput && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStudentSearchInput('');
-                        setStudentCodeInput('');
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      ref={studentSearchInputRef}
+                      id="student-unified-search-input"
+                      type="text"
+                      value={studentSearchInput}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setStudentSearchInput(val);
                         setIsStudentSelected(false);
-                        if (studentSearchInputRef.current) {
-                          studentSearchInputRef.current.focus();
+                        setFormError(null);
+
+                        const clean = val.trim();
+                        // ช่องค้นหาและดึงข้อมูลนักเรียนให้กรอกรหัสครบ 5 ตัวจึงค่อยทำการค้นหา
+                        if (/^\d+$/.test(clean)) {
+                          if (clean.length >= 5) {
+                            const exact = students.find((s) => {
+                              const sc = s.studentCode.trim();
+                              const fsc = formatStudentCode(sc);
+                              return (
+                                sc === clean ||
+                                fsc === clean ||
+                                sc.padStart(5, '0') === clean ||
+                                clean.endsWith(sc) ||
+                                sc.replace(/^0+/, '') === clean.replace(/^0+/, '')
+                              );
+                            });
+                            if (exact) {
+                              lastAutoPopulatedCodeRef.current = exact.studentCode;
+                              populateStudentFields(exact);
+                              setIsStudentSelected(true);
+                            }
+                          }
                         }
                       }}
-                      aria-label="ล้างช่องค้นหา"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleFetchStudentData();
+                        }
+                      }}
+                      placeholder="กรอกรหัสนักเรียนครบ 5 ตัว (กดปุ่มตัวเลข 0 - 9 ด้านล่างได้), หรือพิมพ์ชื่อ นามสกุล หรือหอพัก..."
+                      className="w-full min-h-[46px] pl-10 pr-9 py-2 text-sm font-medium text-slate-900 bg-white border-2 border-slate-300 rounded-xl focus:border-slate-900 focus:outline-none transition-colors shadow-xs"
+                    />
+                    {studentSearchInput && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStudentSearchInput('');
+                          setStudentCodeInput('');
+                          setIsStudentSelected(false);
+                          if (studentSearchInputRef.current) {
+                            studentSearchInputRef.current.focus();
+                          }
+                        }}
+                        aria-label="ล้างช่องค้นหา"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {Boolean(studentSearchInput.trim()) && (
+                    <button
+                      type="button"
+                      onClick={handleFetchStudentData}
+                      className="min-h-[46px] px-4 py-2 bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white font-bold text-sm rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 shrink-0 cursor-pointer animate-in fade-in duration-150"
                     >
-                      <X className="w-4 h-4" />
+                      <Search className="w-4 h-4" />
+                      <span>ค้นหา</span>
                     </button>
                   )}
                 </div>
@@ -2149,12 +2326,13 @@ export const InboundView: React.FC = () => {
             </div>
           </section>
 
-          {/* ขั้นตอนที่ 3: กรอกประเภทสิ่งของ (เพิ่ม เครื่องสำอาง และ อื่นๆ ให้กรอกว่าเป็นอะไร) */}
+          {/* กรอกประเภทสิ่งของ */}
           <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
               <div>
-                <span className="block text-base font-bold text-slate-900">
-                  3. กรอกประเภทสิ่งของ
+                <span className="block text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Package className="w-5 h-5 text-slate-700" />
+                  <span>กรอกประเภทสิ่งของ</span>
                 </span>
                 <span className="block text-xs text-slate-500 mt-0.5">
                   เลือกหมวดหมู่สิ่งของ (กรณีเลือก "เครื่องสำอาง" หรือ "อื่นๆ" สามารถระบุรายละเอียดว่าเป็นอะไรได้ด้านล่าง)
@@ -2268,12 +2446,13 @@ export const InboundView: React.FC = () => {
             })()}
           </section>
 
-          {/* ขั้นตอนที่ 4: เลือกสถานะการคัดแยกพัสดุ */}
+          {/* เลือกสถานะการคัดแยกพัสดุ */}
           <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <span className="block text-base font-bold text-slate-900">
-                  4. เลือกสถานะการคัดแยกพัสดุ
+                <span className="block text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-slate-700" />
+                  <span>เลือกสถานะการคัดแยกพัสดุ</span>
                 </span>
                 <span className="block text-xs text-slate-500 mt-0.5">
                   เลือกสถานะ: พัสดุติดนิติการ (อัตโนมัติเมื่อสั่งเกินเกณฑ์) หรือ ลงทะเบียนรับพัสดุ (อัตโนมัติเมื่อไม่เกิน) · ติดต่องานพยาบาล และ พัสดุไม่ทราบเจ้าของ ให้ผู้ใช้เลือกเอง
@@ -2472,12 +2651,21 @@ export const InboundView: React.FC = () => {
                       className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
                         isTrackingValid && !isDuplicateTracking
                           ? 'bg-emerald-100 text-emerald-800 font-semibold'
+                          : isDuplicateTracking
+                          ? 'bg-red-100 text-red-900 border border-red-300 font-semibold cursor-pointer'
                           : 'bg-slate-200/80 text-slate-500'
                       }`}
+                      onClick={() => {
+                        if (isDuplicateTracking) {
+                          checkAndNotifyDuplicate(trackingNumber);
+                        }
+                      }}
                     >
                       <span>1. เลขพัสดุ</span>
                       {isTrackingValid && !isDuplicateTracking ? (
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      ) : isDuplicateTracking ? (
+                        <span className="text-[10px] text-red-700 underline font-bold">(เลขซ้ำ - ดูข้อมูล)</span>
                       ) : (
                         <span className="text-[10px] text-slate-400">(ยังไม่ได้ระบุ)</span>
                       )}
@@ -2538,98 +2726,95 @@ export const InboundView: React.FC = () => {
               </div>
             )}
           </section>
-        </form>
+      </form>
 
-        {/* คอลัมน์ขวา: จอแสดงสีประจำหอพักขนาดใหญ่ + รายการพัสดุที่รับเข้าล่าสุด (เลือกแสดงเป็นหอพักได้) */}
-        <div className="lg:col-span-5 space-y-6">
-          <section
-            aria-label="ป้ายสีประจำหอพักสำหรับคัดแยกตะกร้า"
-            className={`rounded-2xl border-4 ${dormTheme.borderClass} ${dormTheme.bgClass} p-6 space-y-5 transition-colors`}
-          >
-            <div className="flex items-center justify-between gap-2 border-b border-black/10 pb-4">
+      {/* จุดคัดแยกลงตะกร้าหอพัก (Color-Coding Guide) */}
+      <section
+        aria-label="ป้ายสีประจำหอพักสำหรับคัดแยกตะกร้า"
+        className={`rounded-2xl border-4 ${dormTheme.borderClass} ${dormTheme.bgClass} p-5 md:p-6 space-y-5 transition-colors`}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-black/10 pb-4">
+          <div>
+            <span className="text-xs font-bold text-slate-600">
+              จุดคัดแยกลงตะกร้าหอพัก (Color-Coding Guide)
+            </span>
+            <h2 className={`text-2xl sm:text-3xl font-extrabold ${dormTheme.textClass} mt-0.5`}>
+              {dormTheme.name}
+            </h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className={`px-4 py-2 rounded-xl font-mono font-extrabold text-lg sm:text-xl ${dormTheme.accentBgClass} shadow-2xs`}>
+              {dormTheme.basketCode}
+            </div>
+          </div>
+        </div>
+
+        {studentFullName.trim() || matchedStudent ? (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            <div className="lg:col-span-5 space-y-3">
               <div>
-                <span className="text-xs font-bold text-slate-600">
-                  จุดคัดแยกลงตะกร้าหอพัก (Color-Coding Guide)
-                </span>
-                <h2 className={`text-2xl font-extrabold ${dormTheme.textClass} mt-0.5`}>
-                  {dormTheme.name}
-                </h2>
+                <span className="text-xs font-medium text-slate-600">ชื่อ-นามสกุลนักเรียนผู้รับ</span>
+                <div className={`text-xl sm:text-2xl font-bold ${dormTheme.textClass}`}>
+                  {studentFullName.trim() ||
+                    `${matchedStudent?.prefix || ''}${matchedStudent?.firstName || ''} ${
+                      matchedStudent?.lastName || ''
+                    }`}{' '}
+                  {(studentNickname.trim() || matchedStudent?.nickname) && (
+                    <span className="font-normal text-base">
+                      ({studentNickname.trim() || matchedStudent?.nickname})
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-slate-600 mt-1 font-mono tabular-nums">
+                  รหัสนักเรียน: {formatStudentCode(studentCodeInput.trim() || matchedStudent?.studentCode) || '-'} · ชั้น{' '}
+                  {studentGradeRoom.trim() ||
+                    (matchedStudent ? `${matchedStudent.grade}/${matchedStudent.room}` : '-')}
+                </div>
               </div>
-              <div className={`px-4 py-2.5 rounded-xl font-mono font-extrabold text-lg ${dormTheme.accentBgClass}`}>
-                {dormTheme.basketCode}
+
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="bg-white/90 border border-black/10 rounded-xl p-3.5">
+                  <span className="block text-xs font-medium text-slate-500">สีตะกร้าคัดแยก</span>
+                  <span className={`block text-sm font-bold mt-1 ${dormTheme.textClass}`}>
+                    {dormTheme.colorName}
+                  </span>
+                </div>
+                <div className="bg-white/90 border border-black/10 rounded-xl p-3.5">
+                  <span className="block text-xs font-medium text-slate-500">ห้องพักหอ</span>
+                  <span className={`block text-2xl font-mono font-extrabold tabular-nums mt-0.5 ${dormTheme.textClass}`}>
+                    {studentDormRoom.trim() || matchedStudent?.dormRoom || '-'}
+                  </span>
+                </div>
+              </div>
+
+              {/* แสดงจำนวนชิ้นรวมปัจจุบันบนการ์ดคัดแยกตะกร้า */}
+              <div className="bg-white/90 border border-black/10 rounded-xl p-3.5 flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-slate-700">
+                  จำนวนชิ้นรวมปัจจุบัน
+                </span>
+                <span className={`text-lg font-mono font-extrabold tabular-nums ${dormTheme.textClass}`}>
+                  {activeStudentParcelStats.totalCount} ชิ้น
+                </span>
               </div>
             </div>
 
-            {studentFullName.trim() || matchedStudent ? (
-              <div className="space-y-4">
-                <div>
-                  <span className="text-xs font-medium text-slate-600">ชื่อ-นามสกุลนักเรียนผู้รับ</span>
-                  <div className={`text-xl font-bold ${dormTheme.textClass}`}>
-                    {studentFullName.trim() ||
-                      `${matchedStudent?.prefix || ''}${matchedStudent?.firstName || ''} ${
-                        matchedStudent?.lastName || ''
-                      }`}{' '}
-                    {(studentNickname.trim() || matchedStudent?.nickname) && (
-                      <span className="font-normal text-base">
-                        ({studentNickname.trim() || matchedStudent?.nickname})
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-xs text-slate-600 mt-1 font-mono tabular-nums">
-                    รหัสนักเรียน: {formatStudentCode(studentCodeInput.trim() || matchedStudent?.studentCode) || '-'} · ชั้น{' '}
-                    {studentGradeRoom.trim() ||
-                      (matchedStudent ? `${matchedStudent.grade}/${matchedStudent.room}` : '-')}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 pt-1">
-                  <div className="bg-white/90 border border-black/10 rounded-xl p-3.5">
-                    <span className="block text-xs font-medium text-slate-500">สีตะกร้าคัดแยก</span>
-                    <span className={`block text-sm font-bold mt-1 ${dormTheme.textClass}`}>
-                      {dormTheme.colorName}
-                    </span>
-                  </div>
-                  <div className="bg-white/90 border border-black/10 rounded-xl p-3.5">
-                    <span className="block text-xs font-medium text-slate-500">ห้องพักหอ</span>
-                    <span className={`block text-2xl font-mono font-extrabold tabular-nums mt-0.5 ${dormTheme.textClass}`}>
-                      {studentDormRoom.trim() || matchedStudent?.dormRoom || '-'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* แสดงจำนวนชิ้นรวมปัจจุบันบนการ์ดคัดแยกตะกร้า */}
-                <div className="bg-white/90 border border-black/10 rounded-xl p-3.5 flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold text-slate-700">
-                    จำนวนชิ้นรวมปัจจุบัน
-                  </span>
-                  <span className={`text-lg font-mono font-extrabold tabular-nums ${dormTheme.textClass}`}>
-                    {activeStudentParcelStats.totalCount} ชิ้น
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-2 py-2">
-                <p className="text-sm font-semibold text-slate-800">
-                  ผู้รับ: กรุณากรอกหรือป้อนรหัสนักเรียนในขั้นตอนที่ 2
-                </p>
-                <p className="text-xs text-slate-600 font-mono">
-                  เมื่อป้อนรหัสหรือเลือกนักเรียน ระบบจะแสดงชื่อ หอพัก ห้อง และสีตะกร้าที่นี่ทันที
-                </p>
-              </div>
-            )}
-
             {availableDormitories.length > 0 && (
-              <div className="pt-3 border-t border-black/10">
-                <span className="block text-xs font-semibold text-slate-600 mb-2">
+              <div className="lg:col-span-7 bg-white/70 border border-black/10 rounded-xl p-4 space-y-2.5">
+                <span className="block text-xs font-bold text-slate-700">
                   ผังสีตะกร้าประจำหอพักในระบบ:
                 </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {availableDormitories.map((dName) => {
                     const t = getDormitoryTheme(dName);
+                    const isCurrent = dName === activeDormitoryName;
                     return (
                       <div
                         key={dName}
-                        className="flex items-center gap-2.5 bg-white/80 px-3 py-2 rounded-lg border border-black/5 text-xs"
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-xs transition-colors ${
+                          isCurrent
+                            ? 'bg-white font-bold border-slate-900 ring-2 ring-slate-900/20 shadow-xs'
+                            : 'bg-white/80 border-black/5 text-slate-700'
+                        }`}
                       >
                         <span
                           className="w-3.5 h-3.5 rounded-sm shrink-0"
@@ -2644,10 +2829,52 @@ export const InboundView: React.FC = () => {
                 </div>
               </div>
             )}
-          </section>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="p-4 bg-white/80 rounded-xl border border-black/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-slate-800">
+                  ผู้รับ: กรุณากรอกหรือป้อนรหัสนักเรียนในส่วน "กรอกข้อมูลนักเรียน และดึงข้อมูล"
+                </p>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  เมื่อป้อนรหัสหรือเลือกนักเรียน ระบบจะแสดงชื่อ หอพัก ห้อง และเน้นสีตะกร้าคัดแยกที่นี่ทันที
+                </p>
+              </div>
+            </div>
 
-          {/* รายการพัสดุที่รับเข้าล่าสุด พร้อมตัวเลือกแสดงเป็นหอพักและตัวแบ่งหน้า */}
-          <section className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
+            {availableDormitories.length > 0 && (
+              <div className="pt-1">
+                <span className="block text-xs font-bold text-slate-700 mb-2">
+                  ผังสีตะกร้าประจำหอพักในระบบ:
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+                  {availableDormitories.map((dName) => {
+                    const t = getDormitoryTheme(dName);
+                    return (
+                      <div
+                        key={dName}
+                        className="flex items-center gap-2.5 bg-white/90 px-3 py-2 rounded-xl border border-black/10 text-xs shadow-2xs hover:bg-white transition-colors"
+                      >
+                        <span
+                          className="w-3.5 h-3.5 rounded-sm shrink-0 shadow-2xs"
+                          style={{ backgroundColor: t.hexColor }}
+                        />
+                        <span className="font-mono font-bold text-slate-900">{t.basketCode}</span>
+                        <span className="text-slate-400">·</span>
+                        <span className="text-slate-700 truncate">{t.shortName}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* รายการพัสดุที่รับเข้าล่าสุด */}
+      <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <Layers className="w-4 h-4 text-slate-600" />
@@ -3073,16 +3300,47 @@ export const InboundView: React.FC = () => {
                             )}
                           </div>
 
-                          {p.status !== 'ส่งมอบสำเร็จ' && (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenDeliveryModal(p)}
-                              className="min-h-[38px] px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-900 hover:text-white text-slate-800 rounded-lg transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
-                            >
-                              <span>เซ็นรับสำเร็จ</span>
-                              <ArrowRight className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 shrink-0">
+                            {(() => {
+                              const isReceivedToday = extractParcelLocalYMD(p) === todayIsoStr || p.receivedDate === todayIsoStr;
+                              const isStaffOrAdmin =
+                                currentMember?.role === 'ผู้ดูแลระบบ' ||
+                                currentMember?.role === 'เจ้าหน้าที่';
+                              const canEditThisParcel = isStaffOrAdmin || isReceivedToday;
+
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditModal(p)}
+                                  disabled={!canEditThisParcel}
+                                  title={
+                                    canEditThisParcel
+                                      ? 'แก้ไขการรับพัสดุ (แก้ไขข้อมูลผู้รับพัสดุ, สถานะพัสดุ)'
+                                      : 'แก้ไขได้เฉพาะพัสดุที่รับเข้าเฉพาะวันนี้เท่านั้น (เจ้าหน้าที่/ผู้ดูแล แก้ไขได้ตลอด)'
+                                  }
+                                  className={`min-h-[38px] px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5 ${
+                                    canEditThisParcel
+                                      ? 'bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-800 border border-blue-200 cursor-pointer shadow-2xs'
+                                      : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60'
+                                  }`}
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                  <span>แก้ไขการรับพัสดุ</span>
+                                </button>
+                              );
+                            })()}
+
+                            {p.status !== 'ส่งมอบสำเร็จ' && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenDeliveryModal(p)}
+                                className="min-h-[38px] px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-900 hover:text-white text-slate-800 rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                              >
+                                <span>เซ็นรับสำเร็จ</span>
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
@@ -3137,8 +3395,6 @@ export const InboundView: React.FC = () => {
               </>
             )}
           </section>
-        </div>
-      </div>
 
       {/* Modal เลือกวันที่รับพัสดุ */}
       <DeliveryDateModal
@@ -3149,6 +3405,57 @@ export const InboundView: React.FC = () => {
         }}
         parcel={deliveryModalParcel}
         onConfirm={handleConfirmDelivery}
+      />
+
+      {/* Modal แก้ไขการรับพัสดุ (แก้ไขข้อมูลผู้รับพัสดุ, สถานะพัสดุ) */}
+      <EditInboundParcelModal
+        isOpen={isEditModalOpen}
+        parcel={editingParcel}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditingParcel(null);
+        }}
+      />
+
+      {/* Popup แจ้งเตือนเลขพัสดุซ้ำ "เลขพัสดุได้ถูกใช้งานแล้ว" พร้อมแสดงข้อมูลที่ผูกกับเลขพัสดุชิ้นนั้น */}
+      <DuplicateParcelModal
+        isOpen={isDuplicateModalOpen}
+        parcel={duplicateParcel || detectedDuplicateParcel}
+        onClose={() => {
+          setIsDuplicateModalOpen(false);
+          const currentItem = duplicateParcel || detectedDuplicateParcel;
+          if (currentItem) {
+            dismissedDuplicateTrackingRef.current = `${currentItem.id || ''}_${currentItem.trackingNumber || ''}`.toUpperCase();
+          }
+        }}
+        onClearTracking={() => {
+          setTrackingNumber('');
+          setSixDigitsInput('');
+          setLastScannedCode(null);
+          dismissedDuplicateTrackingRef.current = '';
+          setDuplicateParcel(null);
+          setIsDuplicateModalOpen(false);
+          if (trackingInputMode === 'six_digits' && courier !== 'ผู้ปกครองฝากส่ง') {
+            sixDigitsInputRef.current?.focus();
+          } else {
+            trackingInputRef.current?.focus();
+          }
+        }}
+        onOpenEdit={(p) => {
+          setIsDuplicateModalOpen(false);
+          handleOpenEditModal(p);
+        }}
+        canEdit={(() => {
+          const target = duplicateParcel || detectedDuplicateParcel;
+          if (!target) return false;
+          const isReceivedToday =
+            extractParcelLocalYMD(target) === todayIsoStr ||
+            target.receivedDate === todayIsoStr;
+          const isStaffOrAdmin =
+            currentMember?.role === 'ผู้ดูแลระบบ' ||
+            currentMember?.role === 'เจ้าหน้าที่';
+          return isStaffOrAdmin || isReceivedToday;
+        })()}
       />
     </div>
   );

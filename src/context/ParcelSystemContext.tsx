@@ -178,6 +178,7 @@ interface ParcelSystemContextValue {
   recordLocalSearchSaving: () => void;
   addInboundParcel: (input: NewParcelInput) => Promise<Parcel>;
   updateParcelStatus: (parcelId: string, newStatus: ParcelStatus, note?: string, deliveredDate?: string) => Promise<void>;
+  updateParcelDetails: (parcelId: string, updates: Partial<Parcel>) => Promise<void>;
   bulkUpdateParcelStatus: (parcelIds: string[], newStatus: ParcelStatus, deliveredDate?: string) => Promise<void>;
   deleteParcel: (parcelId: string) => Promise<void>;
   bulkDeleteParcels: (parcelIds: string[], reasonLabel?: string) => Promise<number>;
@@ -716,6 +717,30 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
       } catch (err) {
         showToast(
           `ไม่สามารถอัปเดตสถานะบนฐานข้อมูลได้: ${err instanceof Error ? err.message : 'Error'}`,
+          'error'
+        );
+        throw err;
+      }
+    },
+    [showToast]
+  );
+
+  /**
+   * แก้ไขข้อมูลผู้รับพัสดุ สถานะ และรายละเอียดพัสดุใน Firestore โดยตรง
+   */
+  const updateParcelDetails = useCallback(
+    async (parcelId: string, updates: Partial<Parcel>): Promise<void> => {
+      try {
+        await updateParcelDirectly(parcelId, updates, AUTO_CLOUD_OWNER_ID);
+        setQuotaMetrics((prev) => ({
+          ...prev,
+          firestoreWritesUsed: prev.firestoreWritesUsed + 1,
+          lastSyncedAt: new Date().toISOString(),
+        }));
+        showToast(`บันทึกการแก้ไขข้อมูลพัสดุ ${parcelId} สำเร็จ`, 'success');
+      } catch (err) {
+        showToast(
+          `เกิดข้อผิดพลาดในการแก้ไขข้อมูลพัสดุ: ${err instanceof Error ? err.message : 'Error'}`,
           'error'
         );
         throw err;
@@ -1489,6 +1514,7 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
       recordLocalSearchSaving,
       addInboundParcel,
       updateParcelStatus,
+      updateParcelDetails,
       bulkUpdateParcelStatus,
       deleteParcel,
       bulkDeleteParcels,
@@ -1551,6 +1577,7 @@ export const ParcelSystemProvider: React.FC<{ children: React.ReactNode }> = ({ 
       recordLocalSearchSaving,
       addInboundParcel,
       updateParcelStatus,
+      updateParcelDetails,
       bulkUpdateParcelStatus,
       deleteParcel,
       bulkDeleteParcels,
